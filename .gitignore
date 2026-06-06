@@ -1,0 +1,17 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.python-version
+.venv/
+dist/
+build/
+
+# Test and tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
