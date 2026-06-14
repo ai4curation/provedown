@@ -21,6 +21,22 @@ Run verification with:
 uv run provedown verify report.md
 ```
 
+## Documentation
+
+The documentation is organized with the Diataxis structure under `docs/`.
+
+Build it with:
+
+```bash
+uv run mkdocs build --strict
+```
+
+Preview it locally with:
+
+```bash
+uv run mkdocs serve
+```
+
 The public model is intentionally verifier-neutral. Python execution is one
 plugin; future plugins can validate references with LinkML tooling or prove
 properties about code with systems such as clauz3.
