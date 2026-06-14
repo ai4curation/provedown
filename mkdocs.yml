@@ -12,7 +12,6 @@ nav:
       - Verify a Document: how-to-guides/verify-a-document.md
       - Write Result Assertions: how-to-guides/write-result-assertions.md
       - Reuse Named Code: how-to-guides/reuse-named-code.md
-      - Write Docs With Provedown: how-to-guides/write-docs-with-provedown.md
   - Reference:
       - CLI: reference/cli.md
       - Markup Contract: reference/markup.md
@@ -20,7 +19,6 @@ nav:
       - Verifier Plugins: reference/verifier-plugins.md
   - Explanations:
       - Why not marimo?: explanations/why-not-marimo.md
-      - Provedown in Provedown?: explanations/provedown-in-provedown.md
   - Examples:
       - Basic Verified Report: examples/basic-report.md
   - Design Notes:

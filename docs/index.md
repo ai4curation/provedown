@@ -20,5 +20,4 @@ today while the design notes track where the format is heading.
 - [Verify a document](how-to-guides/verify-a-document.md)
 - [Markup contract](reference/markup.md)
 - [Why not marimo?](explanations/why-not-marimo.md)
-- [Provedown in Provedown?](explanations/provedown-in-provedown.md)
 - [Verifiable Literate Weave design spec](ideas/verifiable-weave-spec.md)
