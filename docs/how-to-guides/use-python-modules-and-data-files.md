@@ -88,7 +88,7 @@ Python set, list, tuple, dict, or string representation of a collection.
 The docs include a complete version of this pattern:
 
 ```bash
-uv run provedown verify docs/examples/data-file-report.md
+provedown verify docs/examples/data-file-report.md
 ```
 
 That example uses only Python's standard library and the checked-in CSV file at

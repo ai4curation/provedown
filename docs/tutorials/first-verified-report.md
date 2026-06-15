@@ -5,8 +5,7 @@ matches the code attached to it.
 
 ## Prerequisites
 
-From a checkout of this repository, use `uv run provedown`. If Provedown is
-installed in another environment, use `provedown` directly.
+Install Provedown, then use the `provedown` command in your shell.
 
 ## Create A Report
 
@@ -34,7 +33,7 @@ The document is ordinary Markdown plus two Provedown contracts:
 Run:
 
 ```bash
-uv run provedown verify report.md
+provedown verify report.md
 ```
 
 Expected text output:
@@ -58,7 +57,7 @@ The cohort has <span class="result" data-code="sample_count">4<span class="metho
 Run verification again:
 
 ```bash
-uv run provedown verify report.md
+provedown verify report.md
 ```
 
 The command exits with status `1` and reports a failed assertion:

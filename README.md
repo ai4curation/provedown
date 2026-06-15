@@ -18,23 +18,23 @@ The cohort has <span class="result" data-code="x">412<span class="method"></span
 Run verification with:
 
 ```bash
-uv run provedown verify report.md
+provedown verify report.md
 ```
 
 ## Documentation
 
 The documentation is organized with the Diataxis structure under `docs/`.
 
-Build it with:
+For repository development, build it with:
 
 ```bash
-uv run mkdocs build --strict
+just docs-build
 ```
 
 Preview it locally with:
 
 ```bash
-uv run mkdocs serve
+just docs-serve
 ```
 
 The public model is intentionally verifier-neutral. Python execution is one

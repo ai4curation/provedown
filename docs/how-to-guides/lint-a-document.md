@@ -7,7 +7,7 @@ and looks for patterns that may make verification misleading or hard to audit.
 ## Run Lints
 
 ```bash
-uv run provedown lint report.md
+provedown lint report.md
 ```
 
 The command prints one summary per file:
@@ -23,7 +23,7 @@ Warnings do not make the command fail. Errors do.
 ## Use JSON Output
 
 ```bash
-uv run provedown lint --format json report.md
+provedown lint --format json report.md
 ```
 
 JSON output is intended for CI, editor integrations, and scripts.
@@ -74,8 +74,8 @@ visible and reviewable.
 Linting does not replace verification:
 
 ```bash
-uv run provedown lint report.md
-uv run provedown verify report.md
+provedown lint report.md
+provedown verify report.md
 ```
 
 Use linting to catch fragile structure. Use verification to recompute authored

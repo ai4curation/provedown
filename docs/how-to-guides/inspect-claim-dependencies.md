@@ -18,7 +18,7 @@ as:
 Run:
 
 ```bash
-uv run provedown inspect docs/examples/data-file-report.md
+provedown inspect docs/examples/data-file-report.md
 ```
 
 Text output starts with a summary and then lists document events in document
@@ -38,7 +38,7 @@ The exact line and column numbers may change as the document changes.
 Use JSON when an editor, CI job, or script needs structured inspection data:
 
 ```bash
-uv run provedown inspect --format json docs/examples/data-file-report.md
+provedown inspect --format json docs/examples/data-file-report.md
 ```
 
 Each event includes its kind, source location, language, and any relevant

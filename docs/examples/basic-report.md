@@ -21,5 +21,5 @@ The compact summary is <span class="result" data-code="#summary">3/3<span class=
 Verify this page with:
 
 ```bash
-uv run provedown verify docs/examples/basic-report.md
+provedown verify docs/examples/basic-report.md
 ```

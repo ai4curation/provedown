@@ -46,5 +46,5 @@ The compact topline is <span class="result" data-code="#topline">4 paid orders t
 Verify this page with:
 
 ```bash
-uv run provedown verify docs/examples/data-file-report.md
+provedown verify docs/examples/data-file-report.md
 ```

@@ -2,12 +2,6 @@
 
 The command-line entry point is `provedown`.
 
-From this repository, run commands through `uv`:
-
-```bash
-uv run provedown ...
-```
-
 ## `provedown verify`
 
 Verify one or more documents.

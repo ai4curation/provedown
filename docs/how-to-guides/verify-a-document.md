@@ -5,7 +5,7 @@ Use `provedown verify` to check one or more Provedown Markdown files.
 ## Verify One File
 
 ```bash
-uv run provedown verify report.md
+provedown verify report.md
 ```
 
 Text output summarizes each file and prints one line per finding:
@@ -22,7 +22,7 @@ The command exits with `0` when every report is ok. A report is ok when it has n
 ## Verify Multiple Files
 
 ```bash
-uv run provedown verify report.md appendix.md
+provedown verify report.md appendix.md
 ```
 
 Each path is parsed and verified independently.
@@ -49,7 +49,7 @@ If the document is `reports/summary.md`, the path above resolves to
 ## Use JSON Output
 
 ```bash
-uv run provedown verify --format json report.md
+provedown verify --format json report.md
 ```
 
 JSON output is intended for CI, editor integrations, and scripts. It includes an
@@ -60,7 +60,7 @@ overall `ok` field, per-file summaries, and structured findings.
 List verifier ids:
 
 ```bash
-uv run provedown list-verifiers
+provedown list-verifiers
 ```
 
 The built-in verifier is currently:
@@ -72,7 +72,7 @@ python-results
 Run only that verifier explicitly:
 
 ```bash
-uv run provedown verify --verifier python-results report.md
+provedown verify --verifier python-results report.md
 ```
 
 The option may be passed more than once when additional verifier plugins exist.

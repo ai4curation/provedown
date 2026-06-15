@@ -1,0 +1,67 @@
+:root {
+  --pd-teal: #0f766e;
+  --pd-teal-dark: #115e59;
+  --pd-amber: #b45309;
+  --pd-ink: #1f2937;
+  --pd-paper: #f8fafc;
+  --pd-border: #d8e2e1;
+}
+
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: var(--pd-teal);
+  --md-primary-fg-color--dark: var(--pd-teal-dark);
+  --md-accent-fg-color: var(--pd-amber);
+  --md-typeset-a-color: #0f766e;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #0f766e;
+  --md-accent-fg-color: #f59e0b;
+  --md-typeset-a-color: #5eead4;
+}
+
+.md-header__title {
+  font-weight: 700;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  letter-spacing: 0;
+}
+
+.md-typeset h1 {
+  font-weight: 750;
+}
+
+.pd-hero {
+  margin: 0 0 2rem;
+  padding: 1.5rem 0 0.5rem;
+  max-width: 52rem;
+}
+
+.pd-hero p {
+  color: var(--md-default-fg-color--light);
+  font-size: 1.05rem;
+  line-height: 1.65;
+  max-width: 44rem;
+}
+
+.pd-hero .md-button {
+  margin-right: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.md-typeset .grid.cards > ul > li {
+  border-color: var(--pd-border);
+  border-radius: 0.35rem;
+}
+
+.md-typeset .grid.cards > ul > li:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 0.2rem 0.8rem rgba(15, 118, 110, 0.12);
+}
+
+.md-typeset code {
+  border-radius: 0.2rem;
+}
