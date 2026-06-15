@@ -17,10 +17,13 @@ check: lint typecheck test
 docs-build:
     uv run mkdocs build --strict
 
+docs-render-examples:
+    uv run python scripts/render_example_tabs.py
+
 docs-serve port="8000":
     uv run mkdocs serve -a 127.0.0.1:{{port}}
 
-examples := "docs/examples/basic-report.md docs/examples/data-file-report.md"
+examples := "examples/basic-report.md examples/data-file-report.md"
 
 verify-examples:
     uv run provedown verify {{examples}}

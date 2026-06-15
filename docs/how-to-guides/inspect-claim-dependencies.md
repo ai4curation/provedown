@@ -18,17 +18,17 @@ as:
 Run:
 
 ```bash
-provedown inspect docs/examples/data-file-report.md
+provedown inspect examples/data-file-report.md
 ```
 
 Text output starts with a summary and then lists document events in document
 order:
 
 ```text
-docs/examples/data-file-report.md: ok
+examples/data-file-report.md: ok
   events=10, errors=0, warnings=0
-  [1] code docs/examples/data-file-report.md:9:6 execution='inline'
-  [2] result docs/examples/data-file-report.md:28:19 compare='exact' authored='6' execution='eval'
+  [1] code examples/data-file-report.md:9:6 execution='inline'
+  [2] result examples/data-file-report.md:28:19 compare='exact' authored='6' execution='eval'
 ```
 
 The exact line and column numbers may change as the document changes.
@@ -38,7 +38,7 @@ The exact line and column numbers may change as the document changes.
 Use JSON when an editor, CI job, or script needs structured inspection data:
 
 ```bash
-provedown inspect --format json docs/examples/data-file-report.md
+provedown inspect --format json examples/data-file-report.md
 ```
 
 Each event includes its kind, source location, language, and any relevant

@@ -71,6 +71,7 @@ class _ProvedownHTMLParser(HTMLParser):
         self.diagnostics: list[str] = []
         self._code: _CodeBuilder | None = None
         self._results: list[_ResultBuilder] = []
+        self._ignore_depth = 0
 
     def handle_starttag(
         self,
@@ -79,6 +80,14 @@ class _ProvedownHTMLParser(HTMLParser):
     ) -> None:
         attr_map = _attrs_to_dict(attrs)
         location = self._location()
+
+        if self._ignore_depth > 0:
+            self._ignore_depth += 1
+            return
+
+        if _is_ignored_region(attr_map):
+            self._ignore_depth = 1
+            return
 
         if self._code is not None:
             self.diagnostics.append(
@@ -106,6 +115,9 @@ class _ProvedownHTMLParser(HTMLParser):
         attr_map = _attrs_to_dict(attrs)
         location = self._location()
 
+        if self._ignore_depth > 0 or _is_ignored_region(attr_map):
+            return
+
         if tag == "code":
             if "use" in attr_map:
                 self._append_code_use(attr_map, location)
@@ -126,6 +138,9 @@ class _ProvedownHTMLParser(HTMLParser):
             self._finish_result()
 
     def handle_data(self, data: str) -> None:
+        if self._ignore_depth > 0:
+            return
+
         if self._code is not None:
             self._code.parts.append(data)
             return
@@ -140,6 +155,10 @@ class _ProvedownHTMLParser(HTMLParser):
         self.handle_data(f"&#{name};")
 
     def handle_endtag(self, tag: str) -> None:
+        if self._ignore_depth > 0:
+            self._ignore_depth -= 1
+            return
+
         if tag == "code" and self._code is not None:
             code = self._code.build()
             self._code = None
@@ -249,7 +268,7 @@ def parse_document(source: str, path: Path | None = None) -> Document:
 
     parser = _ProvedownHTMLParser(source=source, path=path)
     try:
-        parser.feed(source)
+        parser.feed(_mask_markdown_fenced_code(source))
         parser.close()
     except Exception as exc:  # pragma: no cover - HTMLParser is broad by design.
         raise ParseError(str(exc)) from exc
@@ -273,6 +292,14 @@ def _attrs_to_dict(attrs: Sequence[tuple[str, str | None]]) -> dict[str, str]:
 
 def _has_class(attrs: Mapping[str, str], class_name: str) -> bool:
     return class_name in attrs.get("class", "").split()
+
+
+def _is_ignored_region(attrs: Mapping[str, str]) -> bool:
+    return attrs.get("data-provedown-ignore", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    } or _has_class(attrs, "provedown-ignore")
 
 
 def _language(attrs: Mapping[str, str]) -> str:
@@ -299,3 +326,60 @@ def _empty_to_none(value: str | None) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _mask_markdown_fenced_code(source: str) -> str:
+    """Hide Markdown fenced-code contents from the HTML parser.
+
+    Provedown's contract is expressed as HTML in Markdown, but documentation
+    often needs to show that raw HTML contract inside fenced code blocks. The
+    parser does not otherwise understand Markdown, so this lightweight mask
+    prevents examples from becoming live assertions while preserving line and
+    column positions for real HTML outside the fences.
+    """
+
+    lines = source.splitlines(keepends=True)
+    masked: list[str] = []
+    fence_char: str | None = None
+    fence_len = 0
+
+    for line in lines:
+        marker = _fence_marker(line)
+        if fence_char is None:
+            masked.append(line)
+            if marker is not None:
+                fence_char, fence_len = marker
+            continue
+
+        if (
+            marker is not None
+            and marker[0] == fence_char
+            and marker[1] >= fence_len
+        ):
+            masked.append(line)
+            fence_char = None
+            fence_len = 0
+        else:
+            masked.append(_mask_line_preserving_newline(line))
+
+    return "".join(masked)
+
+
+def _fence_marker(line: str) -> tuple[str, int] | None:
+    stripped = line.lstrip()
+    if not stripped.startswith(("```", "~~~")):
+        return None
+
+    char = stripped[0]
+    count = 0
+    for character in stripped:
+        if character != char:
+            break
+        count += 1
+    if count < 3:
+        return None
+    return char, count
+
+
+def _mask_line_preserving_newline(line: str) -> str:
+    return "".join("\n" if character == "\n" else " " for character in line)

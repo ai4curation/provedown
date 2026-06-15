@@ -60,3 +60,39 @@ def test_parser_preserves_unknown_attributes_and_language() -> None:
     assert isinstance(result, ResultAssertion)
     assert result.language == "r"
     assert result.attributes["data-custom"] == "x"
+
+
+def test_parser_ignores_html_inside_markdown_fenced_code() -> None:
+    document = parse_document(
+        """
+```markdown
+<code>x = 1</code>
+The answer is <span class="result" data-code="x">1</span>.
+```
+
+<code>y = 2</code>
+The answer is <span class="result" data-code="y">2</span>.
+""".strip()
+    )
+
+    assert len(document.events) == 2
+    assert isinstance(document.events[0], CodeBlock)
+    assert isinstance(document.events[1], ResultAssertion)
+
+
+def test_parser_ignores_explicit_ignored_regions() -> None:
+    document = parse_document(
+        """
+<div data-provedown-ignore="true">
+<code>x = 1</code>
+The answer is <span class="result" data-code="x">1</span>.
+</div>
+
+<code>y = 2</code>
+The answer is <span class="result" data-code="y">2</span>.
+""".strip()
+    )
+
+    assert len(document.events) == 2
+    assert isinstance(document.events[0], CodeBlock)
+    assert isinstance(document.events[1], ResultAssertion)
