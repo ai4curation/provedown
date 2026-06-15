@@ -27,6 +27,25 @@ uv run provedown verify report.md appendix.md
 
 Each path is parsed and verified independently.
 
+## Relative Data Files
+
+When verifying a file from disk, the Python verifier runs with the document's
+directory as the working directory. This lets reports read nearby data files
+with relative paths:
+
+````markdown
+<pre><code>
+from pathlib import Path
+
+value = Path("data/value.txt").read_text(encoding="utf-8").strip()
+</code></pre>
+
+The value is <span class="result" data-code="value">42<span class="method"></span></span>.
+````
+
+If the document is `reports/summary.md`, the path above resolves to
+`reports/data/value.txt`.
+
 ## Use JSON Output
 
 ```bash

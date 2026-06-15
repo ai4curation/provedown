@@ -57,7 +57,72 @@ Current output:
 python-results
 ```
 
-## Text Output
+## `provedown inspect`
+
+Inspect code and result relationships without executing document code.
+
+```bash
+provedown inspect [--format text|json] PATH [PATH ...]
+```
+
+Arguments:
+
+`PATH`
+: Markdown document to parse and inspect. Multiple paths are allowed.
+
+Options:
+
+`--format text`
+: Print human-readable inspection output. This is the default.
+
+`--format json`
+: Print structured JSON output.
+
+Exit codes:
+
+`0`
+: No inspection errors were found. Warnings are allowed.
+
+`1`
+: At least one inspection error was found, such as an unresolved code use or
+  result reference.
+
+`2`
+: Argument parsing failed.
+
+## `provedown lint`
+
+Lint Provedown documents without executing document code.
+
+```bash
+provedown lint [--format text|json] PATH [PATH ...]
+```
+
+Arguments:
+
+`PATH`
+: Markdown document to parse and lint. Multiple paths are allowed.
+
+Options:
+
+`--format text`
+: Print human-readable lint output. This is the default.
+
+`--format json`
+: Print structured JSON output.
+
+Exit codes:
+
+`0`
+: No lint errors were found. Warnings are allowed.
+
+`1`
+: At least one lint error was found.
+
+`2`
+: Argument parsing failed.
+
+## Verify Text Output
 
 Text output has one file summary followed by finding lines:
 
@@ -67,7 +132,7 @@ report.md: ok
   [pass] python-results report.md:5:16: value matches exactly expected='42' actual='42'
 ```
 
-## JSON Output Shape
+## Verify JSON Output Shape
 
 JSON output has an overall `ok` field and one report object per path:
 
@@ -92,3 +157,12 @@ JSON output has an overall `ok` field and one report object per path:
 
 Findings include `verifier_id`, `status`, `location`, `message`, `expected`,
 `actual`, and `evidence`.
+
+## Python Execution Directory
+
+When `provedown verify` reads a document from disk, the built-in Python verifier
+executes code with that document's parent directory as the working directory.
+Relative paths therefore resolve next to the document being verified.
+
+For example, code in `reports/summary.md` can read `reports/data/input.csv` as
+`Path("data/input.csv")`.

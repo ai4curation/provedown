@@ -12,6 +12,9 @@ nav:
       - Verify a Document: how-to-guides/verify-a-document.md
       - Write Result Assertions: how-to-guides/write-result-assertions.md
       - Reuse Named Code: how-to-guides/reuse-named-code.md
+      - Use Python Modules And Data Files: how-to-guides/use-python-modules-and-data-files.md
+      - Inspect Claim Dependencies: how-to-guides/inspect-claim-dependencies.md
+      - Lint a Document: how-to-guides/lint-a-document.md
   - Reference:
       - CLI: reference/cli.md
       - Markup Contract: reference/markup.md
@@ -21,5 +24,6 @@ nav:
       - Why not marimo?: explanations/why-not-marimo.md
   - Examples:
       - Basic Verified Report: examples/basic-report.md
+      - CSV Sales Summary: examples/data-file-report.md
   - Design Notes:
       - Verifiable Literate Weave: ideas/verifiable-weave-spec.md

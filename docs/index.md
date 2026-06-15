@@ -18,6 +18,10 @@ today while the design notes track where the format is heading.
 
 - [First verified report](tutorials/first-verified-report.md)
 - [Verify a document](how-to-guides/verify-a-document.md)
+- [Use Python modules and data files](how-to-guides/use-python-modules-and-data-files.md)
+- [Inspect claim dependencies](how-to-guides/inspect-claim-dependencies.md)
+- [Lint a document](how-to-guides/lint-a-document.md)
+- [CSV sales summary example](examples/data-file-report.md)
 - [Markup contract](reference/markup.md)
 - [Why not marimo?](explanations/why-not-marimo.md)
 - [Verifiable Literate Weave design spec](ideas/verifiable-weave-spec.md)

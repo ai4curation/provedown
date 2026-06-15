@@ -1,6 +1,14 @@
 """Public API for Provedown."""
 
 from provedown.compare import Comparator, ComparatorRegistry, ComparisonResult
+from provedown.inspection import (
+    InspectionEvent,
+    InspectionIssue,
+    InspectionReport,
+    inspect_document,
+    inspect_file,
+)
+from provedown.linting import LintFinding, LintReport, lint_document, lint_file
 from provedown.model import (
     CodeBlock,
     CodeUse,
@@ -28,6 +36,11 @@ __all__ = [
     "Document",
     "DocumentEvent",
     "Finding",
+    "InspectionEvent",
+    "InspectionIssue",
+    "InspectionReport",
+    "LintFinding",
+    "LintReport",
     "ParseError",
     "Report",
     "ResultAssertion",
@@ -37,6 +50,10 @@ __all__ = [
     "Verifier",
     "VerifierRegistry",
     "default_registry",
+    "inspect_document",
+    "inspect_file",
+    "lint_document",
+    "lint_file",
     "parse_document",
     "parse_file",
     "verify_document",
