@@ -17,13 +17,8 @@ Provedown keeps the human-readable document as the source of truth. Values in
 prose are authored claims, not generated render output, and verifier plugins can
 recompute those claims from embedded evidence.
 
-<!--
-Keep this pair in sync with examples/homepage-orders.md.
-The reader panel is the Pandoc HTML from:
-pandoc --from markdown-smart --to html --wrap=none examples/homepage-orders.md
-The reader panel includes the rendered code block verbatim; CSS hides it so the
-homepage stays compact.
--->
+<!-- pd-homepage-example:start -->
+<!-- Generated from examples/homepage-orders.md by scripts/render_example_tabs.py. -->
 <div class="pd-proof-pair" data-provedown-ignore="true" markdown>
 
 <div class="pd-proof-panel pd-proof-reader">
@@ -46,7 +41,7 @@ total = sum(order["amount"] for order in paid)
 
 <p class="pd-proof-label">Provedown source</p>
 
-```html
+````markdown
 <pre><code>
 orders = [
     {"status": "paid", "amount": 120},
@@ -57,13 +52,13 @@ paid = [order for order in orders if order["status"] == "paid"]
 total = sum(order["amount"] for order in paid)
 </code></pre>
 
-The report includes <span class="result" data-code="len(paid)">2<span class="method"></span></span> paid orders totaling
-<span class="result" data-code="f'${total}'">$195<span class="method"></span></span>.
-```
+The report includes <span class="result" data-code="len(paid)">2<span class="method"></span></span> paid orders totaling <span class="result" data-code="f'${total}'">$195<span class="method"></span></span>.
+````
 
 </div>
 
 </div>
+<!-- pd-homepage-example:end -->
 
 If the data or filtering logic changes, `provedown verify` catches stale prose
 before it ships.

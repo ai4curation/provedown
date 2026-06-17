@@ -8,6 +8,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+HOMEPAGE_SOURCE = ROOT / "examples/homepage-orders.md"
+HOMEPAGE_TARGET = ROOT / "docs/index.md"
+HOMEPAGE_START = "<!-- pd-homepage-example:start -->"
+HOMEPAGE_END = "<!-- pd-homepage-example:end -->"
 
 
 @dataclass(frozen=True)
@@ -67,6 +71,7 @@ def main() -> int:
             _render_page(example, source=source, rendered=rendered),
             encoding="utf-8",
         )
+    _render_homepage_example()
     return 0
 
 
@@ -108,6 +113,66 @@ def _render_page(example: ExamplePage, *, source: str, rendered: str) -> str:
         f"provedown verify {example.source.relative_to(ROOT)}\n"
         "```\n"
     )
+
+
+def _render_homepage_example() -> None:
+    source = HOMEPAGE_SOURCE.read_text(encoding="utf-8")
+    rendered = _pandoc_html(
+        ExamplePage(
+            title="Homepage Orders",
+            source=HOMEPAGE_SOURCE,
+            target=HOMEPAGE_TARGET,
+            description="",
+        )
+    )
+    page = HOMEPAGE_TARGET.read_text(encoding="utf-8")
+    replacement = _render_homepage_block(source=source, rendered=rendered)
+    HOMEPAGE_TARGET.write_text(
+        _replace_between(
+            page,
+            start=HOMEPAGE_START,
+            end=HOMEPAGE_END,
+            replacement=replacement,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _render_homepage_block(*, source: str, rendered: str) -> str:
+    return (
+        f"{HOMEPAGE_START}\n"
+        "<!-- Generated from examples/homepage-orders.md by "
+        "scripts/render_example_tabs.py. -->\n"
+        '<div class="pd-proof-pair" data-provedown-ignore="true" markdown>\n\n'
+        '<div class="pd-proof-panel pd-proof-reader">\n\n'
+        '<p class="pd-proof-label">Reader view</p>\n\n'
+        f"{rendered}\n\n"
+        "</div>\n\n"
+        '<div class="pd-proof-panel pd-proof-source" markdown>\n\n'
+        '<p class="pd-proof-label">Provedown source</p>\n\n'
+        "````markdown\n"
+        f"{source.rstrip()}\n"
+        "````\n\n"
+        "</div>\n\n"
+        "</div>\n"
+        f"{HOMEPAGE_END}"
+    )
+
+
+def _replace_between(
+    text: str,
+    *,
+    start: str,
+    end: str,
+    replacement: str,
+) -> str:
+    before, marker, rest = text.partition(start)
+    if not marker:
+        raise ValueError(f"missing start marker: {start}")
+    _, marker, after = rest.partition(end)
+    if not marker:
+        raise ValueError(f"missing end marker: {end}")
+    return f"{before}{replacement}{after}"
 
 
 def _indent(text: str) -> str:
