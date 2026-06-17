@@ -1,66 +1,64 @@
-"""Built-in verifier for Python result assertions."""
+"""Built-in verifier for SQL result assertions."""
 
 from __future__ import annotations
 
-import ast
 import contextlib
 import os
-import random
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import CodeType
 from typing import Any
+
+import duckdb
 
 from provedown.model import CodeBlock, CodeUse, Document, ResultAssertion
 from provedown.report import Finding, Status
 from provedown.verifiers import VerificationContext
 
-PYTHON_LANGUAGE_NAMES = {"python", "py"}
-VERIFIER_ID = "python-results"
+SQL_LANGUAGE_NAMES = {"sql", "duckdb", "duckdb-sql"}
+VERIFIER_ID = "sql-results"
 
 
 @dataclass
-class PythonResultVerifier:
-    """Execute Python cells and verify scalar result spans."""
+class SQLResultVerifier:
+    """Execute DuckDB SQL cells and verify scalar result spans."""
 
     verifier_id: str = VERIFIER_ID
-    namespace: dict[str, Any] = field(default_factory=dict)
 
     def verify(
         self,
         document: Document,
         context: VerificationContext,
     ) -> Iterable[Finding]:
-        runner = _PythonRunner(document=document, context=context)
+        runner = _SQLRunner(document=document, context=context)
         return runner.verify()
 
 
 @dataclass
-class _PythonRunner:
+class _SQLRunner:
     document: Document
     context: VerificationContext
-    namespace: dict[str, Any] = field(default_factory=dict)
-    executed_referenced_names: set[str] = field(default_factory=set)
+    connection: Any = field(init=False)
 
     def verify(self) -> list[Finding]:
         findings: list[Finding] = []
         deferred_names = self._deferred_code_names()
         with _working_directory(self._execution_cwd()):
-            self.namespace["__name__"] = "__provedown__"
-            if self.document.path is not None:
-                self.namespace["__file__"] = str(self.document.path)
-            for event in self.document.events:
-                if isinstance(event, CodeBlock):
-                    if event.name in deferred_names:
-                        continue
-                    findings.extend(self._execute_code_block(event))
-                elif isinstance(event, CodeUse):
-                    findings.extend(self._execute_code_use(event))
-                elif isinstance(event, ResultAssertion):
-                    finding = self._verify_result(event)
-                    if finding is not None:
-                        findings.append(finding)
+            self.connection = duckdb.connect(database=":memory:")
+            try:
+                for event in self.document.events:
+                    if isinstance(event, CodeBlock):
+                        if event.name in deferred_names:
+                            continue
+                        findings.extend(self._execute_code_block(event))
+                    elif isinstance(event, CodeUse):
+                        findings.extend(self._execute_code_use(event))
+                    elif isinstance(event, ResultAssertion):
+                        finding = self._verify_result(event)
+                        if finding is not None:
+                            findings.append(finding)
+            finally:
+                self.connection.close()
         return findings
 
     def _execute_code_use(self, event: CodeUse) -> list[Finding]:
@@ -74,7 +72,6 @@ class _PythonRunner:
                     message=f"unknown code block reference: {event.name}",
                 )
             ]
-        self.executed_referenced_names.add(event.name)
         return self._execute_code_block(block, execution_location=event)
 
     def _execute_code_block(
@@ -82,29 +79,28 @@ class _PythonRunner:
         block: CodeBlock,
         execution_location: CodeUse | None = None,
     ) -> list[Finding]:
-        if not _is_python(block.language):
+        if not _is_sql(block.language):
             return []
         location = execution_location.location if execution_location else block.location
         try:
-            code = compile(block.code, location.display(), "exec")
-            exec(code, self.namespace)
+            self.connection.execute(block.code)
         except Exception as exc:
             return [
                 Finding(
                     verifier_id=VERIFIER_ID,
                     status=Status.ERROR,
                     location=location,
-                    message=f"python cell raised {type(exc).__name__}: {exc}",
+                    message=f"sql cell raised {type(exc).__name__}: {exc}",
                     evidence={"code": block.code},
                 )
             ]
         return []
 
     def _verify_result(self, result: ResultAssertion) -> Finding | None:
-        if not _is_python(result.language):
+        if not _is_sql(result.language):
             return None
 
-        expression = result.code
+        query = result.code
         ref_name = result.referenced_code_name
         if ref_name is not None:
             referenced = self.document.named_code.get(ref_name)
@@ -116,18 +112,18 @@ class _PythonRunner:
                     message=f"unknown result code reference: {ref_name}",
                     expected=result.authored,
                 )
-            if not _is_python(referenced.language):
+            if not _is_sql(referenced.language):
                 return Finding(
                     verifier_id=VERIFIER_ID,
                     status=Status.SKIP,
                     location=result.location,
                     message=(
-                        "python verifier does not handle referenced language "
+                        "sql verifier does not handle referenced language "
                         f"{referenced.language!r}"
                     ),
                     expected=result.authored,
                 )
-            expression = referenced.code
+            query = referenced.code
 
         if result.compare == "none":
             return Finding(
@@ -136,23 +132,19 @@ class _PythonRunner:
                 location=result.location,
                 message="assertion explicitly marked as not verified",
                 expected=result.authored,
-                evidence={"code": expression, "compare": result.compare},
+                evidence={"code": query, "compare": result.compare},
             )
 
-        seed = _seed_value(result.attributes)
-        if seed is not None:
-            _seed_random_generators(seed, self.namespace)
-
         try:
-            actual = self._evaluate_expression(expression, result.location.display())
+            actual = self._evaluate_query(query)
         except Exception as exc:
             return Finding(
                 verifier_id=VERIFIER_ID,
                 status=Status.ERROR,
                 location=result.location,
-                message=f"python result raised {type(exc).__name__}: {exc}",
+                message=f"sql result raised {type(exc).__name__}: {exc}",
                 expected=result.authored,
-                evidence={"code": expression},
+                evidence={"code": query},
             )
 
         comparison = self.context.comparators.compare(
@@ -168,13 +160,20 @@ class _PythonRunner:
             message=comparison.message,
             expected=comparison.expected,
             actual=comparison.actual,
-            evidence={"code": expression, "compare": result.compare},
+            evidence={"code": query, "compare": result.compare},
         )
 
-    def _evaluate_expression(self, expression: str, filename: str) -> Any:
-        parsed = ast.parse(expression, mode="eval")
-        code: CodeType = compile(parsed, filename, "eval")
-        return eval(code, self.namespace)
+    def _evaluate_query(self, query: str) -> Any:
+        cursor = self.connection.execute(query)
+        rows = cursor.fetchall()
+        description = cursor.description or []
+        column_count = len(description)
+        if not rows:
+            return ""
+        if column_count == 1:
+            values = [row[0] for row in rows]
+            return values[0] if len(values) == 1 else values
+        return rows[0] if len(rows) == 1 else rows
 
     def _execution_cwd(self) -> Path:
         if self.context.cwd is not None:
@@ -205,19 +204,5 @@ def _working_directory(path: Path) -> Iterator[None]:
         os.chdir(original)
 
 
-def _is_python(language: str) -> bool:
-    return language.strip().lower() in PYTHON_LANGUAGE_NAMES
-
-
-def _seed_value(attributes: Mapping[str, str]) -> int | None:
-    value = attributes.get("seed") or attributes.get("data-seed")
-    if value is None or not value.strip():
-        return None
-    return int(value)
-
-
-def _seed_random_generators(seed: int, namespace: Mapping[str, Any]) -> None:
-    random.seed(seed)
-    numpy = namespace.get("np")
-    if numpy is not None and hasattr(numpy, "random"):
-        numpy.random.seed(seed)
+def _is_sql(language: str) -> bool:
+    return language.strip().lower() in SQL_LANGUAGE_NAMES

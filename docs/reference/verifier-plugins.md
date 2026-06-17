@@ -86,5 +86,7 @@ registry.register(MyVerifier())
 
 Then pass the registry to `verify_document()`.
 
-The default registry currently includes only the built-in Python result verifier
-with id `python-results`.
+The default registry currently includes:
+
+- `python-results` for `python` and `py` code;
+- `sql-results` for `sql`, `duckdb`, and `duckdb-sql` code.

@@ -52,6 +52,9 @@ Attributes:
 : Optional language marker. Defaults to the document's `provedown.default_language`
   frontmatter setting, or `python` when unset.
 
+Built-in verifier language names are `python`/`py` and
+`sql`/`duckdb`/`duckdb-sql`.
+
 Unknown attributes are preserved in the parsed IR.
 
 The parser strips leading and trailing newlines from the code text.
@@ -103,6 +106,9 @@ Attributes:
 `data-language`, `language`, `lang`
 : Optional language marker. Defaults to the document's `provedown.default_language`
   frontmatter setting, or `python` when unset.
+
+Built-in verifier language names are `python`/`py` and
+`sql`/`duckdb`/`duckdb-sql`.
 
 `tol`, `data-tol`
 : Numeric tolerance. If present without `data-compare`, the comparison policy is

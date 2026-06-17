@@ -50,9 +50,9 @@ provedown verify report.html
 
 ## Relative Data Files
 
-When verifying a file from disk, the Python verifier runs with the document's
-directory as the working directory. This lets reports read nearby data files
-with relative paths:
+When verifying a file from disk, verifiers run with the document's directory as
+the working directory. This lets reports read nearby data files with relative
+paths:
 
 ````markdown
 <pre><code>
@@ -84,16 +84,23 @@ List verifier ids:
 provedown list-verifiers
 ```
 
-The built-in verifier is currently:
+The built-in verifiers are currently:
 
 ```text
 python-results
+sql-results
 ```
 
 Run only that verifier explicitly:
 
 ```bash
 provedown verify --verifier python-results report.md
+```
+
+Run only the SQL verifier explicitly:
+
+```bash
+provedown verify --verifier sql-results report.md
 ```
 
 The option may be passed more than once when additional verifier plugins exist.

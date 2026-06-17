@@ -5,8 +5,8 @@ Markdown is the primary authoring surface, but pure HTML documents can use the
 same contract. The source document stays human-readable, while embedded
 assertions can be checked by independent verifier plugins.
 
-The first built-in verifier executes Python cells and checks scalar prose
-results:
+The first built-in verifiers execute Python cells or DuckDB SQL and check scalar
+prose results:
 
 ```html
 <code>
@@ -40,8 +40,8 @@ Preview it locally with:
 just docs-serve
 ```
 
-The public model is intentionally verifier-neutral. Python execution is one
-plugin; future plugins can validate references with LinkML tooling or prove
+The public model is intentionally verifier-neutral. Python and SQL execution are
+plugins; future plugins can validate references with LinkML tooling or prove
 properties about code with systems such as clauz3.
 
 ## Extension model
@@ -67,6 +67,6 @@ class MyVerifier:
 ```
 
 The IR keeps code language, unknown attributes, source locations, authored
-values, and named code references intact. That leaves room for non-Python
+values, and named code references intact. That leaves room for additional
 executors, LinkML-backed reference validation, and static proof tools without
 changing the core parser or report format.

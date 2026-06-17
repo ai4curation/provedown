@@ -92,13 +92,22 @@ The external service status is <span class="result" data-code="status()" data-co
 
 The Python verifier does not evaluate the expression. It emits a `skip` finding.
 
-## Non-Python Languages
+## Other Languages
 
 The markup is language-neutral. Add `data-language`, `language`, or `lang` to
 mark a result for another verifier:
 
 ````markdown
-The answer is <span class="result" data-code="answer" data-language="r">42<span class="method"></span></span>.
+The answer is <span class="result" data-code="select 40 + 2" data-language="sql">42<span class="method"></span></span>.
 ````
 
-The built-in Python verifier skips languages other than `python` and `py`.
+Built-in language names:
+
+`python`, `py`
+: Handled by `python-results`.
+
+`sql`, `duckdb`, `duckdb-sql`
+: Handled by `sql-results`.
+
+Verifiers ignore result spans for other languages. Use `data-compare="none"`
+when a claim is intentionally unverified and should produce an explicit `skip`.

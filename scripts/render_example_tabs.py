@@ -46,6 +46,15 @@ EXAMPLES = [
         ),
     ),
     ExamplePage(
+        title="SQL CSV Sales Summary",
+        source=ROOT / "examples/sql-sales-summary.md",
+        target=ROOT / "docs/examples/sql-sales-summary.md",
+        description=(
+            "A Provedown document that uses DuckDB SQL to query a local CSV "
+            "file and verify summary claims in prose."
+        ),
+    ),
+    ExamplePage(
         title="Pure HTML Report",
         source=ROOT / "examples/html-report.html",
         target=ROOT / "docs/examples/html-report.md",

@@ -68,7 +68,9 @@ class VerifierRegistry:
 
 def default_registry() -> VerifierRegistry:
     from provedown.verifiers.python import PythonResultVerifier
+    from provedown.verifiers.sql import SQLResultVerifier
 
     registry = VerifierRegistry()
     registry.register(PythonResultVerifier())
+    registry.register(SQLResultVerifier())
     return registry

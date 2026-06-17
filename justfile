@@ -23,7 +23,7 @@ docs-render-examples:
 docs-serve port="8000": docs-render-examples
     uv run mkdocs serve -a 127.0.0.1:{{port}}
 
-examples := "examples/homepage-orders.md examples/basic-report.md examples/data-file-report.md examples/html-report.html"
+examples := "examples/homepage-orders.md examples/basic-report.md examples/data-file-report.md examples/sql-sales-summary.md examples/html-report.html"
 
 verify-examples:
     uv run provedown verify {{examples}}

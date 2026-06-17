@@ -69,6 +69,7 @@ nav:
       - Write Result Assertions: how-to-guides/write-result-assertions.md
       - Reuse Named Code: how-to-guides/reuse-named-code.md
       - Use Python Modules And Data Files: how-to-guides/use-python-modules-and-data-files.md
+      - Use SQL And CSV Files: how-to-guides/use-sql-and-csv-files.md
       - Inspect Claim Dependencies: how-to-guides/inspect-claim-dependencies.md
       - Lint a Document: how-to-guides/lint-a-document.md
   - Reference:
@@ -83,6 +84,7 @@ nav:
   - Examples:
       - Basic Verified Report: examples/basic-report.md
       - CSV Sales Summary: examples/data-file-report.md
+      - SQL CSV Sales Summary: examples/sql-sales-summary.md
       - Pure HTML Report: examples/html-report.md
   - Design Notes:
       - Verifiable Literate Weave: ideas/verifiable-weave-spec.md

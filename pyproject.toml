@@ -9,6 +9,7 @@ authors = [
   { name = "Provedown contributors" }
 ]
 dependencies = [
+  "duckdb>=1.0.0",
   "PyYAML>=6.0.0",
 ]
 

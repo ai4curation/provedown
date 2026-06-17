@@ -49,6 +49,7 @@ Current output:
 
 ```text
 python-results
+sql-results
 ```
 
 ## `provedown inspect`

@@ -55,6 +55,14 @@ Answer: <span class="result" data-code="x">42<span class="method"></span></span>
     assert "[pass] python-results" in captured.out
 
 
+def test_cli_list_verifiers(capsys: CaptureFixture[str]) -> None:
+    exit_code = main(["list-verifiers"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.out.splitlines() == ["python-results", "sql-results"]
+
+
 def test_cli_verify_json_output_fails_on_mismatch(
     tmp_path: Path,
     capsys: CaptureFixture[str],
