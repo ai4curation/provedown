@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,16 @@ DocumentEvent = CodeBlock | CodeUse | ResultAssertion
 
 
 @dataclass(frozen=True)
+class ProvedownConfig:
+    """Optional configuration parsed from a document's ``provedown`` frontmatter."""
+
+    aliases: Mapping[str, str] = field(default_factory=dict)
+    last_validated: str | None = None
+    default_language: str = "python"
+    pyproject: str | None = None
+
+
+@dataclass(frozen=True)
 class Document:
     """Parsed Provedown document.
 
@@ -74,6 +85,8 @@ class Document:
     path: Path | None
     events: list[DocumentEvent]
     named_code: Mapping[str, CodeBlock]
+    frontmatter: Mapping[str, Any] = field(default_factory=dict)
+    provedown: ProvedownConfig = field(default_factory=ProvedownConfig)
     diagnostics: list[str] = field(default_factory=list)
 
     def referenced_code_names(self) -> list[str]:

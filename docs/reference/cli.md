@@ -13,7 +13,7 @@ provedown verify [--verifier VERIFIER_ID] [--format text|json] PATH [PATH ...]
 Arguments:
 
 `PATH`
-: Markdown document to parse and verify. Multiple paths are allowed.
+: Markdown or HTML document to parse and verify. Multiple paths are allowed.
 
 Options:
 
@@ -62,7 +62,7 @@ provedown inspect [--format text|json] PATH [PATH ...]
 Arguments:
 
 `PATH`
-: Markdown document to parse and inspect. Multiple paths are allowed.
+: Markdown or HTML document to parse and inspect. Multiple paths are allowed.
 
 Options:
 
@@ -95,7 +95,7 @@ provedown lint [--format text|json] PATH [PATH ...]
 Arguments:
 
 `PATH`
-: Markdown document to parse and lint. Multiple paths are allowed.
+: Markdown or HTML document to parse and lint. Multiple paths are allowed.
 
 Options:
 

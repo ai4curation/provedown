@@ -2,7 +2,7 @@
 
 A compact Provedown document with inline Python, scalar result assertions, set comparison, tolerance comparison, and a named expression.
 
-The tabs show the same Provedown document in two forms. The rendered view is generated from the raw Markdown with `pandoc`; the raw view shows the literal Provedown contract.
+The tabs show the same Provedown document in two forms. The rendered view is generated from the raw source with `pandoc`; the raw view shows the literal Provedown contract.
 
 === "Rendered"
 

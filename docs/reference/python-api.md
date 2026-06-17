@@ -4,7 +4,7 @@ The public API is exported from `provedown`.
 
 ## Parse Documents
 
-Parse Markdown text:
+Parse Markdown or HTML text:
 
 ```python
 from provedown import parse_document
@@ -37,6 +37,14 @@ The parsed `Document` contains:
 
 `named_code`
 : Mapping of code block names to `CodeBlock` objects.
+
+`frontmatter`
+: Parsed YAML frontmatter from Markdown documents. User-defined fields are
+  preserved but not validated by Provedown.
+
+`provedown`
+: Normalized Provedown-specific frontmatter settings, including `aliases`,
+  `last_validated`, `default_language`, and `pyproject`.
 
 `diagnostics`
 : Parser diagnostics.

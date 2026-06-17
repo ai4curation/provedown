@@ -16,6 +16,8 @@ class ExamplePage:
     source: Path
     target: Path
     description: str
+    pandoc_from: str = "markdown-smart"
+    raw_language: str = "markdown"
 
 
 EXAMPLES = [
@@ -39,6 +41,18 @@ EXAMPLES = [
             "summary claims in prose."
         ),
     ),
+    ExamplePage(
+        title="Pure HTML Report",
+        source=ROOT / "examples/html-report.html",
+        target=ROOT / "docs/examples/html-report.md",
+        description=(
+            "A Provedown document written as plain HTML, useful when a "
+            "pipeline already emits HTML or when Markdown is not part of the "
+            "authoring workflow."
+        ),
+        pandoc_from="html",
+        raw_language="html",
+    ),
 ]
 
 
@@ -48,7 +62,7 @@ def main() -> int:
 
     for example in EXAMPLES:
         source = example.source.read_text(encoding="utf-8")
-        rendered = _pandoc_html(example.source)
+        rendered = _pandoc_html(example)
         example.target.write_text(
             _render_page(example, source=source, rendered=rendered),
             encoding="utf-8",
@@ -56,16 +70,16 @@ def main() -> int:
     return 0
 
 
-def _pandoc_html(path: Path) -> str:
+def _pandoc_html(example: ExamplePage) -> str:
     completed = subprocess.run(
         [
             "pandoc",
             "--from",
-            "markdown-smart",
+            example.pandoc_from,
             "--to",
             "html",
             "--wrap=none",
-            str(path),
+            str(example.source),
         ],
         check=True,
         capture_output=True,
@@ -79,14 +93,14 @@ def _render_page(example: ExamplePage, *, source: str, rendered: str) -> str:
         f"# {example.title}\n\n"
         f"{example.description}\n\n"
         "The tabs show the same Provedown document in two forms. The rendered "
-        "view is generated from the raw Markdown with `pandoc`; the raw view "
+        "view is generated from the raw source with `pandoc`; the raw view "
         "shows the literal Provedown contract.\n\n"
         '=== "Rendered"\n\n'
         "    <div class=\"pd-rendered-provedown\" data-provedown-ignore=\"true\">\n"
         f"{_indent(rendered)}\n"
         "    </div>\n\n"
-        '=== "Raw .md"\n\n'
-        "    ````markdown\n"
+        f'=== "Raw {example.source.suffix}"\n\n'
+        f"    ````{example.raw_language}\n"
         f"{_indent(source.rstrip())}\n"
         "    ````\n\n"
         "Verify this example with:\n\n"

@@ -73,6 +73,7 @@ nav:
       - Lint a Document: how-to-guides/lint-a-document.md
   - Reference:
       - CLI: reference/cli.md
+      - Frontmatter: reference/frontmatter.md
       - Markup Contract: reference/markup.md
       - Python API: reference/python-api.md
       - Verifier Plugins: reference/verifier-plugins.md
@@ -82,5 +83,6 @@ nav:
   - Examples:
       - Basic Verified Report: examples/basic-report.md
       - CSV Sales Summary: examples/data-file-report.md
+      - Pure HTML Report: examples/html-report.md
   - Design Notes:
       - Verifiable Literate Weave: ideas/verifiable-weave-spec.md

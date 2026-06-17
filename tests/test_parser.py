@@ -96,3 +96,103 @@ The answer is <span class="result" data-code="y">2</span>.
     assert len(document.events) == 2
     assert isinstance(document.events[0], CodeBlock)
     assert isinstance(document.events[1], ResultAssertion)
+
+
+def test_parser_extracts_contract_from_pure_html() -> None:
+    document = parse_document(
+        """
+<!doctype html>
+<html lang="en">
+  <body>
+    <pre><code name="calc">
+x = 21 * 2
+    </code></pre>
+    <p>
+      The answer is
+      <span class="result" data-code="x">42<span class="method"></span></span>.
+    </p>
+  </body>
+</html>
+""".strip(),
+        path=Path("report.html"),
+    )
+
+    assert document.diagnostics == []
+    assert len(document.events) == 2
+    assert isinstance(document.events[0], CodeBlock)
+    assert document.events[0].name == "calc"
+    assert isinstance(document.events[1], ResultAssertion)
+    assert document.events[1].authored == "42"
+
+
+def test_parser_extracts_frontmatter_and_provedown_config() -> None:
+    document = parse_document(
+        """
+---
+title: Sales report
+project:
+  owners:
+    - analytics
+provedown:
+  aliases:
+    data: data
+    cache: ../cache
+  last_validated: 2026-06-15
+  default_language: py
+  pyproject: ../pyproject.toml
+---
+<code>x = 42</code>
+The answer is <span class="result" data-code="x">42</span>.
+""".strip(),
+        path=Path("report.md"),
+    )
+
+    assert document.frontmatter["title"] == "Sales report"
+    assert document.frontmatter["project"] == {"owners": ["analytics"]}
+    assert document.provedown.aliases == {"data": "data", "cache": "../cache"}
+    assert document.provedown.last_validated == "2026-06-15"
+    assert document.provedown.default_language == "py"
+    assert document.provedown.pyproject == "../pyproject.toml"
+
+    assert len(document.events) == 2
+    assert isinstance(document.events[0], CodeBlock)
+    assert document.events[0].language == "py"
+    assert isinstance(document.events[1], ResultAssertion)
+    assert document.events[1].language == "py"
+
+
+def test_parser_ignores_html_inside_frontmatter() -> None:
+    document = parse_document(
+        """
+---
+title: "<code>x = 1</code>"
+summary: "<span class='result' data-code='x'>1</span>"
+---
+<code>y = 2</code>
+The answer is <span class="result" data-code="y">2</span>.
+""".strip()
+    )
+
+    assert len(document.events) == 2
+    assert isinstance(document.events[0], CodeBlock)
+    assert document.events[0].code == "y = 2"
+    assert isinstance(document.events[1], ResultAssertion)
+    assert document.events[1].code == "y"
+
+
+def test_parser_keeps_element_language_over_frontmatter_default() -> None:
+    document = parse_document(
+        """
+---
+provedown:
+  default_language: r
+---
+<code data-language="python">x = 42</code>
+The answer is <span class="result" data-code="x" data-language="python">42</span>.
+""".strip()
+    )
+
+    assert isinstance(document.events[0], CodeBlock)
+    assert document.events[0].language == "python"
+    assert isinstance(document.events[1], ResultAssertion)
+    assert document.events[1].language == "python"

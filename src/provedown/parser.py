@@ -1,4 +1,4 @@
-"""Parser for the Provedown HTML-in-Markdown contract."""
+"""Parser for the Provedown HTML contract in Markdown or HTML documents."""
 
 from __future__ import annotations
 
@@ -6,12 +6,16 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from provedown.model import (
     CodeBlock,
     CodeUse,
     Document,
     DocumentEvent,
+    ProvedownConfig,
     ResultAssertion,
     SourceLocation,
 )
@@ -61,11 +65,25 @@ class _ResultBuilder:
         )
 
 
+@dataclass(frozen=True)
+class _Frontmatter:
+    data: Mapping[str, Any] = field(default_factory=dict)
+    provedown: ProvedownConfig = field(default_factory=ProvedownConfig)
+    diagnostics: list[str] = field(default_factory=list)
+    end_line: int = 0
+
+
 class _ProvedownHTMLParser(HTMLParser):
-    def __init__(self, source: str, path: Path | None) -> None:
+    def __init__(
+        self,
+        source: str,
+        path: Path | None,
+        default_language: str,
+    ) -> None:
         super().__init__(convert_charrefs=True)
         self.source = source
         self.path = path
+        self.default_language = default_language
         self.events: list[DocumentEvent] = []
         self.named_code: dict[str, CodeBlock] = {}
         self.diagnostics: list[str] = []
@@ -127,7 +145,7 @@ class _ProvedownHTMLParser(HTMLParser):
                         code="",
                         location=location,
                         name=_empty_to_none(attr_map.get("name")),
-                        language=_language(attr_map),
+                        language=_language(attr_map, self.default_language),
                         attributes=attr_map,
                     )
                 )
@@ -201,7 +219,7 @@ class _ProvedownHTMLParser(HTMLParser):
         self._code = _CodeBuilder(
             location=location,
             name=_empty_to_none(attr_map.get("name")),
-            language=_language(attr_map),
+            language=_language(attr_map, self.default_language),
             attributes=attr_map,
         )
 
@@ -218,7 +236,7 @@ class _ProvedownHTMLParser(HTMLParser):
             CodeUse(
                 name=name,
                 location=location,
-                language=_language(attr_map),
+                language=_language(attr_map, self.default_language),
                 attributes=attr_map,
             )
         )
@@ -249,7 +267,7 @@ class _ProvedownHTMLParser(HTMLParser):
                 location=location,
                 code=code,
                 compare=_compare_policy(attr_map),
-                language=_language(attr_map),
+                language=_language(attr_map, self.default_language),
                 attributes=attr_map,
             )
         )
@@ -264,11 +282,20 @@ class _ProvedownHTMLParser(HTMLParser):
 
 
 def parse_document(source: str, path: Path | None = None) -> Document:
-    """Parse a markdown document containing Provedown HTML contracts."""
+    """Parse a Markdown or HTML document containing Provedown HTML contracts."""
 
-    parser = _ProvedownHTMLParser(source=source, path=path)
+    frontmatter = _extract_frontmatter(source, path)
+    parser = _ProvedownHTMLParser(
+        source=source,
+        path=path,
+        default_language=frontmatter.provedown.default_language,
+    )
+    parser.diagnostics.extend(frontmatter.diagnostics)
     try:
-        parser.feed(_mask_markdown_fenced_code(source))
+        masked = _mask_markdown_fenced_code(
+            _mask_frontmatter(source, frontmatter.end_line)
+        )
+        parser.feed(masked)
         parser.close()
     except Exception as exc:  # pragma: no cover - HTMLParser is broad by design.
         raise ParseError(str(exc)) from exc
@@ -278,12 +305,140 @@ def parse_document(source: str, path: Path | None = None) -> Document:
         path=path,
         events=parser.events,
         named_code=parser.named_code,
+        frontmatter=frontmatter.data,
+        provedown=frontmatter.provedown,
         diagnostics=parser.diagnostics,
     )
 
 
 def parse_file(path: Path) -> Document:
     return parse_document(path.read_text(encoding="utf-8"), path=path)
+
+
+def _extract_frontmatter(source: str, path: Path | None) -> _Frontmatter:
+    lines = source.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return _Frontmatter()
+
+    closing_line = _frontmatter_closing_line(lines)
+    if closing_line is None:
+        return _Frontmatter()
+
+    diagnostics: list[str] = []
+    text = "".join(lines[1:closing_line])
+    try:
+        loaded = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        diagnostics.append(
+            f"{_frontmatter_location(path).display()}: invalid YAML frontmatter: "
+            f"{exc}"
+        )
+        return _Frontmatter(diagnostics=diagnostics, end_line=closing_line + 1)
+
+    if loaded is None:
+        data: dict[str, Any] = {}
+    elif isinstance(loaded, Mapping):
+        data = {str(key): value for key, value in loaded.items()}
+    else:
+        diagnostics.append(
+            f"{_frontmatter_location(path).display()}: YAML frontmatter "
+            "should be a mapping"
+        )
+        data = {}
+
+    return _Frontmatter(
+        data=data,
+        provedown=_provedown_config(data, path, diagnostics),
+        diagnostics=diagnostics,
+        end_line=closing_line + 1,
+    )
+
+
+def _frontmatter_closing_line(lines: Sequence[str]) -> int | None:
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() in {"---", "..."}:
+            return index
+    return None
+
+
+def _provedown_config(
+    frontmatter: Mapping[str, Any],
+    path: Path | None,
+    diagnostics: list[str],
+) -> ProvedownConfig:
+    raw = frontmatter.get("provedown")
+    if raw is None:
+        return ProvedownConfig()
+
+    if not isinstance(raw, Mapping):
+        diagnostics.append(
+            f"{_frontmatter_location(path).display()}: provedown frontmatter "
+            "should be a mapping"
+        )
+        return ProvedownConfig()
+
+    aliases: dict[str, str] = {}
+    aliases.update(_aliases(raw.get("data_aliases"), path, diagnostics))
+    aliases.update(_aliases(raw.get("aliases"), path, diagnostics))
+
+    return ProvedownConfig(
+        aliases=aliases,
+        last_validated=_optional_text(raw.get("last_validated")),
+        default_language=(
+            _optional_text(raw.get("default_language")) or "python"
+        ),
+        pyproject=(
+            _optional_text(raw.get("pyproject"))
+            or _optional_text(raw.get("pyproject_toml"))
+        ),
+    )
+
+
+def _aliases(
+    raw: object,
+    path: Path | None,
+    diagnostics: list[str],
+) -> dict[str, str]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        diagnostics.append(
+            f"{_frontmatter_location(path).display()}: provedown aliases "
+            "should be a mapping"
+        )
+        return {}
+
+    aliases: dict[str, str] = {}
+    for key, value in raw.items():
+        if key is None or value is None:
+            continue
+        alias = str(key).strip()
+        target = str(value).strip()
+        if alias and target:
+            aliases[alias] = target
+    return aliases
+
+
+def _optional_text(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _frontmatter_location(path: Path | None) -> SourceLocation:
+    return SourceLocation(path=path, line=1, column=1)
+
+
+def _mask_frontmatter(source: str, end_line: int) -> str:
+    if end_line <= 0:
+        return source
+
+    lines = source.splitlines(keepends=True)
+    return "".join(
+        _mask_line_preserving_newline(line) if index < end_line else line
+        for index, line in enumerate(lines)
+    )
 
 
 def _attrs_to_dict(attrs: Sequence[tuple[str, str | None]]) -> dict[str, str]:
@@ -302,13 +457,14 @@ def _is_ignored_region(attrs: Mapping[str, str]) -> bool:
     } or _has_class(attrs, "provedown-ignore")
 
 
-def _language(attrs: Mapping[str, str]) -> str:
+def _language(attrs: Mapping[str, str], default_language: str) -> str:
     return (
         attrs.get("data-language")
         or attrs.get("language")
         or attrs.get("lang")
+        or default_language
         or "python"
-    ).strip()
+    ).strip() or "python"
 
 
 def _compare_policy(attrs: Mapping[str, str]) -> str:

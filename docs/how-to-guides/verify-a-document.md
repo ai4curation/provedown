@@ -1,6 +1,6 @@
 # Verify A Document
 
-Use `provedown verify` to check one or more Provedown Markdown files.
+Use `provedown verify` to check one or more Provedown Markdown or HTML files.
 
 ## Verify One File
 
@@ -26,6 +26,27 @@ provedown verify report.md appendix.md
 ```
 
 Each path is parsed and verified independently.
+
+## Verify HTML
+
+HTML documents use the same Provedown contract:
+
+```html
+<pre><code>
+x = 40 + 2
+</code></pre>
+
+<p>
+  The answer is
+  <span class="result" data-code="x">42<span class="method"></span></span>.
+</p>
+```
+
+Verify the file the same way:
+
+```bash
+provedown verify report.html
+```
 
 ## Relative Data Files
 

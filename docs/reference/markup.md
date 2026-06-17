@@ -1,9 +1,37 @@
 # Markup Contract
 
-Provedown parses ordinary Markdown as text and looks for a small HTML contract.
+Provedown looks for a small HTML contract in Markdown or HTML documents.
 
 The parser currently recognizes `<code>` elements, `<code use="..."/>` elements,
 and `<span class="result">` elements.
+
+## Source Formats
+
+Markdown documents can mix prose with raw Provedown HTML:
+
+````markdown
+The answer is <span class="result" data-code="x">42<span class="method"></span></span>.
+````
+
+HTML documents use the same contract directly:
+
+```html
+<pre><code name="calc">
+x = 40 + 2
+</code></pre>
+<p>
+  The answer is
+  <span class="result" data-code="x">42<span class="method"></span></span>.
+</p>
+```
+
+Markdown fenced code blocks and YAML frontmatter are ignored when scanning for
+Provedown HTML. HTML regions with `data-provedown-ignore="true"` or the
+`provedown-ignore` class are also ignored.
+
+In source HTML, every `<code>` element is treated as Provedown code. Put
+non-executable code samples inside an ignored region when they should only be
+shown to readers.
 
 ## Code Blocks
 
@@ -21,7 +49,8 @@ Attributes:
 : Optional block name.
 
 `data-language`, `language`, `lang`
-: Optional language marker. Defaults to `python`.
+: Optional language marker. Defaults to the document's `provedown.default_language`
+  frontmatter setting, or `python` when unset.
 
 Unknown attributes are preserved in the parsed IR.
 
@@ -72,7 +101,8 @@ Attributes:
 : Optional comparison policy. Defaults to `exact`.
 
 `data-language`, `language`, `lang`
-: Optional language marker. Defaults to `python`.
+: Optional language marker. Defaults to the document's `provedown.default_language`
+  frontmatter setting, or `python` when unset.
 
 `tol`, `data-tol`
 : Numeric tolerance. If present without `data-compare`, the comparison policy is
@@ -109,3 +139,5 @@ Current diagnostics include:
 - unclosed `<code>` blocks;
 - unclosed result spans;
 - result spans missing `data-code`.
+
+See [Frontmatter](frontmatter.md) for document-level metadata and defaults.

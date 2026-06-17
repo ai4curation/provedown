@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Inventory Provedown Report</title>
+  </head>
+  <body>
+    <h1>Inventory Check</h1>
+    <p>
+      This report is authored as plain HTML. Provedown reads the same
+      executable code and result assertion contract it reads from Markdown.
+    </p>
+
+    <pre><code>
+from statistics import mean
+
+counts = [12, 18, 15]
+mean_count = mean(counts)
+    </code></pre>
+
+    <p>
+      The average count is
+      <span class="result" data-code="f'{mean_count:.1f}'">15.0<span class="method"></span></span>.
+    </p>
+
+    <p>
+      The maximum count is
+      <span class="result" data-code="max(counts)">18<span class="method"></span></span>.
+    </p>
+  </body>
+</html>

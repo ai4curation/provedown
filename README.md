@@ -1,8 +1,9 @@
 # Provedown
 
 Provedown is a markdown-native framework for verifiable literate documents.
-The source document stays human-readable, while embedded assertions can be
-checked by independent verifier plugins.
+Markdown is the primary authoring surface, but pure HTML documents can use the
+same contract. The source document stays human-readable, while embedded
+assertions can be checked by independent verifier plugins.
 
 The first built-in verifier executes Python cells and checks scalar prose
 results:
@@ -20,6 +21,8 @@ Run verification with:
 ```bash
 provedown verify report.md
 ```
+
+Use `provedown verify report.html` for the same contract in an HTML file.
 
 ## Documentation
 

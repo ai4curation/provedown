@@ -2,7 +2,7 @@
 
 A more realistic Provedown document that imports Python standard-library modules, reads a local CSV file, and verifies summary claims in prose.
 
-The tabs show the same Provedown document in two forms. The rendered view is generated from the raw Markdown with `pandoc`; the raw view shows the literal Provedown contract.
+The tabs show the same Provedown document in two forms. The rendered view is generated from the raw source with `pandoc`; the raw view shows the literal Provedown contract.
 
 === "Rendered"
 

@@ -14,6 +14,7 @@ from provedown.model import (
     CodeUse,
     Document,
     DocumentEvent,
+    ProvedownConfig,
     ResultAssertion,
     SourceLocation,
 )
@@ -42,6 +43,7 @@ __all__ = [
     "LintFinding",
     "LintReport",
     "ParseError",
+    "ProvedownConfig",
     "Report",
     "ResultAssertion",
     "SourceLocation",
