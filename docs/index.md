@@ -17,13 +17,28 @@ Provedown keeps the human-readable document as the source of truth. Values in
 prose are authored claims, not generated render output, and verifier plugins can
 recompute those claims from embedded evidence.
 
+<!--
+Keep this pair in sync with examples/homepage-orders.md.
+The reader panel is the Pandoc HTML from:
+pandoc --from markdown-smart --to html --wrap=none examples/homepage-orders.md
+The reader panel includes the rendered code block verbatim; CSS hides it so the
+homepage stays compact.
+-->
 <div class="pd-proof-pair" data-provedown-ignore="true" markdown>
 
-<div class="pd-proof-panel pd-proof-reader" markdown>
+<div class="pd-proof-panel pd-proof-reader">
 
 <p class="pd-proof-label">Reader view</p>
 
-The report includes **2** paid orders totaling **$195**.
+<pre><code>
+orders = [
+    {"status": "paid", "amount": 120},
+    {"status": "refunded", "amount": 45},
+    {"status": "paid", "amount": 75},
+]
+paid = [order for order in orders if order["status"] == "paid"]
+total = sum(order["amount"] for order in paid)
+</code></pre><p>The report includes <span class="result" data-code="len(paid)">2<span class="method"></span></span> paid orders totaling <span class="result" data-code="f&#39;${total}&#39;">$195<span class="method"></span></span>.</p>
 
 </div>
 
@@ -32,7 +47,7 @@ The report includes **2** paid orders totaling **$195**.
 <p class="pd-proof-label">Provedown source</p>
 
 ```html
-<code>
+<pre><code>
 orders = [
     {"status": "paid", "amount": 120},
     {"status": "refunded", "amount": 45},
@@ -40,11 +55,9 @@ orders = [
 ]
 paid = [order for order in orders if order["status"] == "paid"]
 total = sum(order["amount"] for order in paid)
-</code>
+</code></pre>
 
-The report includes
-<span class="result" data-code="len(paid)">2<span class="method"></span></span>
-paid orders totaling
+The report includes <span class="result" data-code="len(paid)">2<span class="method"></span></span> paid orders totaling
 <span class="result" data-code="f'${total}'">$195<span class="method"></span></span>.
 ```
 

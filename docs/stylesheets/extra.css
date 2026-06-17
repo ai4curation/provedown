@@ -95,6 +95,11 @@
   text-transform: uppercase;
 }
 
+.pd-proof-reader pre {
+  display: none;
+}
+
+.pd-proof-reader .result,
 .pd-proof-reader strong {
   background: color-mix(in srgb, var(--md-accent-fg-color) 14%, transparent);
   border-bottom: 2px solid var(--md-accent-fg-color);
