@@ -66,6 +66,59 @@
   border-radius: 0.2rem;
 }
 
+.pd-proof-pair {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  margin: 1.4rem 0 1rem;
+}
+
+.pd-proof-panel {
+  border: 1px solid var(--pd-border);
+  border-radius: 0.35rem;
+  min-width: 0;
+  padding: 1rem 1.1rem;
+}
+
+.pd-proof-reader {
+  align-content: center;
+  background: color-mix(in srgb, var(--md-accent-fg-color) 7%, transparent);
+  font-size: 1.05rem;
+}
+
+.pd-proof-label {
+  color: var(--md-default-fg-color--light);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.6rem;
+  text-transform: uppercase;
+}
+
+.pd-proof-reader strong {
+  background: color-mix(in srgb, var(--md-accent-fg-color) 14%, transparent);
+  border-bottom: 2px solid var(--md-accent-fg-color);
+  border-radius: 0.15rem;
+  padding: 0 0.12rem;
+}
+
+.pd-proof-source .highlight,
+.pd-proof-source .highlighttable {
+  margin: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.pd-proof-source .highlight pre {
+  margin-bottom: 0;
+}
+
+@media screen and (max-width: 48rem) {
+  .pd-proof-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
 .pd-rendered-provedown {
   border: 1px solid var(--pd-border);
   border-radius: 0.35rem;

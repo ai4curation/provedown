@@ -17,13 +17,43 @@ Provedown keeps the human-readable document as the source of truth. Values in
 prose are authored claims, not generated render output, and verifier plugins can
 recompute those claims from embedded evidence.
 
+<div class="pd-proof-pair" data-provedown-ignore="true" markdown>
+
+<div class="pd-proof-panel pd-proof-reader" markdown>
+
+<p class="pd-proof-label">Reader view</p>
+
+The report includes **2** paid orders totaling **$195**.
+
+</div>
+
+<div class="pd-proof-panel pd-proof-source" markdown>
+
+<p class="pd-proof-label">Provedown source</p>
+
 ```html
 <code>
-x = 410 + 2
+orders = [
+    {"status": "paid", "amount": 120},
+    {"status": "refunded", "amount": 45},
+    {"status": "paid", "amount": 75},
+]
+paid = [order for order in orders if order["status"] == "paid"]
+total = sum(order["amount"] for order in paid)
 </code>
 
-The cohort has <span class="result" data-code="x">412<span class="method"></span></span> samples.
+The report includes
+<span class="result" data-code="len(paid)">2<span class="method"></span></span>
+paid orders totaling
+<span class="result" data-code="f'${total}'">$195<span class="method"></span></span>.
 ```
+
+</div>
+
+</div>
+
+If the data or filtering logic changes, `provedown verify` catches stale prose
+before it ships.
 
 ## Find Your Path
 
