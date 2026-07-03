@@ -13,6 +13,39 @@ from provedown.parser import parse_file
 
 LintLevel = Literal["error", "warning"]
 
+# Minimum line distance between a global's first definition and a later,
+# in-place mutation of it before the mutation is treated as "widely separated"
+# document locations. Adjacent definition-then-mutation is a common, readable
+# idiom; a mutation many lines away is the spooky action the lint targets.
+MUTATION_SEPARATION_LINES = 10
+
+# Methods that mutate their receiver in place. A call to one of these on a
+# global object is a hidden state change even though nothing is reassigned.
+_MUTATING_METHODS = frozenset(
+    {
+        "append",
+        "appendleft",
+        "extend",
+        "extendleft",
+        "insert",
+        "remove",
+        "pop",
+        "popitem",
+        "clear",
+        "update",
+        "add",
+        "discard",
+        "sort",
+        "reverse",
+        "setdefault",
+        "difference_update",
+        "intersection_update",
+        "symmetric_difference_update",
+        "__setitem__",
+        "__delitem__",
+    }
+)
+
 
 @dataclass(frozen=True)
 class LintFinding:
@@ -77,6 +110,7 @@ def lint_document(document: Document) -> LintReport:
     _add_relationship_lints(document, findings)
     _add_result_policy_lints(document, findings)
     _add_python_fragility_lints(document, findings)
+    _add_mutation_lints(document, findings)
     return LintReport(path=document.path, findings=findings)
 
 
@@ -180,6 +214,177 @@ def _add_python_fragility_lints(
                 findings=findings,
                 skip_random=_has_seed(event),
             )
+
+
+def _add_mutation_lints(
+    document: Document,
+    findings: list[LintFinding],
+) -> None:
+    """Flag in-place mutation of a global defined in an earlier, distant block.
+
+    Python cells share one namespace, so a list or dict created in one block and
+    mutated many lines later is hidden state: reading the second block in
+    isolation does not reveal that its behaviour depends on, and changes, an
+    object from elsewhere in the document. Reordering or re-running then produces
+    different results, which is exactly the fragility verification should avoid.
+    """
+
+    definitions: dict[str, SourceLocation] = {}
+    for event in document.events:
+        if not isinstance(event, CodeBlock) or not _is_python(event.language):
+            continue
+        try:
+            tree = ast.parse(event.code, mode="exec")
+        except SyntaxError:
+            # Syntax errors are reported separately by the fragility lints.
+            continue
+
+        rebound = _module_scope_bindings(tree.body)
+        for name in sorted(_module_scope_mutations(tree.body)):
+            def_location = definitions.get(name)
+            if def_location is None or name in rebound:
+                # First seen here, or this block rebinds a fresh object it owns.
+                continue
+            distance = abs(event.location.line - def_location.line)
+            if distance < MUTATION_SEPARATION_LINES:
+                continue
+            findings.append(
+                LintFinding(
+                    level="warning",
+                    code="distant-global-mutation",
+                    location=event.location,
+                    message=(
+                        f"mutates global {name!r} defined {distance} lines "
+                        f"earlier at {def_location.display()}; distant mutation "
+                        "creates hidden state across the document"
+                    ),
+                    target=name,
+                )
+            )
+
+        for name in rebound:
+            definitions.setdefault(name, event.location)
+
+
+def _module_scope_statements(body: list[ast.stmt]) -> list[ast.stmt]:
+    """Statements executed in module scope, skipping nested function/class bodies.
+
+    Mutations and bindings inside a ``def`` or ``class`` only take effect when
+    that scope runs, so they are not module-level state changes for this lint.
+    Control-flow bodies (``if``/``for``/``while``/``with``/``try``/``match``) are
+    followed because their statements do run at module scope.
+    """
+
+    collected: list[ast.stmt] = []
+    for statement in body:
+        collected.append(statement)
+        if isinstance(
+            statement,
+            (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),
+        ):
+            continue
+        for child in _child_statement_bodies(statement):
+            collected.extend(_module_scope_statements(child))
+    return collected
+
+
+def _child_statement_bodies(statement: ast.stmt) -> list[list[ast.stmt]]:
+    bodies: list[list[ast.stmt]] = []
+    for field_name in ("body", "orelse", "finalbody"):
+        child = getattr(statement, field_name, None)
+        if isinstance(child, list):
+            bodies.append(child)
+    for handler in getattr(statement, "handlers", []):
+        bodies.append(handler.body)
+    for case in getattr(statement, "cases", []):
+        bodies.append(case.body)
+    return bodies
+
+
+def _module_scope_bindings(body: list[ast.stmt]) -> set[str]:
+    """Names freshly bound to a new object in module scope.
+
+    Augmented assignment (``x += 1``) is deliberately excluded: it mutates an
+    existing binding rather than creating a new object.
+    """
+
+    names: set[str] = set()
+    for statement in _module_scope_statements(body):
+        if isinstance(statement, ast.Assign):
+            for target in statement.targets:
+                names |= _target_names(target)
+        elif isinstance(statement, ast.AnnAssign):
+            if isinstance(statement.target, ast.Name) and statement.value is not None:
+                names.add(statement.target.id)
+        elif isinstance(
+            statement,
+            (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),
+        ):
+            names.add(statement.name)
+        elif isinstance(statement, (ast.Import, ast.ImportFrom)):
+            for alias in statement.names:
+                names.add((alias.asname or alias.name).split(".")[0])
+        elif isinstance(statement, (ast.For, ast.AsyncFor)):
+            names |= _target_names(statement.target)
+        elif isinstance(statement, (ast.With, ast.AsyncWith)):
+            for item in statement.items:
+                if item.optional_vars is not None:
+                    names |= _target_names(item.optional_vars)
+    return names
+
+
+def _module_scope_mutations(body: list[ast.stmt]) -> set[str]:
+    """Root names of objects mutated in place in module scope."""
+
+    names: set[str] = set()
+    for statement in _module_scope_statements(body):
+        if isinstance(statement, ast.AugAssign):
+            _add_root(statement.target, names)
+        elif isinstance(statement, ast.Assign):
+            for target in statement.targets:
+                if isinstance(target, (ast.Subscript, ast.Attribute)):
+                    _add_root(target, names)
+        elif isinstance(statement, ast.AnnAssign):
+            if isinstance(statement.target, (ast.Subscript, ast.Attribute)):
+                _add_root(statement.target, names)
+        elif isinstance(statement, ast.Delete):
+            for target in statement.targets:
+                if isinstance(target, (ast.Subscript, ast.Attribute)):
+                    _add_root(target, names)
+        elif isinstance(statement, ast.Expr) and isinstance(
+            statement.value, ast.Call
+        ):
+            func = statement.value.func
+            if isinstance(func, ast.Attribute) and func.attr in _MUTATING_METHODS:
+                _add_root(func.value, names)
+    return names
+
+
+def _target_names(node: ast.expr) -> set[str]:
+    if isinstance(node, ast.Name):
+        return {node.id}
+    if isinstance(node, ast.Starred):
+        return _target_names(node.value)
+    if isinstance(node, (ast.Tuple, ast.List)):
+        names: set[str] = set()
+        for element in node.elts:
+            names |= _target_names(element)
+        return names
+    return set()
+
+
+def _add_root(node: ast.expr, names: set[str]) -> None:
+    root = _root_name(node)
+    if root is not None:
+        names.add(root)
+
+
+def _root_name(node: ast.expr) -> str | None:
+    while isinstance(node, (ast.Subscript, ast.Attribute)):
+        node = node.value
+    if isinstance(node, ast.Name):
+        return node.id
+    return None
 
 
 def _lint_python_source(
