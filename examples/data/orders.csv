@@ -1,0 +1,7 @@
+order_id,region,status,amount
+A001,North,paid,120.50
+A002,South,paid,80.00
+A003,North,refunded,40.00
+A004,West,paid,200.25
+A005,South,paid,60.25
+A006,West,pending,35.00
