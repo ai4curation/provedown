@@ -1624,8 +1624,8 @@ false or stale. That mismatch is the hallucination signal.</p>
 <ul>
 <li><code>provedown inspect</code> shows which code supports which claims;</li>
 <li><code>provedown lint</code> flags unresolved references, unused named code, unjustified
-  unverified claims, and fragile Python patterns such as randomness or wall-clock
-  time.</li>
+  unverified claims, fragile Python patterns such as randomness or wall-clock
+  time, and distant mutation of shared global state.</li>
 </ul>
 <p>Future verifier plugins can extend the same model to other hallucination-prone
 claims:</p>
