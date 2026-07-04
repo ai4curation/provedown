@@ -93,6 +93,142 @@ def test_lint_respects_seeded_result_expression() -> None:
     assert report.findings == []
 
 
+def test_lint_warns_on_distant_global_mutation() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<code>",
+                "totals = []",
+                "</code>",
+                "",
+                "Prose paragraph one.",
+                "Prose paragraph two.",
+                "Prose paragraph three.",
+                "Prose paragraph four.",
+                "Prose paragraph five.",
+                "Prose paragraph six.",
+                "",
+                "<code>",
+                "totals.append(1)",
+                "</code>",
+            ]
+        )
+    )
+
+    report = lint_document(document)
+
+    assert report.ok
+    assert report.summary() == {"errors": 0, "warnings": 1}
+    finding = report.findings[0]
+    assert finding.code == "distant-global-mutation"
+    assert finding.target == "totals"
+
+
+def test_lint_allows_nearby_mutation() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<code>",
+                "totals = []",
+                "totals.append(1)",
+                "</code>",
+            ]
+        )
+    )
+
+    report = lint_document(document)
+
+    assert report.findings == []
+
+
+def test_lint_ignores_locally_owned_object() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<code>",
+                "totals = []",
+                "</code>",
+                "",
+                "Prose paragraph one.",
+                "Prose paragraph two.",
+                "Prose paragraph three.",
+                "Prose paragraph four.",
+                "Prose paragraph five.",
+                "Prose paragraph six.",
+                "",
+                "<code>",
+                "totals = [1, 2, 3]",
+                "totals.append(4)",
+                "</code>",
+            ]
+        )
+    )
+
+    report = lint_document(document)
+
+    assert report.findings == []
+
+
+def test_lint_ignores_mutation_inside_function_scope() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<code>",
+                "totals = []",
+                "</code>",
+                "",
+                "Prose paragraph one.",
+                "Prose paragraph two.",
+                "Prose paragraph three.",
+                "Prose paragraph four.",
+                "Prose paragraph five.",
+                "Prose paragraph six.",
+                "",
+                "<code>",
+                "def record(value):",
+                "    local = []",
+                "    local.append(value)",
+                "    return local",
+                "</code>",
+            ]
+        )
+    )
+
+    report = lint_document(document)
+
+    assert report.findings == []
+
+
+def test_lint_warns_on_distant_subscript_mutation() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<code>",
+                "counts = {}",
+                "</code>",
+                "",
+                "Prose paragraph one.",
+                "Prose paragraph two.",
+                "Prose paragraph three.",
+                "Prose paragraph four.",
+                "Prose paragraph five.",
+                "Prose paragraph six.",
+                "",
+                "<code>",
+                'counts["a"] = 1',
+                "</code>",
+            ]
+        )
+    )
+
+    report = lint_document(document)
+
+    assert [finding.code for finding in report.findings] == [
+        "distant-global-mutation"
+    ]
+    assert report.findings[0].target == "counts"
+
+
 def test_cli_lint_json_output(tmp_path: Path, capsys: CaptureFixture[str]) -> None:
     report_path = tmp_path / "report.md"
     report_path.write_text(

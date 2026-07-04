@@ -54,6 +54,13 @@ JSON output is intended for CI, editor integrations, and scripts.
 : Python code appears to use randomness, wall-clock time, environment variables,
   or network calls during verification. This is a warning.
 
+`distant-global-mutation`
+: A code block mutates a global object (for example `list.append` or
+  `data[key] = ...`) that was first defined in an earlier block many lines away.
+  Because Python cells share one namespace, this is hidden state that makes the
+  later block depend on and change something far from where it reads. This is a
+  warning.
+
 `python-syntax-error`
 : A Python code block or inline expression cannot be parsed. This is an error.
 

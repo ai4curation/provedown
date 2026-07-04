@@ -95,8 +95,8 @@ The inspection and linting commands add static checks before execution:
 
 - `provedown inspect` shows which code supports which claims;
 - `provedown lint` flags unresolved references, unused named code, unjustified
-  unverified claims, and fragile Python patterns such as randomness or wall-clock
-  time.
+  unverified claims, fragile Python patterns such as randomness or wall-clock
+  time, and distant mutation of shared global state.
 
 Future verifier plugins can extend the same model to other hallucination-prone
 claims:
