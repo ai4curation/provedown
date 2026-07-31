@@ -53,6 +53,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default="text",
         help="output format",
     )
+    verify.add_argument(
+        "--sandbox",
+        choices=("uv",),
+        help="verify Python in an isolated uv environment (prototype)",
+    )
 
     inspect = subparsers.add_parser(
         "inspect",
@@ -83,9 +88,28 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _verify(args: argparse.Namespace) -> int:
+    verifier_ids = args.verifiers
+    if (
+        args.sandbox is not None
+        and verifier_ids is not None
+        and set(verifier_ids) != {"python-results"}
+    ):
+        print(
+            "provedown verify: --sandbox uv currently supports only "
+            "--verifier python-results",
+            file=sys.stderr,
+        )
+        return 2
+
     reports: list[Report] = []
     for path in args.paths:
-        reports.append(verify_file(path, verifier_ids=args.verifiers))
+        reports.append(
+            verify_file(
+                path,
+                verifier_ids=verifier_ids,
+                sandbox=args.sandbox,
+            )
+        )
 
     if args.format == "json":
         payload = {

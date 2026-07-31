@@ -7,7 +7,8 @@ The command-line entry point is `provedown`.
 Verify one or more documents.
 
 ```bash
-provedown verify [--verifier VERIFIER_ID] [--format text|json] PATH [PATH ...]
+provedown verify [--verifier VERIFIER_ID] [--format text|json]
+  [--sandbox uv] PATH [PATH ...]
 ```
 
 Arguments:
@@ -25,6 +26,12 @@ Options:
 
 `--format json`
 : Print structured JSON output.
+
+`--sandbox uv`
+: Run the built-in Python verifier in a fresh uv environment. This prototype
+  supports only sandboxed `python-results`; documents containing SQL claims
+  return an unsupported-sandbox error. The mode uses document environment
+  metadata and does not provide network or filesystem security isolation.
 
 Exit codes:
 
