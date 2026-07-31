@@ -68,6 +68,7 @@ class ProvedownConfig:
     """Optional configuration parsed from a document's ``provedown`` frontmatter."""
 
     aliases: Mapping[str, str] = field(default_factory=dict)
+    environments: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     last_validated: str | None = None
     default_language: str = "python"
     pyproject: str | None = None

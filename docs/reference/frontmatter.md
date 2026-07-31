@@ -15,6 +15,12 @@ provedown:
   aliases:
     data: data
     cache: ../cache
+  environments:
+    python:
+      requires-python: ">=3.11"
+      dependencies:
+        - pandas>=2
+        - pyarrow>=15
   last_validated: "2026-06-15"
   default_language: python
   pyproject: pyproject.toml
@@ -38,6 +44,13 @@ The optional `provedown` mapping is reserved for Provedown-aware tooling.
 : Optional mapping of short names to data folders or other local paths. The
   parser stores these aliases for verifiers and integrations.
 
+`environments`
+: Optional mapping of language or verifier-family names to environment
+  metadata. Provedown core preserves each nested mapping without interpreting
+  plugin-specific fields. The built-in Python environment uses
+  `dependencies` and `requires-python` with the same value semantics as PEP
+  723. See [Dependency Metadata](../explanations/dependency-metadata.md).
+
 `last_validated`
 : Optional date or string recording when the document was last validated. YAML
   dates are normalized to strings in `Document.provedown.last_validated`.
@@ -49,7 +62,8 @@ The optional `provedown` mapping is reserved for Provedown-aware tooling.
 
 `pyproject`
 : Optional path to the Python project's `pyproject.toml`, relative to the
-  document or repository convention used by the verifier.
+  document. A Python environment may combine this project with extra inline
+  dependencies from `environments.python.dependencies`.
 
 `pyproject_toml`
 : Accepted as a synonym for `pyproject`.

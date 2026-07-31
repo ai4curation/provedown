@@ -383,6 +383,7 @@ def _provedown_config(
 
     return ProvedownConfig(
         aliases=aliases,
+        environments=_environments(raw.get("environments"), path, diagnostics),
         last_validated=_optional_text(raw.get("last_validated")),
         default_language=(
             _optional_text(raw.get("default_language")) or "python"
@@ -392,6 +393,39 @@ def _provedown_config(
             or _optional_text(raw.get("pyproject_toml"))
         ),
     )
+
+
+def _environments(
+    raw: object,
+    path: Path | None,
+    diagnostics: list[str],
+) -> dict[str, Mapping[str, Any]]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        diagnostics.append(
+            f"{_frontmatter_location(path).display()}: provedown environments "
+            "should be a mapping"
+        )
+        return {}
+
+    environments: dict[str, Mapping[str, Any]] = {}
+    for key, value in raw.items():
+        name = str(key).strip() if key is not None else ""
+        if not name:
+            diagnostics.append(
+                f"{_frontmatter_location(path).display()}: provedown environment "
+                "name should not be empty"
+            )
+            continue
+        if not isinstance(value, Mapping):
+            diagnostics.append(
+                f"{_frontmatter_location(path).display()}: provedown environment "
+                f"{name!r} should be a mapping"
+            )
+            continue
+        environments[name] = {str(item_key): item for item_key, item in value.items()}
+    return environments
 
 
 def _aliases(
