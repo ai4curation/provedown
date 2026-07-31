@@ -81,6 +81,7 @@ nav:
   - Explanations:
       - Hallucination Detection: explanations/hallucination-detection.md
       - Dependency Metadata: explanations/dependency-metadata.md
+      - Export Paths: explanations/export-paths.md
       - Why not marimo?: explanations/why-not-marimo.md
   - Examples:
       - Basic Verified Report: examples/basic-report.md

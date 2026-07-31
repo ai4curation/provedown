@@ -101,7 +101,8 @@ borrowing:
   [PEP 723](https://peps.python.org/pep-0723/) for single-file reproducibility.
 - Sandboxed execution with `uv` for verifier isolation.
 - Dependency inspection tools that show which code supports which claims.
-- App or WASM export ideas for richer interactive presentations.
+- [App or WASM export ideas](export-paths.md) for richer interactive
+  presentations.
 - Strong linting around mutation, hidden state, and nondeterministic execution.
 
 The likely workflow is not "Provedown instead of marimo" in every context. A
