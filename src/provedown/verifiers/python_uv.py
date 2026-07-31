@@ -27,6 +27,8 @@ from provedown.verifiers.python import (
     _seed_value,
 )
 
+UV_SANDBOX_TIMEOUT_SECONDS = 300
+
 
 @dataclass(frozen=True)
 class _UVAction:
@@ -191,10 +193,19 @@ class UVPythonRunner:
                 text=True,
                 cwd=self._execution_cwd(),
                 env=environment,
+                timeout=UV_SANDBOX_TIMEOUT_SECONDS,
             )
         except FileNotFoundError:
             return self._sandbox_error(
                 "uv sandbox setup failed: uv executable was not found"
+            )
+        except subprocess.TimeoutExpired:
+            return self._sandbox_error(
+                f"uv sandbox timed out after {UV_SANDBOX_TIMEOUT_SECONDS} seconds",
+                evidence={
+                    "sandbox": "uv",
+                    "timeout_seconds": UV_SANDBOX_TIMEOUT_SECONDS,
+                },
             )
 
         if completed.returncode != 0:

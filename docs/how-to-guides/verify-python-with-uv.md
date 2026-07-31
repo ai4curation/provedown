@@ -53,7 +53,9 @@ requested environment.
 
 The worker preserves normal Provedown execution order and the document-relative
 working directory. Result comparison and report formatting remain in the
-parent Provedown process.
+parent Provedown process. The complete uv setup and worker invocation has a
+five-minute timeout so dependency resolution or document code cannot hang the
+verifier indefinitely.
 
 ## Understand The Boundary
 

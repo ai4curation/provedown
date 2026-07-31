@@ -1,12 +1,17 @@
 import shutil
+import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
-from pytest import CaptureFixture
+from pytest import CaptureFixture, MonkeyPatch
 
 from provedown import Status, VerificationContext, parse_document, verify_document
 from provedown.cli import main
-from provedown.verifiers.python_uv import UVPythonRunner
+from provedown.verifiers.python_uv import (
+    UV_SANDBOX_TIMEOUT_SECONDS,
+    UVPythonRunner,
+)
 
 UV_AVAILABLE = shutil.which("uv") is not None
 
@@ -124,6 +129,34 @@ Answer: <span class="result" data-code="x">42</span>
     assert not report.ok
     assert report.count(Status.ERROR) == 1
     assert "dependencies must be a list" in report.findings[0].message
+
+
+def test_uv_sandbox_reports_worker_timeout(monkeypatch: MonkeyPatch) -> None:
+    def time_out(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert kwargs["timeout"] == UV_SANDBOX_TIMEOUT_SECONDS
+        raise subprocess.TimeoutExpired(
+            cmd=args[0],
+            timeout=kwargs["timeout"],
+        )
+
+    monkeypatch.setattr(subprocess, "run", time_out)
+    document = parse_document(
+        """
+<code>while True: pass</code>
+Answer: <span class="result" data-code="1 + 1">2</span>
+""".strip()
+    )
+
+    report = verify_document(
+        document,
+        context=VerificationContext(sandbox="uv"),
+        verifier_ids=["python-results"],
+    )
+
+    assert not report.ok
+    assert report.count(Status.ERROR) == 1
+    assert report.findings[0].message == "uv sandbox timed out after 300 seconds"
+    assert report.findings[0].evidence["timeout_seconds"] == 300
 
 
 def test_cli_uv_sandbox_rejects_non_python_verifier(
