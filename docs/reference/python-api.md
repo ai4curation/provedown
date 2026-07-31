@@ -44,7 +44,7 @@ The parsed `Document` contains:
 
 `provedown`
 : Normalized Provedown-specific frontmatter settings, including `aliases`,
-  `last_validated`, `default_language`, and `pyproject`.
+  `environments`, `last_validated`, `default_language`, and `pyproject`.
 
 `diagnostics`
 : Parser diagnostics.

@@ -80,6 +80,7 @@ nav:
       - Verifier Plugins: reference/verifier-plugins.md
   - Explanations:
       - Hallucination Detection: explanations/hallucination-detection.md
+      - Dependency Metadata: explanations/dependency-metadata.md
       - Export Paths: explanations/export-paths.md
       - Why not marimo?: explanations/why-not-marimo.md
   - Examples:

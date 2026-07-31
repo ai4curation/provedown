@@ -137,6 +137,15 @@ provedown:
   aliases:
     data: data
     cache: ../cache
+  environments:
+    python:
+      requires-python: ">=3.11"
+      dependencies:
+        - pandas>=2
+        - pyarrow>=15
+    sql:
+      extensions:
+        - spatial
   last_validated: 2026-06-15
   default_language: py
   pyproject: ../pyproject.toml
@@ -150,6 +159,13 @@ The answer is <span class="result" data-code="x">42</span>.
     assert document.frontmatter["title"] == "Sales report"
     assert document.frontmatter["project"] == {"owners": ["analytics"]}
     assert document.provedown.aliases == {"data": "data", "cache": "../cache"}
+    assert document.provedown.environments == {
+        "python": {
+            "requires-python": ">=3.11",
+            "dependencies": ["pandas>=2", "pyarrow>=15"],
+        },
+        "sql": {"extensions": ["spatial"]},
+    }
     assert document.provedown.last_validated == "2026-06-15"
     assert document.provedown.default_language == "py"
     assert document.provedown.pyproject == "../pyproject.toml"
@@ -159,6 +175,102 @@ The answer is <span class="result" data-code="x">42</span>.
     assert document.events[0].language == "py"
     assert isinstance(document.events[1], ResultAssertion)
     assert document.events[1].language == "py"
+
+
+def test_parser_reports_invalid_environment_config() -> None:
+    document = parse_document(
+        """
+---
+provedown:
+  environments:
+    python:
+      dependencies:
+        - pandas
+    sql: duckdb
+---
+<code>x = 42</code>
+""".strip(),
+        path=Path("report.md"),
+    )
+
+    assert document.provedown.environments == {
+        "python": {"dependencies": ["pandas"]}
+    }
+    assert len(document.diagnostics) == 1
+    assert "provedown environment 'sql' should be a mapping" in document.diagnostics[0]
+
+
+def test_parser_reports_non_mapping_environments() -> None:
+    document = parse_document(
+        """
+---
+provedown:
+  environments:
+    - python
+---
+<code>x = 42</code>
+""".strip(),
+        path=Path("report.md"),
+    )
+
+    assert document.provedown.environments == {}
+    assert len(document.diagnostics) == 1
+    assert "provedown environments should be a mapping" in document.diagnostics[0]
+
+
+def test_parser_rejects_non_string_environment_keys() -> None:
+    document = parse_document(
+        """
+---
+provedown:
+  environments:
+    1:
+      dependencies:
+        - numpy
+    python:
+      1: discarded
+      "1": preserved
+      dependencies:
+        - pandas
+---
+<code>x = 42</code>
+""".strip(),
+        path=Path("report.md"),
+    )
+
+    assert document.provedown.environments == {
+        "python": {"1": "preserved", "dependencies": ["pandas"]}
+    }
+    assert len(document.diagnostics) == 2
+    assert "environment name 1 should be a string" in document.diagnostics[0]
+    assert "environment 'python' metadata key 1 should be a string" in (
+        document.diagnostics[1]
+    )
+
+
+def test_parser_reports_environment_names_that_collide_after_trimming() -> None:
+    document = parse_document(
+        """
+---
+provedown:
+  environments:
+    python:
+      dependencies:
+        - pandas
+    " python ":
+      dependencies:
+        - numpy
+---
+<code>x = 42</code>
+""".strip(),
+        path=Path("report.md"),
+    )
+
+    assert document.provedown.environments == {
+        "python": {"dependencies": ["pandas"]}
+    }
+    assert len(document.diagnostics) == 1
+    assert "duplicate provedown environment name 'python'" in document.diagnostics[0]
 
 
 def test_parser_ignores_html_inside_frontmatter() -> None:
