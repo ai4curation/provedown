@@ -398,6 +398,8 @@
       
         
       
+        
+      
     
     
     
@@ -576,6 +578,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#verify-python-in-a-fresh-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify Python In A Fresh Environment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#interpret-statuses" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -666,6 +679,34 @@
     
   
     Use Python Modules And Data Files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../verify-python-with-uv/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Verify Python With uv
   
 
     
@@ -1527,6 +1568,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#verify-python-in-a-fresh-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify Python In A Fresh Environment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#interpret-statuses" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1621,6 +1673,13 @@ overall <code>ok</code> field, per-file summaries, and structured findings.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>provedown<span class="w"> </span>verify<span class="w"> </span>--verifier<span class="w"> </span>sql-results<span class="w"> </span>report.md
 </span></code></pre></div>
 <p>The option may be passed more than once when additional verifier plugins exist.</p>
+<h2 id="verify-python-in-a-fresh-environment">Verify Python In A Fresh Environment<a class="headerlink" href="#verify-python-in-a-fresh-environment" title="Permanent link">&para;</a></h2>
+<p>Use the uv sandbox prototype when you want Python verification to run without
+inheriting packages from the caller's environment:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>provedown<span class="w"> </span>verify<span class="w"> </span>--sandbox<span class="w"> </span>uv<span class="w"> </span>report.md
+</span></code></pre></div>
+<p>The sandbox reads Python requirements from document frontmatter. See
+<a href="../verify-python-with-uv/">Verify Python With uv</a> for setup and boundaries.</p>
 <h2 id="interpret-statuses">Interpret Statuses<a class="headerlink" href="#interpret-statuses" title="Permanent link">&para;</a></h2>
 <p><code>pass</code> means the authored claim matched the recomputed value.</p>
 <p><code>fail</code> means the verifier ran successfully and found a mismatch.</p>

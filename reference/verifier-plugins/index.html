@@ -396,6 +396,8 @@
       
         
       
+        
+      
     
     
     
@@ -540,6 +542,34 @@
     
   
     Use Python Modules And Data Files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to-guides/verify-python-with-uv/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Verify Python With uv
   
 
     
@@ -1564,6 +1594,10 @@ receives a parsed <code>Document</code> and returns <code>Finding</code> objects
 <dd>Optional working directory for verifier execution.</dd>
 <dt><code>comparators</code></dt>
 <dd>Comparator registry used by scalar result verifiers.</dd>
+<dt><code>sandbox</code></dt>
+<dd>Optional execution adapter requested by the caller. A verifier must either
+  implement the named mode or return an error; it must not silently run code
+  outside the requested sandbox.</dd>
 </dl>
 <p>Verifiers may ignore context fields that do not apply.</p>
 <h2 id="registration">Registration<a class="headerlink" href="#registration" title="Permanent link">&para;</a></h2>

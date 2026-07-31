@@ -396,6 +396,8 @@
       
         
       
+        
+      
     
     
     
@@ -540,6 +542,34 @@
     
   
     Use Python Modules And Data Files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to-guides/verify-python-with-uv/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Verify Python With uv
   
 
     
@@ -1553,6 +1583,8 @@ parser owns only the portable mapping. A verifier adapter owns validation,
 environment construction, and execution. Installing declared dependencies is
 therefore an explicit execution action, with the same trust implications as
 running the document code itself.</p>
+<p>The built-in Python adapter consumes this metadata when verification is invoked
+with <code>--sandbox uv</code>.</p>
 <p>Lock data and offline dependency policies can be added later without changing
 the document-level ownership boundary.</p>
 

@@ -396,6 +396,8 @@
       
         
       
+        
+      
     
     
     
@@ -540,6 +542,34 @@
     
   
     Use Python Modules And Data Files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to-guides/verify-python-with-uv/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Verify Python With uv
   
 
     
@@ -1561,7 +1591,8 @@
 <p>The command-line entry point is <code>provedown</code>.</p>
 <h2 id="provedown-verify"><code>provedown verify</code><a class="headerlink" href="#provedown-verify" title="Permanent link">&para;</a></h2>
 <p>Verify one or more documents.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>provedown<span class="w"> </span>verify<span class="w"> </span><span class="o">[</span>--verifier<span class="w"> </span>VERIFIER_ID<span class="o">]</span><span class="w"> </span><span class="o">[</span>--format<span class="w"> </span>text<span class="p">|</span>json<span class="o">]</span><span class="w"> </span>PATH<span class="w"> </span><span class="o">[</span>PATH<span class="w"> </span>...<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>provedown<span class="w"> </span>verify<span class="w"> </span><span class="o">[</span>--verifier<span class="w"> </span>VERIFIER_ID<span class="o">]</span><span class="w"> </span><span class="o">[</span>--format<span class="w"> </span>text<span class="p">|</span>json<span class="o">]</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="o">[</span>--sandbox<span class="w"> </span>uv<span class="o">]</span><span class="w"> </span>PATH<span class="w"> </span><span class="o">[</span>PATH<span class="w"> </span>...<span class="o">]</span>
 </span></code></pre></div>
 <p>Arguments:</p>
 <dl>
@@ -1576,6 +1607,11 @@
 <dd>Print human-readable output. This is the default.</dd>
 <dt><code>--format json</code></dt>
 <dd>Print structured JSON output.</dd>
+<dt><code>--sandbox uv</code></dt>
+<dd>Run the built-in Python verifier in a fresh uv environment. This prototype
+  supports only sandboxed <code>python-results</code>; documents containing SQL claims
+  return an unsupported-sandbox error. The mode uses document environment
+  metadata and does not provide network or filesystem security isolation.</dd>
 </dl>
 <p>Exit codes:</p>
 <dl>

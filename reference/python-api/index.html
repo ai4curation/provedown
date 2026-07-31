@@ -396,6 +396,8 @@
       
         
       
+        
+      
     
     
     
@@ -540,6 +542,34 @@
     
   
     Use Python Modules And Data Files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to-guides/verify-python-with-uv/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Verify Python With uv
   
 
     
@@ -1545,7 +1575,8 @@
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
 </span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">report</span> <span class="o">=</span> <span class="n">verify_file</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;report.md&quot;</span><span class="p">))</span>
 </span></code></pre></div>
-<p><code>verify_file()</code> runs with the document directory as the working directory.</p>
+<p><code>verify_file()</code> runs with the document directory as the working directory.
+Pass <code>sandbox="uv"</code> and select <code>python-results</code> to use the uv sandbox adapter.</p>
 <h2 id="inspect-reports">Inspect Reports<a class="headerlink" href="#inspect-reports" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">provedown</span><span class="w"> </span><span class="kn">import</span> <span class="n">Status</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
