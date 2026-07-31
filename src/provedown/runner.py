@@ -35,9 +35,10 @@ def verify_file(
     path: Path,
     registry: VerifierRegistry | None = None,
     verifier_ids: Sequence[str] | None = None,
+    sandbox: str | None = None,
 ) -> Report:
     document = parse_file(path)
-    context = VerificationContext(cwd=path.parent)
+    context = VerificationContext(cwd=path.parent, sandbox=sandbox)
     return verify_document(
         document,
         registry=registry,

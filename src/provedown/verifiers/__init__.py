@@ -18,6 +18,7 @@ class VerificationContext:
 
     cwd: Path | None = None
     comparators: ComparatorRegistry = field(default_factory=default_comparators)
+    sandbox: str | None = None
 
 
 class Verifier(Protocol):

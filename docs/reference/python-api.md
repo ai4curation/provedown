@@ -75,6 +75,7 @@ report = verify_file(Path("report.md"))
 ```
 
 `verify_file()` runs with the document directory as the working directory.
+Pass `sandbox="uv"` and select `python-results` to use the uv sandbox adapter.
 
 ## Inspect Reports
 

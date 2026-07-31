@@ -71,6 +71,11 @@ Only `fail` and `error` make a report not ok.
 `comparators`
 : Comparator registry used by scalar result verifiers.
 
+`sandbox`
+: Optional execution adapter requested by the caller. A verifier must either
+  implement the named mode or return an error; it must not silently run code
+  outside the requested sandbox.
+
 Verifiers may ignore context fields that do not apply.
 
 ## Registration

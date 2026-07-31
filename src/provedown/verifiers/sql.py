@@ -11,7 +11,13 @@ from typing import Any
 
 import duckdb
 
-from provedown.model import CodeBlock, CodeUse, Document, ResultAssertion
+from provedown.model import (
+    CodeBlock,
+    CodeUse,
+    Document,
+    ResultAssertion,
+    SourceLocation,
+)
 from provedown.report import Finding, Status
 from provedown.verifiers import VerificationContext
 
@@ -30,6 +36,18 @@ class SQLResultVerifier:
         document: Document,
         context: VerificationContext,
     ) -> Iterable[Finding]:
+        if context.sandbox is not None and _has_sql_events(document):
+            return [
+                Finding(
+                    verifier_id=VERIFIER_ID,
+                    status=Status.ERROR,
+                    location=SourceLocation(path=document.path, line=1, column=1),
+                    message=(
+                        "sql-results does not support sandbox mode "
+                        f"{context.sandbox!r}"
+                    ),
+                )
+            ]
         runner = _SQLRunner(document=document, context=context)
         return runner.verify()
 
@@ -206,3 +224,11 @@ def _working_directory(path: Path) -> Iterator[None]:
 
 def _is_sql(language: str) -> bool:
     return language.strip().lower() in SQL_LANGUAGE_NAMES
+
+
+def _has_sql_events(document: Document) -> bool:
+    return any(
+        isinstance(event, (CodeBlock, CodeUse, ResultAssertion))
+        and _is_sql(event.language)
+        for event in document.events
+    )

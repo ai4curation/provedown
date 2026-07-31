@@ -105,6 +105,18 @@ provedown verify --verifier sql-results report.md
 
 The option may be passed more than once when additional verifier plugins exist.
 
+## Verify Python In A Fresh Environment
+
+Use the uv sandbox prototype when you want Python verification to run without
+inheriting packages from the caller's environment:
+
+```bash
+provedown verify --sandbox uv report.md
+```
+
+The sandbox reads Python requirements from document frontmatter. See
+[Verify Python With uv](verify-python-with-uv.md) for setup and boundaries.
+
 ## Interpret Statuses
 
 `pass` means the authored claim matched the recomputed value.

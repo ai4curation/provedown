@@ -12,7 +12,13 @@ from pathlib import Path
 from types import CodeType
 from typing import Any
 
-from provedown.model import CodeBlock, CodeUse, Document, ResultAssertion
+from provedown.model import (
+    CodeBlock,
+    CodeUse,
+    Document,
+    ResultAssertion,
+    SourceLocation,
+)
 from provedown.report import Finding, Status
 from provedown.verifiers import VerificationContext
 
@@ -32,6 +38,19 @@ class PythonResultVerifier:
         document: Document,
         context: VerificationContext,
     ) -> Iterable[Finding]:
+        if context.sandbox == "uv":
+            from provedown.verifiers.python_uv import UVPythonRunner
+
+            return UVPythonRunner(document=document, context=context).verify()
+        if context.sandbox is not None:
+            return [
+                Finding(
+                    verifier_id=VERIFIER_ID,
+                    status=Status.ERROR,
+                    location=_document_location(document),
+                    message=f"unknown Python sandbox mode: {context.sandbox}",
+                )
+            ]
         runner = _PythonRunner(document=document, context=context)
         return runner.verify()
 
@@ -184,15 +203,7 @@ class _PythonRunner:
         return Path.cwd()
 
     def _deferred_code_names(self) -> set[str]:
-        names: set[str] = set()
-        for event in self.document.events:
-            if isinstance(event, CodeUse):
-                names.add(event.name)
-            elif isinstance(event, ResultAssertion):
-                ref_name = event.referenced_code_name
-                if ref_name is not None:
-                    names.add(ref_name)
-        return names
+        return _deferred_code_names(self.document)
 
 
 @contextlib.contextmanager
@@ -207,6 +218,22 @@ def _working_directory(path: Path) -> Iterator[None]:
 
 def _is_python(language: str) -> bool:
     return language.strip().lower() in PYTHON_LANGUAGE_NAMES
+
+
+def _deferred_code_names(document: Document) -> set[str]:
+    names: set[str] = set()
+    for event in document.events:
+        if isinstance(event, CodeUse):
+            names.add(event.name)
+        elif isinstance(event, ResultAssertion):
+            ref_name = event.referenced_code_name
+            if ref_name is not None:
+                names.add(ref_name)
+    return names
+
+
+def _document_location(document: Document) -> SourceLocation:
+    return SourceLocation(path=document.path, line=1, column=1)
 
 
 def _seed_value(attributes: Mapping[str, str]) -> int | None:

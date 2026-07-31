@@ -78,5 +78,8 @@ environment construction, and execution. Installing declared dependencies is
 therefore an explicit execution action, with the same trust implications as
 running the document code itself.
 
+The built-in Python adapter consumes this metadata when verification is invoked
+with `--sandbox uv`.
+
 Lock data and offline dependency policies can be added later without changing
 the document-level ownership boundary.
