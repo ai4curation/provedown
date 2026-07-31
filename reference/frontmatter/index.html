@@ -941,6 +941,8 @@
       
         
       
+        
+      
     
     
     
@@ -1001,6 +1003,34 @@
     
   
     Hallucination Detection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanations/dependency-metadata/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Metadata
   
 
     
@@ -1431,10 +1461,16 @@ assertions.</p>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span><span class="nt">aliases</span><span class="p">:</span>
 </span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">    </span><span class="nt">data</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data</span>
 </span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span><span class="nt">cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../cache</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">  </span><span class="nt">last_validated</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-06-15&quot;</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">  </span><span class="nt">default_language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">  </span><span class="nt">pyproject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pyproject.toml</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="nn">---</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">    </span><span class="nt">python</span><span class="p">:</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">      </span><span class="nt">requires-python</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&gt;=3.11&quot;</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">      </span><span class="nt">dependencies</span><span class="p">:</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pandas&gt;=2</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pyarrow&gt;=15</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">  </span><span class="nt">last_validated</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-06-15&quot;</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">  </span><span class="nt">default_language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">  </span><span class="nt">pyproject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pyproject.toml</span>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="nn">---</span>
 </span></code></pre></div>
 <h2 id="user-metadata">User Metadata<a class="headerlink" href="#user-metadata" title="Permanent link">&para;</a></h2>
 <p>The top-level YAML schema belongs to the project that owns the document.
@@ -1448,6 +1484,13 @@ diagnostic becomes an <code>error</code> finding in <code>provedown verify</code
 <dt><code>aliases</code></dt>
 <dd>Optional mapping of short names to data folders or other local paths. The
   parser stores these aliases for verifiers and integrations.</dd>
+<dt><code>environments</code></dt>
+<dd>Optional mapping of language or verifier-family names to environment
+  metadata. Environment names and metadata keys must be strings. Provedown core
+  preserves each nested mapping without interpreting plugin-specific fields.
+  The built-in Python environment uses
+  <code>dependencies</code> and <code>requires-python</code> with the same value semantics as PEP
+  723. See <a href="../../explanations/dependency-metadata/">Dependency Metadata</a>.</dd>
 <dt><code>last_validated</code></dt>
 <dd>Optional date or string recording when the document was last validated. YAML
   dates are normalized to strings in <code>Document.provedown.last_validated</code>.</dd>
@@ -1457,7 +1500,8 @@ diagnostic becomes an <code>error</code> finding in <code>provedown verify</code
   <code>python</code>.</dd>
 <dt><code>pyproject</code></dt>
 <dd>Optional path to the Python project's <code>pyproject.toml</code>, relative to the
-  document or repository convention used by the verifier.</dd>
+  document. A Python environment may combine this project with extra inline
+  dependencies from <code>environments.python.dependencies</code>.</dd>
 <dt><code>pyproject_toml</code></dt>
 <dd>Accepted as a synonym for <code>pyproject</code>.</dd>
 </dl>
