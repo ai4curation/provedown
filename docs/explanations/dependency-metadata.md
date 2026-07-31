@@ -25,9 +25,10 @@ provedown:
 ```
 
 Provedown core checks that `environments` and each named environment are
-mappings. It otherwise preserves their content for verifier plugins. This lets
-the Python verifier use Python packaging metadata without imposing Python
-package semantics on SQL or future verifier families.
+mappings, and that environment names and metadata keys are strings. It
+otherwise preserves their content for verifier plugins. This lets the Python
+verifier use Python packaging metadata without imposing Python package
+semantics on SQL or future verifier families.
 
 ## Python Semantics
 

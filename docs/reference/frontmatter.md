@@ -46,8 +46,9 @@ The optional `provedown` mapping is reserved for Provedown-aware tooling.
 
 `environments`
 : Optional mapping of language or verifier-family names to environment
-  metadata. Provedown core preserves each nested mapping without interpreting
-  plugin-specific fields. The built-in Python environment uses
+  metadata. Environment names and metadata keys must be strings. Provedown core
+  preserves each nested mapping without interpreting plugin-specific fields.
+  The built-in Python environment uses
   `dependencies` and `requires-python` with the same value semantics as PEP
   723. See [Dependency Metadata](../explanations/dependency-metadata.md).
 

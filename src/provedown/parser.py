@@ -411,7 +411,13 @@ def _environments(
 
     environments: dict[str, Mapping[str, Any]] = {}
     for key, value in raw.items():
-        name = str(key).strip() if key is not None else ""
+        if not isinstance(key, str):
+            diagnostics.append(
+                f"{_frontmatter_location(path).display()}: provedown environment "
+                f"name {key!r} should be a string"
+            )
+            continue
+        name = key.strip()
         if not name:
             diagnostics.append(
                 f"{_frontmatter_location(path).display()}: provedown environment "
@@ -424,7 +430,23 @@ def _environments(
                 f"{name!r} should be a mapping"
             )
             continue
-        environments[name] = {str(item_key): item for item_key, item in value.items()}
+        if name in environments:
+            diagnostics.append(
+                f"{_frontmatter_location(path).display()}: duplicate provedown "
+                f"environment name {name!r}"
+            )
+            continue
+
+        metadata: dict[str, Any] = {}
+        for item_key, item in value.items():
+            if not isinstance(item_key, str):
+                diagnostics.append(
+                    f"{_frontmatter_location(path).display()}: provedown environment "
+                    f"{name!r} metadata key {item_key!r} should be a string"
+                )
+                continue
+            metadata[item_key] = item
+        environments[name] = metadata
     return environments
 
 
