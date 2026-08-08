@@ -1,0 +1,69 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    # Optional: Only run on specific file changes
+    # paths:
+    #   - "src/**/*.py"
+    #   - "tests/**/*.py"
+    #   - "docs/**/*.md"
+
+jobs:
+  claude-review:
+    # Optional: Filter by PR author
+    # if: |
+    #   github.event.pull_request.user.login == 'external-contributor' ||
+    #   github.event.pull_request.user.login == 'new-developer' ||
+    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code Review
+        id: claude-review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          # In v1, providing a `prompt` runs in automation mode, which does not
+          # post a comment by default. track_progress restores PR comments and
+          # automatically injects the pull request context.
+          track_progress: true
+
+          # Prompt for the automated review (no @claude mention needed).
+          prompt: |
+            Review this pull request for concrete, actionable issues. Focus on:
+            - Correctness and maintainability
+            - Fail-closed parsing and document-order execution semantics
+            - Security boundaries around executable Python, SQL, and workflows
+            - Error handling and stable CLI/API behavior
+            - Tests for success, failure, and edge cases
+            - Documentation and backward compatibility for public contracts
+
+            Prioritize bugs, security risks, and missing tests over stylistic
+            preferences. Be constructive, concise, and explain why each finding
+            matters. Do not claim a problem unless the changed code supports it.
+
+          # Use the model alias so the workflow follows the current Opus release
+          # instead of breaking when a dated model id is retired.
+          claude_args: |
+            --model opus
+
+          # Optional: Reuse one comment when a pull request is updated.
+          # use_sticky_comment: true
+
+          # Optional: Skip review for selected pull requests.
+          # if: |
+          #   !contains(github.event.pull_request.title, '[skip-review]') &&
+          #   !contains(github.event.pull_request.title, '[WIP]')
