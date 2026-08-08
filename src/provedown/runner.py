@@ -19,8 +19,11 @@ def verify_document(
     context: VerificationContext | None = None,
     verifier_ids: Sequence[str] | None = None,
 ) -> Report:
-    active_registry = registry or default_registry()
     findings = list(_diagnostic_findings(document))
+    if any(finding.status == Status.ERROR for finding in findings):
+        return Report.from_findings(findings)
+
+    active_registry = registry or default_registry()
     findings.extend(
         active_registry.verify(
             document,

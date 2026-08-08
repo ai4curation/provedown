@@ -136,6 +136,10 @@ value. Future renderers can use this slot for method markers or disclosure UI.
 ## Diagnostics
 
 Parser diagnostics are converted into `error` findings by `provedown verify`.
+When any parser error is present, verification stops before loading or invoking
+verifier plugins, so malformed documents cannot execute Python, SQL, dependency
+setup, or other verifier side effects. Static `inspect` and `lint` analysis
+remain available for diagnosing the document.
 
 Current diagnostics include:
 
