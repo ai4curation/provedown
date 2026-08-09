@@ -44,7 +44,10 @@ Any frontmatter parser diagnostic—for example, invalid YAML, a non-mapping
 `environments` value, or an unterminated block—becomes an `error` finding in
 the high-level verification entry points. They report that verification was
 skipped and do not invoke a verifier. Static `inspect` and `lint` analysis
-remain available and report the diagnostic.
+remain available and report the diagnostic. For an unterminated block, the
+source through EOF is masked, so static reports contain no events from that
+region; with a closing delimiter, the document body remains available for
+static analysis.
 
 ## `provedown` Block
 
