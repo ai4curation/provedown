@@ -19,6 +19,7 @@ jobs:
 
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
       pull-requests: read
       issues: read
@@ -32,7 +33,9 @@ jobs:
 
       - name: Run Claude Code Review
         id: claude-review
-        uses: anthropics/claude-code-action@v1
+        # Pin the last runtime verified with OAuth + Opus. The floating v1 tag
+        # can advance the bundled Claude Code and Agent SDK without notice.
+        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
