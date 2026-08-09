@@ -33,11 +33,18 @@ The top-level YAML schema belongs to the project that owns the document.
 Provedown does not validate `title`, `owner`, `tags`, or other user-defined
 fields. Unknown fields are preserved in `Document.frontmatter`.
 
-If parsing a delimited frontmatter block produces a diagnostic—for example,
-because its YAML is invalid—that diagnostic becomes an `error` finding in the
-high-level verification entry points. They report that verification was skipped
-and do not invoke a verifier. Static `inspect` and `lint` analysis remain
-available and report the diagnostic.
+A first line whose trimmed contents are `---` is always treated as a frontmatter
+opener and must have a closing `---` or `...` delimiter. Use `***` or `___` for
+a thematic break at the start of a Markdown document. Without a closing
+delimiter, the parser masks the rest of the document so HTML in the malformed
+frontmatter cannot become executable Provedown markup, and reports an
+unterminated-block diagnostic.
+
+Any frontmatter parser diagnostic—for example, invalid YAML, a non-mapping
+`environments` value, or an unterminated block—becomes an `error` finding in
+the high-level verification entry points. They report that verification was
+skipped and do not invoke a verifier. Static `inspect` and `lint` analysis
+remain available and report the diagnostic.
 
 ## `provedown` Block
 

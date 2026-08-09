@@ -104,6 +104,61 @@ def test_all_parser_errors_are_returned_before_verification() -> None:
     assert report.findings[2].message == VERIFICATION_SKIPPED_MESSAGE
 
 
+def test_unterminated_frontmatter_blocks_verification(tmp_path: Path) -> None:
+    marker = tmp_path / "frontmatter-ran.txt"
+    report_path = tmp_path / "report.md"
+    report_path.write_text(
+        """
+---
+provedown:
+  default_language: python
+payload: <code>
+from pathlib import Path
+Path("frontmatter-ran.txt").write_text("ran", encoding="utf-8")
+</code>
+""".strip(),
+        encoding="utf-8",
+    )
+
+    report = verify_file(report_path, verifier_ids=["python-results"])
+
+    assert [finding.status for finding in report.findings] == [
+        Status.ERROR,
+        Status.SKIP,
+    ]
+    assert "unterminated YAML frontmatter block" in report.findings[0].message
+    assert report.findings[1].message == VERIFICATION_SKIPPED_MESSAGE
+    assert not marker.exists()
+
+
+def test_delimited_frontmatter_errors_block_verification() -> None:
+    verifier = RecordingVerifier()
+    registry = VerifierRegistry()
+    registry.register(verifier)
+    document = parse_document(
+        """
+---
+provedown:
+  environments:
+    - python
+---
+<code>x = 42</code>
+""".strip(),
+        path=Path("report.md"),
+    )
+
+    report = verify_document(document, registry=registry)
+
+    assert len(document.events) == 1
+    assert not verifier.called
+    assert [finding.status for finding in report.findings] == [
+        Status.ERROR,
+        Status.SKIP,
+    ]
+    assert "provedown environments should be a mapping" in report.findings[0].message
+    assert report.findings[1].message == VERIFICATION_SKIPPED_MESSAGE
+
+
 def test_parser_errors_block_python_side_effects(tmp_path: Path) -> None:
     marker = tmp_path / "python-ran.txt"
     report_path = tmp_path / "report.md"
