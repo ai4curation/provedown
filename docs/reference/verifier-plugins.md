@@ -91,6 +91,11 @@ registry.register(MyVerifier())
 
 Then pass the registry to `verify_document()`.
 
+Do not call `registry.verify()` directly for parsed or untrusted document input.
+That low-level dispatch method does not inspect `Document.diagnostics` before
+invoking plugins; `verify_document()` enforces the fail-closed parser-diagnostic
+gate.
+
 The default registry currently includes:
 
 - `python-results` for `python` and `py` code;

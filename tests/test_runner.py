@@ -1,11 +1,13 @@
+import json
 from collections.abc import Iterable
 from pathlib import Path
 
-from pytest import MonkeyPatch
+from pytest import CaptureFixture, MonkeyPatch
 
 from provedown import (
     Document,
     Finding,
+    Status,
     VerificationContext,
     VerifierRegistry,
     inspect_document,
@@ -14,6 +16,9 @@ from provedown import (
     verify_document,
     verify_file,
 )
+from provedown.cli import main
+from provedown.model import SourceLocation
+from provedown.runner import VERIFICATION_SKIPPED_MESSAGE
 from provedown.verifiers.python_uv import UVPythonRunner
 
 
@@ -27,6 +32,27 @@ class UnexpectedVerifier:
     ) -> Iterable[Finding]:
         del document, context
         raise AssertionError("verifier ran after a parser error")
+
+
+class RecordingVerifier:
+    verifier_id = "recording"
+
+    def __init__(self) -> None:
+        self.called = False
+
+    def verify(
+        self,
+        document: Document,
+        context: VerificationContext,
+    ) -> Iterable[Finding]:
+        del context
+        self.called = True
+        yield Finding(
+            verifier_id=self.verifier_id,
+            status=Status.PASS,
+            location=SourceLocation(path=document.path, line=1, column=1),
+            message="custom verifier ran",
+        )
 
 
 def test_parser_errors_prevent_custom_verifier_execution() -> None:
@@ -43,8 +69,39 @@ def test_parser_errors_prevent_custom_verifier_execution() -> None:
     report = verify_document(document, registry=registry)
 
     assert not report.ok
-    assert report.summary() == {"pass": 0, "fail": 0, "skip": 0, "error": 1}
+    assert report.summary() == {"pass": 0, "fail": 0, "skip": 1, "error": 1}
     assert report.findings[0].verifier_id == "parser"
+    assert report.findings[-1].message == VERIFICATION_SKIPPED_MESSAGE
+
+
+def test_diagnostic_free_documents_run_verifiers() -> None:
+    verifier = RecordingVerifier()
+    registry = VerifierRegistry()
+    registry.register(verifier)
+    document = parse_document("<code>x = 42</code>")
+
+    report = verify_document(document, registry=registry)
+
+    assert document.diagnostics == []
+    assert verifier.called
+    assert report.ok
+    assert report.summary() == {"pass": 1, "fail": 0, "skip": 0, "error": 0}
+
+
+def test_all_parser_errors_are_returned_before_verification() -> None:
+    document = parse_document('<code name="value">1</code>\n<code name="value">2')
+
+    report = verify_document(document)
+
+    parser_findings = report.findings[:2]
+    assert [finding.message for finding in parser_findings] == document.diagnostics
+    assert [finding.verifier_id for finding in parser_findings] == ["parser", "parser"]
+    assert [finding.status for finding in report.findings] == [
+        Status.ERROR,
+        Status.ERROR,
+        Status.SKIP,
+    ]
+    assert report.findings[2].message == VERIFICATION_SKIPPED_MESSAGE
 
 
 def test_parser_errors_block_python_side_effects(tmp_path: Path) -> None:
@@ -62,7 +119,10 @@ Path("python-ran.txt").write_text("ran", encoding="utf-8")
     report = verify_file(report_path, verifier_ids=["python-results"])
 
     assert not report.ok
-    assert [finding.verifier_id for finding in report.findings] == ["parser"]
+    assert [finding.status for finding in report.findings] == [
+        Status.ERROR,
+        Status.SKIP,
+    ]
     assert not marker.exists()
 
 
@@ -82,7 +142,10 @@ copy (select 1 as value) to 'sql-ran.csv' (format csv, header);
     report = verify_file(report_path, verifier_ids=["sql-results"])
 
     assert not report.ok
-    assert [finding.verifier_id for finding in report.findings] == ["parser"]
+    assert [finding.status for finding in report.findings] == [
+        Status.ERROR,
+        Status.SKIP,
+    ]
     assert not marker.exists()
 
 
@@ -101,7 +164,44 @@ def test_parser_errors_block_uv_sandbox_setup(monkeypatch: MonkeyPatch) -> None:
     )
 
     assert not report.ok
-    assert [finding.verifier_id for finding in report.findings] == ["parser"]
+    assert [finding.status for finding in report.findings] == [
+        Status.ERROR,
+        Status.SKIP,
+    ]
+
+
+def test_cli_json_reports_blocked_verification(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    report_path = tmp_path / "report.md"
+    report_path.write_text("<code>x = 42", encoding="utf-8")
+
+    exit_code = main(["verify", "--format", "json", str(report_path)])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 1
+    assert captured.err == ""
+    assert payload["ok"] is False
+    assert len(payload["reports"]) == 1
+    report_payload = payload["reports"][0]
+    assert report_payload["path"] == str(report_path)
+    assert report_payload["ok"] is False
+    assert report_payload["summary"] == {
+        "error": 1,
+        "fail": 0,
+        "pass": 0,
+        "skip": 1,
+    }
+    assert [finding["status"] for finding in report_payload["findings"]] == [
+        "error",
+        "skip",
+    ]
+    assert report_payload["findings"][0]["verifier_id"] == "parser"
+    assert report_payload["findings"][1]["message"] == (
+        "verification skipped: document has parser errors"
+    )
 
 
 def test_static_inspection_and_lint_continue_after_parser_errors() -> None:

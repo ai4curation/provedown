@@ -11,6 +11,7 @@ from provedown.report import Finding, Report, Status
 from provedown.verifiers import VerificationContext, VerifierRegistry, default_registry
 
 PARSER_VERIFIER_ID = "parser"
+VERIFICATION_SKIPPED_MESSAGE = "verification skipped: document has parser errors"
 
 
 def verify_document(
@@ -20,7 +21,17 @@ def verify_document(
     verifier_ids: Sequence[str] | None = None,
 ) -> Report:
     findings = list(_diagnostic_findings(document))
+    # Parser diagnostics are currently all errors. Keep the status-based gate so
+    # typed warning diagnostics can remain non-blocking if they are added later.
     if any(finding.status == Status.ERROR for finding in findings):
+        findings.append(
+            Finding(
+                verifier_id=PARSER_VERIFIER_ID,
+                status=Status.SKIP,
+                location=SourceLocation(path=document.path, line=1, column=1),
+                message=VERIFICATION_SKIPPED_MESSAGE,
+            )
+        )
         return Report.from_findings(findings)
 
     active_registry = registry or default_registry()

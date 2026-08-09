@@ -45,9 +45,10 @@ definitions to be parked away from the prose that needs them.
 
 ## Avoid Ambiguous Reuse
 
-Prefer one named block per concept. A duplicate `name` is accepted, but the later
-definition wins and the parser emits a diagnostic. In practice, duplicate names
-should be treated as authoring mistakes.
+Prefer one named block per concept. A duplicate `name` is a parser error. The
+later definition remains visible to static `inspect` and `lint` analysis, but
+`provedown verify` fails closed and does not invoke any verifier until the
+duplicate is fixed.
 
 ## Choose Inline Or Named Code
 

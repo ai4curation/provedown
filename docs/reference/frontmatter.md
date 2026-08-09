@@ -33,8 +33,11 @@ The top-level YAML schema belongs to the project that owns the document.
 Provedown does not validate `title`, `owner`, `tags`, or other user-defined
 fields. Unknown fields are preserved in `Document.frontmatter`.
 
-If the YAML cannot be parsed, Provedown emits a parser diagnostic. That
-diagnostic becomes an `error` finding in `provedown verify`.
+If parsing a delimited frontmatter block produces a diagnostic—for example,
+because its YAML is invalid—that diagnostic becomes an `error` finding in the
+high-level verification entry points. They report that verification was skipped
+and do not invoke a verifier. Static `inspect` and `lint` analysis remain
+available and report the diagnostic.
 
 ## `provedown` Block
 
