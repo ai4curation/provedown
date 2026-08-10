@@ -1577,6 +1577,11 @@
 </span></code></pre></div>
 <p><code>verify_file()</code> runs with the document directory as the working directory.
 Pass <code>sandbox="uv"</code> and select <code>python-results</code> to use the uv sandbox adapter.</p>
+<p><code>verify_document()</code> and <code>verify_file()</code> fail closed when the parsed document has
+an error diagnostic: their report contains every parser error plus a <code>skip</code>
+finding, and they do not construct the default registry or invoke a verifier.
+<code>VerifierRegistry.verify()</code> is a lower-level dispatch API that does not inspect
+<code>Document.diagnostics</code> before invoking registered verifiers.</p>
 <h2 id="inspect-reports">Inspect Reports<a class="headerlink" href="#inspect-reports" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">provedown</span><span class="w"> </span><span class="kn">import</span> <span class="n">Status</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>

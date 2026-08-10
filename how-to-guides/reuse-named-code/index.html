@@ -1554,9 +1554,10 @@ execute somewhere else in the document:</p>
 <p>The use site is the execution site. This keeps execution linear while allowing
 definitions to be parked away from the prose that needs them.</p>
 <h2 id="avoid-ambiguous-reuse">Avoid Ambiguous Reuse<a class="headerlink" href="#avoid-ambiguous-reuse" title="Permanent link">&para;</a></h2>
-<p>Prefer one named block per concept. A duplicate <code>name</code> is accepted, but the later
-definition wins and the parser emits a diagnostic. In practice, duplicate names
-should be treated as authoring mistakes.</p>
+<p>Prefer one named block per concept. A duplicate <code>name</code> is a parser error. The
+later definition remains visible to static <code>inspect</code> and <code>lint</code> analysis, but
+<code>provedown verify</code> fails closed and does not invoke any verifier until the
+duplicate is fixed.</p>
 <h2 id="choose-inline-or-named-code">Choose Inline Or Named Code<a class="headerlink" href="#choose-inline-or-named-code" title="Permanent link">&para;</a></h2>
 <p>Use inline <code>data-code</code> when the expression is short and readable:</p>
 <div class="language-markdown highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>&lt;span class=&quot;result&quot; data-code=&quot;len(samples)&quot;&gt;3&lt;/span&gt;

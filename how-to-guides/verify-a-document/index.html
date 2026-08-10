@@ -1683,11 +1683,12 @@ inheriting packages from the caller's environment:</p>
 <h2 id="interpret-statuses">Interpret Statuses<a class="headerlink" href="#interpret-statuses" title="Permanent link">&para;</a></h2>
 <p><code>pass</code> means the authored claim matched the recomputed value.</p>
 <p><code>fail</code> means the verifier ran successfully and found a mismatch.</p>
-<p><code>skip</code> means the verifier deliberately did not check the claim. For example, the
-Python verifier skips result spans marked with <code>data-compare="none"</code>.</p>
+<p><code>skip</code> means a check was intentionally not run. It can describe an intentionally
+unchecked claim, such as <code>data-compare="none"</code>, or a document-level verification
+skip after parser errors block all verifier execution.</p>
 <p><code>error</code> means verification could not complete for that item. Examples include a
-Python exception, an unknown result code reference, or an unknown comparison
-policy.</p>
+parser diagnostic, a Python exception, an unknown result code reference, or an
+unknown comparison policy.</p>
 
 
 

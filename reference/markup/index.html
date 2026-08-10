@@ -1635,8 +1635,9 @@ shown to readers.</p>
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>&lt;/code&gt;
 </span></code></pre></div>
 <p>Named blocks can be referenced by result assertions or executed at use sites.</p>
-<p>Duplicate names are accepted, but the later definition wins and the parser emits
-a diagnostic.</p>
+<p>A duplicate name produces a parser diagnostic. The parsed IR retains the later
+definition for static inspection, but the high-level verification entry points
+do not invoke a verifier until the duplicate is fixed.</p>
 <h2 id="code-uses">Code Uses<a class="headerlink" href="#code-uses" title="Permanent link">&para;</a></h2>
 <p>Use a named block at a specific execution point:</p>
 <div class="language-markdown highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>&lt;code use=&quot;load&quot;/&gt;
@@ -1651,7 +1652,9 @@ a diagnostic.</p>
 <dt><code>class="result"</code></dt>
 <dd>Marks the span as a Provedown assertion.</dd>
 <dt><code>data-code</code></dt>
-<dd>Python expression to evaluate, or <code>#name</code> to reference a named code block.</dd>
+<dd>Required Python expression to evaluate, or <code>#name</code> to reference a named code
+  block. A missing or empty value produces a parser error and blocks high-level
+  verification.</dd>
 <dt><code>data-compare</code></dt>
 <dd>Optional comparison policy. Defaults to <code>exact</code>.</dd>
 <dt><code>data-language</code>, <code>language</code>, <code>lang</code></dt>
@@ -1677,8 +1680,18 @@ a diagnostic.</p>
 <p>The parser ignores text inside the method slot when collecting the authored
 value. Future renderers can use this slot for method markers or disclosure UI.</p>
 <h2 id="diagnostics">Diagnostics<a class="headerlink" href="#diagnostics" title="Permanent link">&para;</a></h2>
-<p>Parser diagnostics are converted into <code>error</code> findings by <code>provedown verify</code>.</p>
-<p>Current diagnostics include:</p>
+<p>The <code>provedown verify</code> CLI and the high-level <code>verify_file()</code> and
+<code>verify_document()</code> APIs convert every current parser diagnostic into an
+<code>error</code> finding. If any parser finding has <code>error</code> status, they append a <code>skip</code>
+finding and return without constructing the default registry or invoking a
+verifier. A document for which parsing reports an error therefore cannot execute
+Python, SQL, dependency setup, or other verifier side effects through these
+entry points. Static <code>inspect</code> and <code>lint</code> analysis remain available for
+diagnosing the document.</p>
+<p><code>VerifierRegistry.verify()</code> is a lower-level plugin dispatch API: it does not
+inspect <code>Document.diagnostics</code> before invoking registered verifiers. Use
+<code>verify_document()</code> or <code>verify_file()</code> for parsed or untrusted document input.</p>
+<p>Markup diagnostics include:</p>
 <ul>
 <li>nested HTML tags inside <code>&lt;code&gt;</code>;</li>
 <li>duplicate code block names;</li>

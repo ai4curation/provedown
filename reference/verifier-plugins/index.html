@@ -1608,6 +1608,10 @@ receives a parsed <code>Document</code> and returns <code>Finding</code> objects
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">MyVerifier</span><span class="p">())</span>
 </span></code></pre></div>
 <p>Then pass the registry to <code>verify_document()</code>.</p>
+<p>Do not call <code>registry.verify()</code> directly for parsed or untrusted document input.
+That low-level dispatch method does not inspect <code>Document.diagnostics</code> before
+invoking plugins; <code>verify_document()</code> enforces the fail-closed parser-diagnostic
+gate.</p>
 <p>The default registry currently includes:</p>
 <ul>
 <li><code>python-results</code> for <code>python</code> and <code>py</code> code;</li>

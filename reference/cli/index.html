@@ -1594,6 +1594,9 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>provedown<span class="w"> </span>verify<span class="w"> </span><span class="o">[</span>--verifier<span class="w"> </span>VERIFIER_ID<span class="o">]</span><span class="w"> </span><span class="o">[</span>--format<span class="w"> </span>text<span class="p">|</span>json<span class="o">]</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="o">[</span>--sandbox<span class="w"> </span>uv<span class="o">]</span><span class="w"> </span>PATH<span class="w"> </span><span class="o">[</span>PATH<span class="w"> </span>...<span class="o">]</span>
 </span></code></pre></div>
+<p>Parser diagnostics become <code>error</code> findings. If a document has any parser error,
+the command adds a <code>skip</code> finding, does not load or invoke verifiers for that
+document, and exits with status <code>1</code>.</p>
 <p>Arguments:</p>
 <dl>
 <dt><code>PATH</code></dt>

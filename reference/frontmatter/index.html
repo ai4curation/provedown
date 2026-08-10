@@ -1506,8 +1506,20 @@ assertions.</p>
 <p>The top-level YAML schema belongs to the project that owns the document.
 Provedown does not validate <code>title</code>, <code>owner</code>, <code>tags</code>, or other user-defined
 fields. Unknown fields are preserved in <code>Document.frontmatter</code>.</p>
-<p>If the YAML cannot be parsed, Provedown emits a parser diagnostic. That
-diagnostic becomes an <code>error</code> finding in <code>provedown verify</code>.</p>
+<p>A first line whose trimmed contents are <code>---</code> is always treated as a frontmatter
+opener and must have a closing <code>---</code> or <code>...</code> delimiter. Use <code>***</code> or <code>___</code> for
+a thematic break at the start of a Markdown document. Without a closing
+delimiter, the parser masks the rest of the document so HTML in the malformed
+frontmatter cannot become executable Provedown markup, and reports an
+unterminated-block diagnostic.</p>
+<p>Any frontmatter parser diagnostic—for example, invalid YAML, a non-mapping
+<code>environments</code> value, or an unterminated block—becomes an <code>error</code> finding in
+the high-level verification entry points. They report that verification was
+skipped and do not invoke a verifier. Static <code>inspect</code> and <code>lint</code> analysis
+remain available and report the diagnostic. For an unterminated block, the
+source through EOF is masked, so static reports contain no events from that
+region; with a closing delimiter, the document body remains available for
+static analysis.</p>
 <h2 id="provedown-block"><code>provedown</code> Block<a class="headerlink" href="#provedown-block" title="Permanent link">&para;</a></h2>
 <p>The optional <code>provedown</code> mapping is reserved for Provedown-aware tooling.</p>
 <dl>
