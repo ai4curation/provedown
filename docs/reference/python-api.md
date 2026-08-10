@@ -77,6 +77,12 @@ report = verify_file(Path("report.md"))
 `verify_file()` runs with the document directory as the working directory.
 Pass `sandbox="uv"` and select `python-results` to use the uv sandbox adapter.
 
+`verify_document()` and `verify_file()` fail closed when the parsed document has
+an error diagnostic: their report contains every parser error plus a `skip`
+finding, and they do not construct the default registry or invoke a verifier.
+`VerifierRegistry.verify()` is a lower-level dispatch API that does not inspect
+`Document.diagnostics` before invoking registered verifiers.
+
 ## Inspect Reports
 
 ```python

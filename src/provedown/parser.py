@@ -322,7 +322,13 @@ def _extract_frontmatter(source: str, path: Path | None) -> _Frontmatter:
 
     closing_line = _frontmatter_closing_line(lines)
     if closing_line is None:
-        return _Frontmatter()
+        return _Frontmatter(
+            diagnostics=[
+                f"{_frontmatter_location(path).display()}: "
+                "unterminated YAML frontmatter block"
+            ],
+            end_line=len(lines),
+        )
 
     diagnostics: list[str] = []
     text = "".join(lines[1:closing_line])

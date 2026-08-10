@@ -123,9 +123,10 @@ The sandbox reads Python requirements from document frontmatter. See
 
 `fail` means the verifier ran successfully and found a mismatch.
 
-`skip` means the verifier deliberately did not check the claim. For example, the
-Python verifier skips result spans marked with `data-compare="none"`.
+`skip` means a check was intentionally not run. It can describe an intentionally
+unchecked claim, such as `data-compare="none"`, or a document-level verification
+skip after parser errors block all verifier execution.
 
 `error` means verification could not complete for that item. Examples include a
-Python exception, an unknown result code reference, or an unknown comparison
-policy.
+parser diagnostic, a Python exception, an unknown result code reference, or an
+unknown comparison policy.

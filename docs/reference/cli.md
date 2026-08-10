@@ -11,6 +11,10 @@ provedown verify [--verifier VERIFIER_ID] [--format text|json]
   [--sandbox uv] PATH [PATH ...]
 ```
 
+Parser diagnostics become `error` findings. If a document has any parser error,
+the command adds a `skip` finding, does not load or invoke verifiers for that
+document, and exits with status `1`.
+
 Arguments:
 
 `PATH`

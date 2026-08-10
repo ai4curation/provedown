@@ -177,6 +177,25 @@ The answer is <span class="result" data-code="x">42</span>.
     assert document.events[1].language == "py"
 
 
+def test_parser_reports_and_masks_unterminated_frontmatter() -> None:
+    document = parse_document(
+        """
+---
+provedown:
+  default_language: python
+<code>raise AssertionError("frontmatter executed")</code>
+""".strip(),
+        path=Path("report.md"),
+    )
+
+    assert document.frontmatter == {}
+    assert document.events == []
+    assert document.named_code == {}
+    assert document.diagnostics == [
+        "report.md:1:1: unterminated YAML frontmatter block"
+    ]
+
+
 def test_parser_reports_invalid_environment_config() -> None:
     document = parse_document(
         """

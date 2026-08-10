@@ -71,8 +71,9 @@ x = 40 + 2
 
 Named blocks can be referenced by result assertions or executed at use sites.
 
-Duplicate names are accepted, but the later definition wins and the parser emits
-a diagnostic.
+A duplicate name produces a parser diagnostic. The parsed IR retains the later
+definition for static inspection, but the high-level verification entry points
+do not invoke a verifier until the duplicate is fixed.
 
 ## Code Uses
 
@@ -98,7 +99,9 @@ Attributes:
 : Marks the span as a Provedown assertion.
 
 `data-code`
-: Python expression to evaluate, or `#name` to reference a named code block.
+: Required Python expression to evaluate, or `#name` to reference a named code
+  block. A missing or empty value produces a parser error and blocks high-level
+  verification.
 
 `data-compare`
 : Optional comparison policy. Defaults to `exact`.
@@ -135,9 +138,20 @@ value. Future renderers can use this slot for method markers or disclosure UI.
 
 ## Diagnostics
 
-Parser diagnostics are converted into `error` findings by `provedown verify`.
+The `provedown verify` CLI and the high-level `verify_file()` and
+`verify_document()` APIs convert every current parser diagnostic into an
+`error` finding. If any parser finding has `error` status, they append a `skip`
+finding and return without constructing the default registry or invoking a
+verifier. A document for which parsing reports an error therefore cannot execute
+Python, SQL, dependency setup, or other verifier side effects through these
+entry points. Static `inspect` and `lint` analysis remain available for
+diagnosing the document.
 
-Current diagnostics include:
+`VerifierRegistry.verify()` is a lower-level plugin dispatch API: it does not
+inspect `Document.diagnostics` before invoking registered verifiers. Use
+`verify_document()` or `verify_file()` for parsed or untrusted document input.
+
+Markup diagnostics include:
 
 - nested HTML tags inside `<code>`;
 - duplicate code block names;
