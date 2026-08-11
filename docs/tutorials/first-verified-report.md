@@ -5,7 +5,18 @@ matches the code attached to it.
 
 ## Prerequisites
 
-Install Provedown, then use the `provedown` command in your shell.
+Install Provedown from PyPI:
+
+```bash
+pip install provedown
+```
+
+Alternatively, install [`uv`](https://docs.astral.sh/uv/) and run each command
+without installing Provedown into the current environment. For example:
+
+```bash
+uvx provedown verify report.md
+```
 
 ## Create A Report
 
