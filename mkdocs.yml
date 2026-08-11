@@ -1,5 +1,6 @@
 site_name: Provedown
 site_description: Markdown-native verifiable literate documents.
+site_url: https://ai4curation.io/provedown/
 repo_url: https://github.com/ai4curation/provedown
 repo_name: ai4curation/provedown
 
@@ -67,6 +68,7 @@ nav:
   - How-to Guides:
       - Verify a Document: how-to-guides/verify-a-document.md
       - Write Result Assertions: how-to-guides/write-result-assertions.md
+      - Customize Evidence Rendering: how-to-guides/customize-evidence-rendering.md
       - Reuse Named Code: how-to-guides/reuse-named-code.md
       - Use Python Modules And Data Files: how-to-guides/use-python-modules-and-data-files.md
       - Verify Python With uv: how-to-guides/verify-python-with-uv.md

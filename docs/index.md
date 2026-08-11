@@ -2,9 +2,10 @@
 
 <div class="pd-hero" markdown>
 
-Markdown-native verifiable literate documents. Write reports for people, attach
-small executable evidence to the claims that matter, and let a non-LLM verifier
-check the numbers.
+Markdown-native verifiable literate documents. Agents or people create
+markdown/HTML/text reports, attach small executable
+evidence to the claims that matter, and let a deterministic verifier check
+the numbers.
 
 [Start the tutorial](tutorials/first-verified-report.md){ .md-button .md-button--primary }
 [Read the markup contract](reference/markup.md){ .md-button }
@@ -23,7 +24,7 @@ recompute those claims from embedded evidence.
 
 <div class="pd-proof-panel pd-proof-reader">
 
-<p class="pd-proof-label">Reader view</p>
+<p class="pd-proof-label">Styled reader view</p>
 
 <pre><code>
 orders = [
@@ -59,6 +60,18 @@ The report includes <span class="result" data-code="len(paid)">2<span class="met
 
 </div>
 <!-- pd-homepage-example:end -->
+
+The styled reader view is a documentation preview, not the default output of
+every Markdown viewer. Pandoc renders the same source shown alongside it, then
+this site's CSS hides the `<pre>` block and accents the result spans. GitHub and
+other viewers that do not load that CSS show the code and render the claims as
+ordinary prose.
+
+In the source, `<code>` marks executable evidence and `<pre>` preserves its
+multiline layout for readers. Reader-first reports can make that block
+expandable or hide it from rendered output; the
+[rendering guide](how-to-guides/customize-evidence-rendering.md) shows each
+option alongside its source.
 
 If the data or filtering logic changes, `provedown verify` catches stale prose
 before it ships.

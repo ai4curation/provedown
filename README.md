@@ -6,15 +6,16 @@ same contract. The source document stays human-readable, while embedded
 assertions can be checked by independent verifier plugins.
 
 The first built-in verifiers execute Python cells or DuckDB SQL and check scalar
-prose results:
+prose results. The `<code>` element marks executable evidence; the surrounding
+`<pre>` preserves multiline code layout when Markdown is rendered as HTML:
 
-```html
-<code>
+````markdown
+<pre><code>
 x = 410 + 2
-</code>
+</code></pre>
 
 The cohort has <span class="result" data-code="x">412<span class="method"></span></span> samples.
-```
+````
 
 Run verification with:
 
@@ -23,8 +24,13 @@ provedown verify report.md
 ```
 
 Use `provedown verify report.html` for the same contract in an HTML file.
+Reader-first documents can put the same `<pre><code>` block inside native
+`<details>` disclosure or hide it with renderer CSS; see
+[Customize Evidence Rendering](https://ai4curation.io/provedown/how-to-guides/customize-evidence-rendering/).
 
 ## Documentation
+
+Read the documentation at <https://ai4curation.io/provedown/>.
 
 The documentation is organized with the Diataxis structure under `docs/`.
 

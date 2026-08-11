@@ -5,6 +5,49 @@ Provedown looks for a small HTML contract in Markdown or HTML documents.
 The parser currently recognizes `<code>` elements, `<code use="..."/>` elements,
 and `<span class="result">` elements.
 
+## Rendering In Markdown
+
+`<code>` is the executable Provedown contract. For a multiline cell intended
+to render as a visible code block, use `<pre><code>`:
+
+````markdown
+<pre><code>
+x = 40 + 2
+</code></pre>
+````
+
+The `<pre>` element is a presentation wrapper, not a Provedown event. Without
+it, browsers treat `<code>` as an inline element and may collapse the block's
+line breaks and whitespace. Provedown can parse a bare `<code>` element, but
+`<pre><code>` is the renderer-safe authoring form for multiline cells.
+
+To hide supporting code by default without a custom renderer, use native HTML
+disclosure:
+
+````markdown
+<details>
+<summary>Show supporting calculation</summary>
+
+<pre><code>
+x = 40 + 2
+</code></pre>
+
+</details>
+
+The answer is <span class="result" data-code="x">42<span class="method"></span></span>.
+````
+
+The `<details>` and `<summary>` elements affect presentation only. Provedown
+still executes the nested `<code>` element. GitHub and ordinary browser-based
+MkDocs output can present this as a collapsed section; no Provedown-specific CSS
+or JavaScript is required.
+
+Rendering remains viewer-dependent. Without custom CSS, result spans look like
+ordinary prose. A platform that sanitizes raw HTML or `data-*` attributes may
+also remove part of the rendered contract. Verification operates on the
+original source file, not a rendered or sanitized DOM. Markdown fenced code
+blocks are literal examples and are not executable Provedown cells.
+
 ## Source Formats
 
 Markdown documents can mix prose with raw Provedown HTML:
@@ -35,12 +78,12 @@ shown to readers.
 
 ## Code Blocks
 
-Use `<code>` for executable cells:
+Use `<code>` for executable cells, normally inside `<pre>` for rendering:
 
 ````markdown
-<code>
+<pre><code>
 x = 40 + 2
-</code>
+</code></pre>
 ````
 
 Attributes:
@@ -64,9 +107,9 @@ The parser strips leading and trailing newlines from the code text.
 Name a block with `name`:
 
 ````markdown
-<code name="load">
+<pre><code name="load">
 x = 40 + 2
-</code>
+</code></pre>
 ````
 
 Named blocks can be referenced by result assertions or executed at use sites.

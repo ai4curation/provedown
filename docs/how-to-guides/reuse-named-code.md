@@ -9,13 +9,13 @@ For longer expressions, put the expression in a named `<code>` block and point a
 result span at it with `data-code="#name"`:
 
 ````markdown
-<code>
+<pre><code>
 samples = ["alpha", "beta", "gamma"]
-</code>
+</code></pre>
 
 The summary is <span class="result" data-code="#summary">3 samples<span class="method"></span></span>.
 
-<code name="summary">f"{len(samples)} samples"</code>
+<pre><code name="summary">f"{len(samples)} samples"</code></pre>
 ````
 
 Named code used by a result assertion must be a Python expression, because the
@@ -30,10 +30,10 @@ Use `<code use="name"/>` when the named block contains statements that should
 execute somewhere else in the document:
 
 ````markdown
-<code name="load-data">
+<pre><code name="load-data">
 samples = ["alpha", "beta", "gamma"]
 sample_count = len(samples)
-</code>
+</code></pre>
 
 <code use="load-data"/>
 
