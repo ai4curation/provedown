@@ -33,7 +33,7 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling", "uv-dynamic-versioning"]
+requires = ["hatchling>=1.27", "uv-dynamic-versioning>=0.7"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
