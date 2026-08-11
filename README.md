@@ -1,78 +1,76 @@
 # Provedown
 
-Provedown is a markdown-native framework for verifiable literate documents.
-Markdown is the primary authoring surface, but pure HTML documents can use the
-same contract. The source document stays human-readable, while embedded
-assertions can be checked by independent verifier plugins.
+Provedown makes claims in Markdown and HTML reports independently verifiable.
+Attach small Python or DuckDB SQL calculations to important values, then run a
+deterministic verifier to catch stale or incorrect prose.
 
-The first built-in verifiers execute Python cells or DuckDB SQL and check scalar
-prose results. The `<code>` element marks executable evidence; the surrounding
-`<pre>` preserves multiline code layout when Markdown is rendered as HTML:
+[Documentation](https://ai4curation.io/provedown/) |
+[First verified report](https://ai4curation.io/provedown/tutorials/first-verified-report/) |
+[Markup reference](https://ai4curation.io/provedown/reference/markup/)
+
+## Install
+
+Provedown requires Python 3.10 or later and is available from PyPI:
+
+```bash
+pip install provedown
+```
+
+## Quick Start
+
+Create `report.md`:
 
 ````markdown
+# Order Summary
+
 <pre><code>
-x = 410 + 2
+orders = [
+    {"status": "paid", "amount": 120},
+    {"status": "refunded", "amount": 45},
+    {"status": "paid", "amount": 75},
+]
+paid = [order for order in orders if order["status"] == "paid"]
+total = sum(order["amount"] for order in paid)
 </code></pre>
 
-The cohort has <span class="result" data-code="x">412<span class="method"></span></span> samples.
+The report includes <span class="result" data-code="len(paid)">2<span class="method"></span></span> paid orders totaling <span class="result" data-code="f'${total}'">$195<span class="method"></span></span>.
 ````
 
-Run verification with:
+Verify it:
 
 ```bash
 provedown verify report.md
 ```
 
-Use `provedown verify report.html` for the same contract in an HTML file.
-Reader-first documents can put the same `<pre><code>` block inside native
-`<details>` disclosure or hide it with renderer CSS; see
-[Customize Evidence Rendering](https://ai4curation.io/provedown/how-to-guides/customize-evidence-rendering/).
+Provedown reruns the calculation and checks both authored values:
 
-## Documentation
-
-Read the documentation at <https://ai4curation.io/provedown/>.
-
-The documentation is organized with the Diataxis structure under `docs/`.
-
-For repository development, build it with:
-
-```bash
-just docs-build
+```text
+report.md: ok
+  pass=2, fail=0, skip=0, error=0
 ```
 
-Preview it locally with:
+The HTML elements have separate jobs:
 
-```bash
-just docs-serve
-```
+- `code` contains executable evidence. The surrounding `pre` preserves its
+  multiline layout for readers.
+- `span.result` contains an authored value and the expression that must
+  reproduce it.
 
-The public model is intentionally verifier-neutral. Python and SQL execution are
-plugins; future plugins can validate references with LinkML tooling or prove
-properties about code with systems such as clauz3.
+Provedown reports mismatches but does not rewrite the document. The Markdown or
+HTML file remains the source of truth.
 
-## Extension model
+## Capabilities
 
-Verifier plugins receive a parsed `Document` IR and return a `Report` made of
-portable findings:
+- Execute embedded Python or DuckDB SQL.
+- Query local CSV files from SQL or Python reports.
+- Check exact values, numeric tolerances, and set equality.
+- Reuse named calculations across multiple claims.
+- Inspect dependencies between evidence and claims.
+- Render evidence as visible, expandable, or claim-only HTML.
 
-```python
-from collections.abc import Iterable
+## Learn More
 
-from provedown import Document, Finding, VerificationContext
-
-
-class MyVerifier:
-    verifier_id = "my-verifier"
-
-    def verify(
-        self,
-        document: Document,
-        context: VerificationContext,
-    ) -> Iterable[Finding]:
-        ...
-```
-
-The IR keeps code language, unknown attributes, source locations, authored
-values, and named code references intact. That leaves room for additional
-executors, LinkML-backed reference validation, and static proof tools without
-changing the core parser or report format.
+- [Use SQL and CSV files](https://ai4curation.io/provedown/how-to-guides/use-sql-and-csv-files/)
+- [Customize evidence rendering](https://ai4curation.io/provedown/how-to-guides/customize-evidence-rendering/)
+- [CLI reference](https://ai4curation.io/provedown/reference/cli/)
+- [Python API](https://ai4curation.io/provedown/reference/python-api/)
