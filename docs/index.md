@@ -12,6 +12,24 @@ the numbers.
 
 </div>
 
+## Install And Run
+
+=== "Install with pip"
+
+    ```bash
+    pip install provedown
+    provedown verify report.md
+    ```
+
+=== "Run with uvx"
+
+    Run the verifier directly from PyPI without installing it into the current
+    environment:
+
+    ```bash
+    uvx provedown verify report.md
+    ```
+
 ## What It Does
 
 Provedown keeps the human-readable document as the source of truth. Values in

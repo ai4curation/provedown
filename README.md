@@ -1,5 +1,11 @@
 # Provedown
 
+[![PyPI](https://img.shields.io/pypi/v/provedown.svg)](https://pypi.org/project/provedown/)
+[![Python versions](https://img.shields.io/pypi/pyversions/provedown.svg)](https://pypi.org/project/provedown/)
+[![Build and test](https://github.com/ai4curation/provedown/actions/workflows/main.yaml/badge.svg)](https://github.com/ai4curation/provedown/actions/workflows/main.yaml)
+[![Documentation](https://img.shields.io/badge/docs-ai4curation.io-0f766e)](https://ai4curation.io/provedown/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Provedown makes claims in Markdown and HTML reports independently verifiable.
 Attach small Python or DuckDB SQL calculations to important values, then run a
 deterministic verifier to catch stale or incorrect prose.
@@ -14,6 +20,13 @@ Provedown requires Python 3.10 or later and is available from PyPI:
 
 ```bash
 pip install provedown
+```
+
+For a one-off run without installing it into the current environment, use
+`uvx`:
+
+```bash
+uvx provedown verify report.md
 ```
 
 ## Quick Start
