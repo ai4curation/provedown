@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -33,6 +33,10 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           distributions=(dist/provedown-*.tar.gz)
+          if [[ ! -f "${distributions[0]}" ]]; then
+            echo "::error::No source distribution was built"
+            exit 1
+          fi
           filename="${distributions[0]##*/}"
           version="${filename#provedown-}"
           version="${version%.tar.gz}"
