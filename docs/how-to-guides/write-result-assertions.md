@@ -8,9 +8,9 @@ and the code that should reproduce it.
 Use `data-code` for short Python expressions:
 
 ````markdown
-<code>
+<pre><code>
 samples = ["alpha", "beta", "gamma"]
-</code>
+</code></pre>
 
 The cohort has <span class="result" data-code="len(samples)">3<span class="method"></span></span> samples.
 ````
@@ -71,9 +71,9 @@ collections, and computed sets, lists, tuples, or dict keys.
 Use `seed` or `data-seed` when an assertion depends on Python randomness:
 
 ````markdown
-<code>
+<pre><code>
 import random
-</code>
+</code></pre>
 
 The draw is <span class="result" data-code="random.randint(1, 10)" seed="7">6<span class="method"></span></span>.
 ````

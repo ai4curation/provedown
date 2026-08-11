@@ -106,17 +106,17 @@ def _render_page(example: ExamplePage, *, source: str, rendered: str) -> str:
     return (
         f"# {example.title}\n\n"
         f"{example.description}\n\n"
-        "The tabs show the same Provedown document in two forms. The rendered "
-        "view is generated from the raw source with `pandoc`; the raw view "
-        "shows the literal Provedown contract.\n\n"
-        '=== "Rendered"\n\n'
-        "    <div class=\"pd-rendered-provedown\" data-provedown-ignore=\"true\">\n"
-        f"{_indent(rendered)}\n"
-        "    </div>\n\n"
+        "The tabs show the same Provedown document in two forms. The raw view "
+        "shows the literal Provedown contract; the rendered HTML is generated "
+        "from that source with `pandoc`.\n\n"
         f'=== "Raw {example.source.suffix}"\n\n'
         f"    ````{example.raw_language}\n"
         f"{_indent(source.rstrip())}\n"
         "    ````\n\n"
+        '=== "Rendered HTML"\n\n'
+        "    <div class=\"pd-rendered-provedown\" data-provedown-ignore=\"true\">\n"
+        f"{_indent(rendered)}\n"
+        "    </div>\n\n"
         "Verify this example with:\n\n"
         "```bash\n"
         f"provedown verify {example.source.relative_to(ROOT)}\n"
@@ -154,7 +154,7 @@ def _render_homepage_block(*, source: str, rendered: str) -> str:
         "scripts/render_example_tabs.py. -->\n"
         '<div class="pd-proof-pair" data-provedown-ignore="true" markdown>\n\n'
         '<div class="pd-proof-panel pd-proof-reader">\n\n'
-        '<p class="pd-proof-label">Reader view</p>\n\n'
+        '<p class="pd-proof-label">Styled reader view</p>\n\n'
         f"{rendered}\n\n"
         "</div>\n\n"
         '<div class="pd-proof-panel pd-proof-source" markdown>\n\n'

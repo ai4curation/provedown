@@ -1,0 +1,79 @@
+name: Publish Python package
+
+on:  # yamllint disable-line rule:truthy
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78  # v7.6.0
+        with:
+          python-version: "3.13"
+
+      - name: Build source and wheel distributions
+        run: uv build
+
+      - name: Verify built version matches release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          distributions=(dist/provedown-*.tar.gz)
+          if [[ ! -f "${distributions[0]}" ]]; then
+            echo "::error::No source distribution was built"
+            exit 1
+          fi
+          filename="${distributions[0]##*/}"
+          version="${filename#provedown-}"
+          version="${version%.tar.gz}"
+          expected="${RELEASE_TAG#v}"
+          echo "Built version: ${version}; release tag: ${RELEASE_TAG}"
+          if [[ ${#distributions[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly one source distribution"
+            exit 1
+          fi
+          if [[ "${RELEASE_TAG}" != v* || "${version}" != "${expected}" ]]; then
+            echo "::error::Built version does not match release tag. Use canonical tags such as v1.2.3 or v1.2.3rc1."
+            exit 1
+          fi
+
+      - name: Store distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: python-package-distributions
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish distributions to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+      url: https://pypi.org/p/provedown
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7.0.0
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2

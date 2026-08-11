@@ -1,10 +1,11 @@
 [project]
 name = "provedown"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Markdown-native verifiable literate documents."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
   { name = "Provedown contributors" }
 ]
@@ -15,6 +16,11 @@ dependencies = [
 
 [project.scripts]
 provedown = "provedown.cli:main"
+
+[project.urls]
+Documentation = "https://ai4curation.io/provedown/"
+Issues = "https://github.com/ai4curation/provedown/issues"
+Repository = "https://github.com/ai4curation/provedown"
 
 [dependency-groups]
 dev = [
@@ -27,8 +33,16 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27", "uv-dynamic-versioning>=0.7"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+vcs = "git"
+style = "pep440"
+fallback-version = "0.0.0"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/provedown"]
