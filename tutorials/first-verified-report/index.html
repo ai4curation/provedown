@@ -10,6 +10,8 @@
       
       
       
+        <link rel="canonical" href="https://ai4curation.io/provedown/tutorials/first-verified-report/">
+      
       
         <link rel="prev" href="../..">
       
@@ -502,6 +504,8 @@
       
         
       
+        
+      
     
     
     
@@ -590,6 +594,34 @@
     
   
     Write Result Assertions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to-guides/customize-evidence-rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Customize Evidence Rendering
   
 
     
@@ -1550,21 +1582,44 @@ matches the code attached to it.</p>
 <p>Install Provedown, then use the <code>provedown</code> command in your shell.</p>
 <h2 id="create-a-report">Create A Report<a class="headerlink" href="#create-a-report" title="Permanent link">&para;</a></h2>
 <p>Create a file named <code>report.md</code>:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Raw .md</label><label for="__tabbed_1_2">Rendered HTML</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
 <div class="language-markdown highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="gh"># Example Report</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>&lt;code&gt;
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>&lt;pre&gt;&lt;code&gt;
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>samples = [&quot;alpha&quot;, &quot;beta&quot;, &quot;gamma&quot;]
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>sample_count = len(samples)
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>&lt;/code&gt;
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>&lt;/code&gt;&lt;/pre&gt;
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>The cohort has &lt;span class=&quot;result&quot; data-code=&quot;sample_count&quot;&gt;3&lt;span class=&quot;method&quot;&gt;&lt;/span&gt;&lt;/span&gt; samples.
 </span></code></pre></div>
-<p>The document is ordinary Markdown plus two Provedown contracts:</p>
+</div>
+<div class="tabbed-block">
+<div class="pd-rendered-provedown" data-provedown-ignore="true">
+<p><h1 id="example-report">Example Report</h1>
+<pre><code>
+samples = ["alpha", "beta", "gamma"]
+sample_count = len(samples)
+</code></pre>
+<p>The cohort has <span class="result" data-code="sample_count">3<span class="method"></span></span> samples.</p></p>
+</div>
+</div>
+</div>
+</div>
+<p>The document is ordinary Markdown plus two Provedown contracts and one
+presentation wrapper:</p>
 <ul>
-<li><code>&lt;code&gt;</code> contains Python that will run during verification.</li>
-<li><code>&lt;span class="result"&gt;</code> contains an authored prose value and the expression
+<li>The HTML <code>code</code> element contains Python that will run during verification.</li>
+<li>The HTML <code>pre</code> element is a presentation wrapper that preserves the block's
+  line breaks and whitespace in HTML-based Markdown renderers. Provedown does
+  not require it for execution, but multiline code should nest <code>code</code> inside
+  <code>pre</code> so readers see a proper code block.</li>
+<li>A <code>span.result</code> element contains an authored prose value and the expression
   that should reproduce it.</li>
 </ul>
+<p>To collapse or hide evidence in reader-facing output, see
+<a href="../../how-to-guides/customize-evidence-rendering/">Customize Evidence Rendering</a>.</p>
 <h2 id="verify-it">Verify It<a class="headerlink" href="#verify-it" title="Permanent link">&para;</a></h2>
 <p>Run:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>provedown<span class="w"> </span>verify<span class="w"> </span>report.md
@@ -1572,7 +1627,7 @@ matches the code attached to it.</p>
 <p>Expected text output:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>report.md: ok
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>  pass=1, fail=0, skip=0, error=0
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  [pass] python-results report.md:7:16: value matches exactly expected=&#39;3&#39; actual=&#39;3&#39;
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  [pass] python-results report.md:8:16: value matches exactly expected=&#39;3&#39; actual=&#39;3&#39;
 </span></code></pre></div>
 <p>The exact line and column can differ if your file has different spacing.</p>
 <h2 id="see-a-failure">See A Failure<a class="headerlink" href="#see-a-failure" title="Permanent link">&para;</a></h2>
@@ -1585,7 +1640,7 @@ matches the code attached to it.</p>
 <p>The command exits with status <code>1</code> and reports a failed assertion:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>report.md: failed
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>  pass=0, fail=1, skip=0, error=0
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>  [fail] python-results report.md:7:16: value differs expected=&#39;4&#39; actual=&#39;3&#39;
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>  [fail] python-results report.md:8:16: value differs expected=&#39;4&#39; actual=&#39;3&#39;
 </span></code></pre></div>
 <p>The verifier does not rewrite the document. It tells you that the document's
 claim is false under the current code and environment.</p>

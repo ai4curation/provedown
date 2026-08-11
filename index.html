@@ -10,6 +10,8 @@
       
       
       
+        <link rel="canonical" href="https://ai4curation.io/provedown/">
+      
       
       
         <link rel="next" href="tutorials/first-verified-report/">
@@ -476,6 +478,8 @@
       
         
       
+        
+      
     
     
     
@@ -564,6 +568,34 @@
     
   
     Write Result Assertions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="how-to-guides/customize-evidence-rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Customize Evidence Rendering
   
 
     
@@ -1497,9 +1529,10 @@
 
 <h1 id="provedown">Provedown<a class="headerlink" href="#provedown" title="Permanent link">&para;</a></h1>
 <div class="pd-hero">
-<p>Markdown-native verifiable literate documents. Write reports for people, attach
-small executable evidence to the claims that matter, and let a non-LLM verifier
-check the numbers.</p>
+<p>Markdown-native verifiable literate documents. Agents or people create
+markdown/HTML/text reports, attach small executable
+evidence to the claims that matter, and let a deterministic verifier check
+the numbers.</p>
 <p><a class="md-button md-button--primary" href="tutorials/first-verified-report/">Start the tutorial</a>
 <a class="md-button" href="reference/markup/">Read the markup contract</a></p>
 </div>
@@ -1511,7 +1544,7 @@ recompute those claims from embedded evidence.</p>
 <!-- Generated from examples/homepage-orders.md by scripts/render_example_tabs.py. -->
 <div class="pd-proof-pair" data-provedown-ignore="true">
 <div class="pd-proof-panel pd-proof-reader">
-<p class="pd-proof-label">Reader view</p>
+<p class="pd-proof-label">Styled reader view</p>
 <pre><code>
 orders = [
     {"status": "paid", "amount": 120},
@@ -1541,6 +1574,16 @@ total = sum(order["amount"] for order in paid)
 </div>
 <!-- pd-homepage-example:end -->
 
+<p>The styled reader view is a documentation preview, not the default output of
+every Markdown viewer. Pandoc renders the same source shown alongside it, then
+this site's CSS hides the <code>&lt;pre&gt;</code> block and accents the result spans. GitHub and
+other viewers that do not load that CSS show the code and render the claims as
+ordinary prose.</p>
+<p>In the source, <code>&lt;code&gt;</code> marks executable evidence and <code>&lt;pre&gt;</code> preserves its
+multiline layout for readers. Reader-first reports can make that block
+expandable or hide it from rendered output; the
+<a href="how-to-guides/customize-evidence-rendering/">rendering guide</a> shows each
+option alongside its source.</p>
 <p>If the data or filtering logic changes, <code>provedown verify</code> catches stale prose
 before it ships.</p>
 <h2 id="find-your-path">Find Your Path<a class="headerlink" href="#find-your-path" title="Permanent link">&para;</a></h2>

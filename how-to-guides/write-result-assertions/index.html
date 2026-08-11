@@ -10,11 +10,13 @@
       
       
       
+        <link rel="canonical" href="https://ai4curation.io/provedown/how-to-guides/write-result-assertions/">
+      
       
         <link rel="prev" href="../verify-a-document/">
       
       
-        <link rel="next" href="../reuse-named-code/">
+        <link rel="next" href="../customize-evidence-rendering/">
       
       
         
@@ -400,6 +402,8 @@
       
         
       
+        
+      
     
     
     
@@ -631,6 +635,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../customize-evidence-rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Customize Evidence Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1614,9 +1646,9 @@
 and the code that should reproduce it.</p>
 <h2 id="inline-expressions">Inline Expressions<a class="headerlink" href="#inline-expressions" title="Permanent link">&para;</a></h2>
 <p>Use <code>data-code</code> for short Python expressions:</p>
-<div class="language-markdown highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>&lt;code&gt;
+<div class="language-markdown highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>&lt;pre&gt;&lt;code&gt;
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>samples = [&quot;alpha&quot;, &quot;beta&quot;, &quot;gamma&quot;]
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>&lt;/code&gt;
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>&lt;/code&gt;&lt;/pre&gt;
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>The cohort has &lt;span class=&quot;result&quot; data-code=&quot;len(samples)&quot;&gt;3&lt;span class=&quot;method&quot;&gt;&lt;/span&gt;&lt;/span&gt; samples.
 </span></code></pre></div>
@@ -1650,9 +1682,9 @@ attribute is present and <code>data-compare</code> is not set.</p>
 collections, and computed sets, lists, tuples, or dict keys.</p>
 <h2 id="seeded-comparison">Seeded Comparison<a class="headerlink" href="#seeded-comparison" title="Permanent link">&para;</a></h2>
 <p>Use <code>seed</code> or <code>data-seed</code> when an assertion depends on Python randomness:</p>
-<div class="language-markdown highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>&lt;code&gt;
+<div class="language-markdown highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>&lt;pre&gt;&lt;code&gt;
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>import random
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>&lt;/code&gt;
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>&lt;/code&gt;&lt;/pre&gt;
 </span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
 </span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>The draw is &lt;span class=&quot;result&quot; data-code=&quot;random.randint(1, 10)&quot; seed=&quot;7&quot;&gt;6&lt;span class=&quot;method&quot;&gt;&lt;/span&gt;&lt;/span&gt;.
 </span></code></pre></div>
@@ -1730,13 +1762,13 @@ when a claim is intentionally unverified and should produce an explicit <code>sk
         
         
           
-          <a href="../reuse-named-code/" class="md-footer__link md-footer__link--next" aria-label="Next: Reuse Named Code">
+          <a href="../customize-evidence-rendering/" class="md-footer__link md-footer__link--next" aria-label="Next: Customize Evidence Rendering">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Reuse Named Code
+                Customize Evidence Rendering
               </div>
             </div>
             <div class="md-footer__button md-icon">

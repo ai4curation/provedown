@@ -10,6 +10,8 @@
       
       
       
+        <link rel="canonical" href="https://ai4curation.io/provedown/examples/html-report/">
+      
       
         <link rel="prev" href="../sql-sales-summary/">
       
@@ -398,6 +400,8 @@
       
         
       
+        
+      
     
     
     
@@ -486,6 +490,34 @@
     
   
     Write Result Assertions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to-guides/customize-evidence-rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Customize Evidence Rendering
   
 
     
@@ -1390,21 +1422,9 @@
 
 <h1 id="pure-html-report">Pure HTML Report<a class="headerlink" href="#pure-html-report" title="Permanent link">&para;</a></h1>
 <p>A Provedown document written as plain HTML, useful when a pipeline already emits HTML or when Markdown is not part of the authoring workflow.</p>
-<p>The tabs show the same Provedown document in two forms. The rendered view is generated from the raw source with <code>pandoc</code>; the raw view shows the literal Provedown contract.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Rendered</label><label for="__tabbed_1_2">Raw .html</label></div>
+<p>The tabs show the same Provedown document in two forms. The raw view shows the literal Provedown contract; the rendered HTML is generated from that source with <code>pandoc</code>.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Raw .html</label><label for="__tabbed_1_2">Rendered HTML</label></div>
 <div class="tabbed-content">
-<div class="tabbed-block">
-<p><div class="pd-rendered-provedown" data-provedown-ignore="true">
-<h1 id="inventory-check">Inventory Check</h1>
-<p>This report is authored as plain HTML. Provedown reads the same executable code and result assertion contract it reads from Markdown.</p>
-<pre><code>from statistics import mean</p>
-<p>counts = [12, 18, 15]
-mean_count = mean(counts)
-    </code></pre>
-<p>The average count is <span class="result" data-code="f&#39;{mean_count:.1f}&#39;">15.0<span class="method"></span></span>.</p>
-<p>The maximum count is <span class="result" data-code="max(counts)">18<span class="method"></span></span>.</p>
-</div></p>
-</div>
 <div class="tabbed-block">
 <div class="language-html highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="cp">&lt;!doctype html&gt;</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="p">&lt;</span><span class="nt">html</span> <span class="na">lang</span><span class="o">=</span><span class="s">&quot;en&quot;</span><span class="p">&gt;</span>
@@ -1438,6 +1458,18 @@ mean_count = mean(counts)
 </span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>  <span class="p">&lt;/</span><span class="nt">body</span><span class="p">&gt;</span>
 </span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a><span class="p">&lt;/</span><span class="nt">html</span><span class="p">&gt;</span>
 </span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<p><div class="pd-rendered-provedown" data-provedown-ignore="true">
+<h1 id="inventory-check">Inventory Check</h1>
+<p>This report is authored as plain HTML. Provedown reads the same executable code and result assertion contract it reads from Markdown.</p>
+<pre><code>from statistics import mean</p>
+<p>counts = [12, 18, 15]
+mean_count = mean(counts)
+    </code></pre>
+<p>The average count is <span class="result" data-code="f&#39;{mean_count:.1f}&#39;">15.0<span class="method"></span></span>.</p>
+<p>The maximum count is <span class="result" data-code="max(counts)">18<span class="method"></span></span>.</p>
+</div></p>
 </div>
 </div>
 </div>
