@@ -73,6 +73,7 @@ nav:
       - Use Python Modules And Data Files: how-to-guides/use-python-modules-and-data-files.md
       - Verify Python With uv: how-to-guides/verify-python-with-uv.md
       - Use SQL And CSV Files: how-to-guides/use-sql-and-csv-files.md
+      - Verify an OKF Bundle: how-to-guides/verify-an-okf-bundle.md
       - Inspect Claim Dependencies: how-to-guides/inspect-claim-dependencies.md
       - Lint a Document: how-to-guides/lint-a-document.md
   - Reference:

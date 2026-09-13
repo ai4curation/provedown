@@ -63,6 +63,64 @@ def test_cli_list_verifiers(capsys: CaptureFixture[str]) -> None:
     assert captured.out.splitlines() == ["python-results", "sql-results"]
 
 
+OKF_DOCUMENT = """---
+type: Attested Computation
+runtime: duckdb
+---
+
+# Computation
+
+```sql
+SELECT 41 + 1
+```
+
+Answer: <span class="result" data-code="#computation">42<span
+  class="method"></span></span>
+"""
+
+
+def test_cli_verify_okf_lifts_the_computation(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    report_path = tmp_path / "revenue.md"
+    report_path.write_text(OKF_DOCUMENT, encoding="utf-8")
+
+    exit_code = main(["verify", "--okf", str(report_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "[pass] sql-results" in captured.out
+
+
+def test_cli_verify_without_okf_leaves_the_fence_alone(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    report_path = tmp_path / "revenue.md"
+    report_path.write_text(OKF_DOCUMENT, encoding="utf-8")
+
+    exit_code = main(["verify", str(report_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "unknown result code reference" in captured.out
+
+
+def test_cli_inspect_okf_resolves_the_lifted_reference(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    report_path = tmp_path / "revenue.md"
+    report_path.write_text(OKF_DOCUMENT, encoding="utf-8")
+
+    exit_code = main(["inspect", "--okf", str(report_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "reference='computation'" in captured.out
+
+
 def test_cli_verify_json_output_fails_on_mismatch(
     tmp_path: Path,
     capsys: CaptureFixture[str],

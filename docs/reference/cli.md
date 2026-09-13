@@ -8,7 +8,7 @@ Verify one or more documents.
 
 ```bash
 provedown verify [--verifier VERIFIER_ID] [--format text|json]
-  [--sandbox uv] PATH [PATH ...]
+  [--sandbox uv] [--okf] PATH [PATH ...]
 ```
 
 Parser diagnostics become `error` findings. If a document has any parser error,
@@ -36,6 +36,12 @@ Options:
   supports only sandboxed `python-results`; documents containing SQL claims
   return an unsupported-sandbox error. The mode uses document environment
   metadata and does not provide network or filesystem security isolation.
+
+`--okf`
+: Treat each document as [Open Knowledge Format](../how-to-guides/verify-an-okf-bundle.md)
+  and lift an `Attested Computation`'s fenced computation into an executable
+  named code block. Without this flag the fenced computation stays a literal
+  example, as fenced code does everywhere else.
 
 Exit codes:
 
@@ -68,7 +74,7 @@ sql-results
 Inspect code and result relationships without executing document code.
 
 ```bash
-provedown inspect [--format text|json] PATH [PATH ...]
+provedown inspect [--format text|json] [--okf] PATH [PATH ...]
 ```
 
 Arguments:
@@ -83,6 +89,11 @@ Options:
 
 `--format json`
 : Print structured JSON output.
+
+`--okf`
+: Lift an OKF `Attested Computation` before inspecting, so claims that
+  reference the lifted block resolve. Useful for seeing what `--okf` verify
+  would execute.
 
 Exit codes:
 
@@ -101,7 +112,7 @@ Exit codes:
 Lint Provedown documents without executing document code.
 
 ```bash
-provedown lint [--format text|json] PATH [PATH ...]
+provedown lint [--format text|json] [--okf] PATH [PATH ...]
 ```
 
 Arguments:
@@ -116,6 +127,10 @@ Options:
 
 `--format json`
 : Print structured JSON output.
+
+`--okf`
+: Lift an OKF `Attested Computation` before linting, so claims that reference
+  the lifted block are not reported as unresolved.
 
 Exit codes:
 

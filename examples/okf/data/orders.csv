@@ -1,0 +1,8 @@
+order_id,order_ts,order_status,net_amount,currency
+1001,2025-02-11,delivered,120.00,USD
+1002,2025-06-03,returned,45.00,USD
+1003,2025-09-19,delivered,75.50,USD
+1004,2025-11-27,delivered,30.00,USD
+1005,2026-01-08,delivered,210.25,USD
+1006,2026-03-14,returned,60.00,USD
+1007,2026-05-02,delivered,64.75,USD
