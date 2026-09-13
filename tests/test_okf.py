@@ -412,6 +412,26 @@ sources:
     assert metadata.generated is not None
 
 
+def test_stale_after_accepts_the_timestamp_form_bundles_use() -> None:
+    source = """---
+type: Metric
+stale_after: 2026-12-31T00:00:00Z
+---
+"""
+
+    metadata = parse_okf_document(source).metadata
+
+    assert metadata.stale_after == "2026-12-31T00:00:00+00:00"
+    assert not metadata.is_stale(date(2026, 12, 31))
+    assert metadata.is_stale(date(2027, 1, 1))
+
+
+def test_unparsable_stale_after_is_never_reported_stale() -> None:
+    source = "---\ntype: Metric\nstale_after: whenever\n---\n"
+
+    assert not parse_okf_document(source).metadata.is_stale(date(2030, 1, 1))
+
+
 def test_trust_tier_prefers_human_actors() -> None:
     source = """---
 type: Metric

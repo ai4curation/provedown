@@ -92,5 +92,6 @@ nav:
       - CSV Sales Summary: examples/data-file-report.md
       - SQL CSV Sales Summary: examples/sql-sales-summary.md
       - Pure HTML Report: examples/html-report.md
+      - OKF Acme Retail Bundle: examples/okf-acme-retail.md
   - Design Notes:
       - Verifiable Literate Weave: ideas/verifiable-weave-spec.md

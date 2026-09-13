@@ -219,18 +219,16 @@ one is that tooling's decision, not Provedown's.
 
 ## A Worked Bundle
 
-`examples/okf/` holds a small bundle covering both cases:
-
-```text
-examples/okf/
-├── computations/revenue-by-year.md   # Attested Computation, needs --okf
-├── tables/orders.md                  # ordinary OKF concept document
-└── data/orders.csv
-```
+`examples/okf/` holds a small bundle mirroring the layout of OKF's reference
+`acme_retail` bundle, covering both cases:
 
 ```bash
 provedown verify examples/okf/tables/orders.md
-provedown verify --okf examples/okf/computations/revenue-by-year.md
+provedown verify --okf examples/okf/computations/revenue-ytd.md
 ```
+
+[OKF Bundle: Revenue at Acme Retail](../examples/okf-acme-retail.md) walks
+through it with a policy change that leaves every OKF trust signal green and the
+document's figures wrong.
 
 [okf]: https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf
