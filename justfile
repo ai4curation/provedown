@@ -38,6 +38,7 @@ check-examples: lint-examples inspect-examples verify-examples
 
 # Requires a Lean 4 toolchain on PATH, so it is not part of `check-examples`.
 verify-lean-example:
-    uv run provedown verify examples/lean-report.md
+    uv run provedown verify examples/lean-report.md \
+      examples/curation-filter-report.md
 
 all: check check-examples docs-build

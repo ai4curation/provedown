@@ -96,7 +96,7 @@ Attributes:
   frontmatter setting, or `python` when unset.
 
 Built-in verifier language names are `python`/`py`,
-`sql`/`duckdb`/`duckdb-sql`, and `lean`/`lean4`.
+`sql`/`duckdb`/`duckdb-sql`, `lean`/`lean4`, and `lean-proof`/`lean-theorem`.
 
 Unknown attributes are preserved in the parsed IR.
 
@@ -154,7 +154,7 @@ Attributes:
   frontmatter setting, or `python` when unset.
 
 Built-in verifier language names are `python`/`py`,
-`sql`/`duckdb`/`duckdb-sql`, and `lean`/`lean4`.
+`sql`/`duckdb`/`duckdb-sql`, `lean`/`lean4`, and `lean-proof`/`lean-theorem`.
 
 `tol`, `data-tol`
 : Numeric tolerance. If present without `data-compare`, the comparison policy is

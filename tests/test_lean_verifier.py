@@ -378,3 +378,161 @@ and Python agrees:
         "lean-results",
         "python-results",
     }
+
+
+PROOF_CELL = """
+<pre><code data-language="lean">
+def keepAbove (t : Nat) : List Nat -> List Nat
+  | [] => []
+  | x :: xs => if x >= t then x :: keepAbove t xs else keepAbove t xs
+
+theorem never_invents (t : Nat) (xs : List Nat) :
+    (keepAbove t xs).length <= xs.length := by
+  induction xs with
+  | nil => simp [keepAbove]
+  | cons x xs ih =>
+    simp only [keepAbove]
+    split
+    · simp; omega
+    · simp; omega
+</code></pre>
+"""
+
+PROOF_STATEMENT = "∀ (t : Nat) (xs : List Nat), (keepAbove t xs).length ≤ xs.length"
+
+
+def _proof_document(statement: str, name: str = "never_invents") -> str:
+    return (
+        PROOF_CELL
+        + '\n<span class="result" data-language="lean-proof" '
+        + f'data-code="{name}">{statement}</span>\n'
+    )
+
+
+def test_unexpected_axioms_permits_only_the_standard_three() -> None:
+    from provedown.verifiers.lean import _unexpected_axioms
+
+    assert _unexpected_axioms("'f' does not depend on any axioms", {}) == set()
+    assert (
+        _unexpected_axioms(
+            "'f' depends on axioms: [propext, Classical.choice, Quot.sound]", {}
+        )
+        == set()
+    )
+    assert _unexpected_axioms("'f' depends on axioms: [propext, sorryAx]", {}) == {
+        "sorryAx"
+    }
+    # A bare `axiom` declaration is an unproved assumption too.
+    assert _unexpected_axioms("'f' depends on axioms: [myAssumption]", {}) == {
+        "myAssumption"
+    }
+    # ...unless the document declares it.
+    assert (
+        _unexpected_axioms(
+            "'f' depends on axioms: [myAssumption]", {"axioms": "myAssumption"}
+        )
+        == set()
+    )
+
+
+def test_strip_declaration_prefix() -> None:
+    from provedown.verifiers.lean import _strip_declaration_prefix
+
+    assert _strip_declaration_prefix("foo : ∀ n, n = n", "foo") == "∀ n, n = n"
+    assert _strip_declaration_prefix("∀ n, n = n", "foo") == "∀ n, n = n"
+
+
+def test_normalize_ignores_pretty_printer_line_wrapping() -> None:
+    from provedown.verifiers.lean import _normalize
+
+    assert _normalize("∀ (t : Nat),\n  t ≤ t") == _normalize("∀ (t : Nat), t ≤ t")
+
+
+@requires_lean
+def test_lean_proof_claim_passes_when_statement_and_axioms_agree() -> None:
+    report = verify_document(parse_document(_proof_document(PROOF_STATEMENT)))
+
+    findings = [f for f in report.findings if f.verifier_id == "lean-results"]
+    assert [f.status for f in findings] == [Status.PASS], [
+        f.message for f in findings
+    ]
+    assert "no unproved assumptions" in findings[0].message
+
+
+@requires_lean
+def test_lean_proof_claim_fails_when_statement_was_weakened() -> None:
+    weakened = PROOF_CELL.replace("<= xs.length := by", "<= xs.length + 1 := by")
+    document = parse_document(
+        weakened
+        + '\n<span class="result" data-language="lean-proof" '
+        + f'data-code="never_invents">{PROOF_STATEMENT}</span>\n'
+    )
+
+    report = verify_document(document)
+
+    findings = [f for f in report.findings if f.verifier_id == "lean-results"]
+    assert findings[-1].status == Status.FAIL
+    assert "states a different theorem" in findings[-1].message
+    assert findings[-1].actual is not None
+    assert findings[-1].actual.endswith("+ 1")
+
+
+@requires_lean
+def test_lean_proof_claim_fails_on_sorry_buried_in_a_dependency() -> None:
+    """The claimed theorem has no `sorry` of its own and emits no warning."""
+    document = parse_document(
+        """
+<pre><code data-language="lean">
+def keepAbove (t : Nat) : List Nat -> List Nat
+  | [] => []
+  | x :: xs => if x >= t then x :: keepAbove t xs else keepAbove t xs
+</code></pre>
+<pre><code data-language="lean">
+theorem buried (t : Nat) (xs : List Nat) :
+    (keepAbove t xs).length <= xs.length := by sorry
+</code></pre>
+<pre><code data-language="lean">
+theorem never_invents (t : Nat) (xs : List Nat) :
+    (keepAbove t xs).length <= xs.length := buried t xs
+</code></pre>
+"""
+        + '<span class="result" data-language="lean-proof" '
+        + f'data-code="never_invents">{PROOF_STATEMENT}</span>\n'
+    )
+
+    report = verify_document(document)
+
+    findings = [f for f in report.findings if f.verifier_id == "lean-results"]
+    claim = findings[-1]
+    assert claim.status == Status.FAIL
+    assert "sorryAx" in claim.message
+    # The statement itself is correct; only the axiom audit catches this.
+    assert claim.expected is not None
+    assert claim.actual is not None
+    assert claim.expected.strip() == claim.actual.strip()
+
+
+@requires_lean
+def test_lean_proof_claim_errors_on_unknown_declaration() -> None:
+    document = parse_document(_proof_document(PROOF_STATEMENT, name="no_such_thing"))
+
+    report = verify_document(document)
+
+    findings = [f for f in report.findings if f.verifier_id == "lean-results"]
+    assert findings[-1].status == Status.ERROR
+
+
+@requires_lean
+def test_lean_proof_claim_rejects_non_identifier_code() -> None:
+    """`data-code` is spliced into a Lean file, so it must name one declaration."""
+    document = parse_document(
+        '<span class="result" data-language="lean-proof" '
+        'data-code="foo&#10;#eval IO.println 1">x</span>'
+    )
+
+    report = verify_document(document)
+
+    findings = [f for f in report.findings if f.verifier_id == "lean-results"]
+    assert len(findings) == 1
+    assert findings[0].status == Status.ERROR
+    assert "must name a single declaration" in findings[0].message

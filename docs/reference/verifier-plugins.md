@@ -98,7 +98,8 @@ gate.
 
 The default registry currently includes:
 
-- `lean-results` for `lean` and `lean4` code;
+- `lean-results` for `lean` and `lean4` code, and for `lean-proof` /
+  `lean-theorem` proof claims;
 - `python-results` for `python` and `py` code;
 - `sql-results` for `sql`, `duckdb`, and `duckdb-sql` code.
 

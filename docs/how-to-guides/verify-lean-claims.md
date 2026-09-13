@@ -103,10 +103,61 @@ A cell that elaborates with `declaration uses 'sorry'` is reported as `fail`.
 A `sorry` means the Lean text does not actually establish what it appears to,
 so treating it as evidence would defeat the point of verifying the document.
 
-## What this does not check
+## Proof claims
 
-The verifier checks that an expression *evaluates* to the authored value. It
-does not check that a Lean theorem's statement means what the surrounding prose
-claims it means. A theorem can typecheck, contain no `sorry`, and still prove
-something weaker than the sentence next to it. That gap is not mechanically
-detectable, so Lean evidence still needs a reader.
+Scalar evaluation is the less interesting half. Python and SQL already compute
+values, and they do it against real data, which Lean cannot easily read. What
+Lean offers that neither can is a claim about *every* input rather than about
+the rows in front of you.
+
+A `lean-proof` claim names a theorem, and the authored text is the theorem's
+statement:
+
+````markdown
+<span
+  class="result"
+  data-language="lean-proof"
+  data-code="keepAbove_never_invents"
+>∀ (t : Nat) (xs : List Nat), (keepAbove t xs).length ≤ xs.length</span>
+````
+
+Three independent things are checked:
+
+1. **The declaration exists.** A renamed or deleted theorem fails the report.
+2. **It rests on no unproved assumptions.** `#print axioms` is consulted, and
+   anything beyond Lean's standard `propext`, `Classical.choice`, and
+   `Quot.sound` is reported. Declare deliberate extras with
+   `data-axioms="myAxiom"`.
+3. **Its statement matches the document.** The pretty-printed statement is
+   compared with the authored text, ignoring line wrapping.
+
+The language names are `lean-proof` and `lean-theorem`.
+
+### Why all three
+
+The checks catch genuinely different failures, and none subsumes another.
+
+A `sorry` anywhere in a proof's *dependencies* makes the claim vacuous, even
+when the theorem's own text is clean and Lean emits no warning on it:
+
+```lean
+theorem helper (xs : List Nat) : P xs := by sorry
+theorem looks_clean (xs : List Nat) : P xs := helper xs   -- no warning here
+```
+
+`looks_clean` has no `sorry` in its text, yet `#print axioms` reports
+`sorryAx`. Grepping for `sorry` misses this; the axiom audit does not. Here the
+statement is correct, so only check 2 fires.
+
+Conversely, a proof can be entirely honest and still not support the prose,
+because the theorem was weakened until it went through — an extra hypothesis, a
+loosened bound. Then checks 1 and 2 pass and only check 3 fires.
+
+### What this still does not check
+
+Whether the theorem's statement means what the surrounding *prose* claims it
+means. That is why the statement is printed in the document rather than hidden
+behind a name: the machine checks statement against proof, and the reader
+checks statement against prose. A theorem can typecheck, use no `sorry`, match
+the displayed statement, and still be irrelevant to the sentence above it. That
+last gap is not mechanically closable.

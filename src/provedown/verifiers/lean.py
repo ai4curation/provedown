@@ -24,7 +24,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -39,12 +39,25 @@ from provedown.report import Finding, Status
 from provedown.verifiers import VerificationContext
 
 LEAN_LANGUAGE_NAMES = {"lean", "lean4"}
+LEAN_PROOF_LANGUAGE_NAMES = {"lean-proof", "lean-theorem"}
 VERIFIER_ID = "lean-results"
+
+#: Axioms every ordinary Lean proof may use. Anything else -- a bare ``axiom``
+#: declaration, or ``sorryAx`` from an unfinished proof -- is an unproved
+#: assumption the claim silently rests on, so it is reported.
+STANDARD_AXIOMS = frozenset({"propext", "Classical.choice", "Quot.sound"})
 LEAN_TIMEOUT_SECONDS = 300
 
 _ENTRY_POINT = "main"
 _VALUE_BEGIN = "<<provedown:begin>>"
 _VALUE_END = "<<provedown:end>>"
+_STATEMENT_BEGIN = "<<provedown:statement>>"
+_AXIOMS_BEGIN = "<<provedown:axioms>>"
+_PROOF_END = "<<provedown:proof-end>>"
+
+_DECLARATION_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.'!?]*$")
+_AXIOM_LIST_PATTERN = re.compile(r"depends on axioms: \[([^\]]*)\]")
+_NO_AXIOMS_PATTERN = re.compile(r"does not depend on any axioms")
 _IMPORT_PATTERN = re.compile(r"^import\s+\S+")
 _ENTRY_POINT_PATTERN = re.compile(
     r"^\s*(?:@\[[^\]]*\]\s*)*(?:private\s+|protected\s+|unsafe\s+|partial\s+)*"
@@ -161,6 +174,7 @@ class _LeanRunner:
             return []
         location = execution_location.location if execution_location else block.location
 
+
         imports, body = _split_imports(block.code)
         for statement in imports:
             if statement not in self.imports:
@@ -218,6 +232,8 @@ class _LeanRunner:
     ) -> Finding | None:
         if not _is_lean(result.language):
             return None
+        if _is_lean_proof(result.language):
+            return self._verify_proof(result, toolchain, scratch)
 
         expression = result.code
         ref_name = result.referenced_code_name
@@ -326,6 +342,144 @@ class _LeanRunner:
             expected=comparison.expected,
             actual=comparison.actual,
             evidence={"code": expression, "compare": result.compare},
+        )
+
+    def _verify_proof(
+        self,
+        result: ResultAssertion,
+        toolchain: list[str],
+        scratch: Path,
+    ) -> Finding:
+        """Check that a named theorem states the authored claim and proves it.
+
+        Three things can go wrong independently, so all three are checked: the
+        declaration may not exist, it may rest on unproved assumptions, and its
+        statement may have drifted from the claim the document displays.
+        """
+        name = result.code.strip()
+        evidence = {"declaration": name, "compare": result.compare}
+
+        if result.compare == "none":
+            return Finding(
+                verifier_id=VERIFIER_ID,
+                status=Status.SKIP,
+                location=result.location,
+                message="assertion explicitly marked as not verified",
+                expected=result.authored,
+                evidence=evidence,
+            )
+        if not _DECLARATION_NAME_PATTERN.match(name):
+            return Finding(
+                verifier_id=VERIFIER_ID,
+                status=Status.ERROR,
+                location=result.location,
+                message=(
+                    "a lean proof claim must name a single declaration, "
+                    f"not {name!r}"
+                ),
+                expected=result.authored,
+                evidence=evidence,
+            )
+        if self.prefix_failure is not None:
+            return Finding(
+                verifier_id=VERIFIER_ID,
+                status=Status.ERROR,
+                location=result.location,
+                message=self.prefix_failure,
+                expected=result.authored,
+                evidence=evidence,
+            )
+
+        entry = "\n".join(
+            [
+                f'#eval IO.println "{_STATEMENT_BEGIN}"',
+                f"#check @{name}",
+                f'#eval IO.println "{_AXIOMS_BEGIN}"',
+                f"#print axioms {name}",
+                f'#eval IO.println "{_PROOF_END}"',
+            ]
+        )
+        outcome = _run_lean(
+            toolchain,
+            self._render_source(entry),
+            scratch,
+            self._execution_cwd(),
+        )
+        if outcome.timed_out:
+            return Finding(
+                verifier_id=VERIFIER_ID,
+                status=Status.ERROR,
+                location=result.location,
+                message=f"lean proof timed out after {LEAN_TIMEOUT_SECONDS} seconds",
+                expected=result.authored,
+                evidence=evidence,
+            )
+        if outcome.returncode != 0:
+            return Finding(
+                verifier_id=VERIFIER_ID,
+                status=Status.ERROR,
+                location=result.location,
+                message=f"lean proof claim failed: {_summarize(outcome.output)}",
+                expected=result.authored,
+                evidence={**evidence, "output": outcome.output},
+            )
+
+        statement = _section(outcome.output, _STATEMENT_BEGIN, _AXIOMS_BEGIN)
+        axioms_text = _section(outcome.output, _AXIOMS_BEGIN, _PROOF_END)
+        if statement is None or axioms_text is None:
+            return Finding(
+                verifier_id=VERIFIER_ID,
+                status=Status.ERROR,
+                location=result.location,
+                message=f"could not read the statement of {name!r}",
+                expected=result.authored,
+                evidence={**evidence, "output": outcome.output},
+            )
+
+        statement = _strip_declaration_prefix(statement, name)
+        evidence = {**evidence, "statement": statement}
+
+        unproved = _unexpected_axioms(axioms_text, result.attributes)
+        if unproved:
+            listed = ", ".join(sorted(unproved))
+            detail = (
+                "an unfinished proof ('sorry')"
+                if "sorryAx" in unproved
+                else "an unproved assumption"
+            )
+            return Finding(
+                verifier_id=VERIFIER_ID,
+                status=Status.FAIL,
+                location=result.location,
+                message=(
+                    f"{name} rests on {detail}; it depends on [{listed}]"
+                ),
+                expected=result.authored,
+                actual=statement,
+                evidence={**evidence, "axioms": axioms_text},
+            )
+
+        if _normalize(statement) != _normalize(result.authored):
+            return Finding(
+                verifier_id=VERIFIER_ID,
+                status=Status.FAIL,
+                location=result.location,
+                message=(
+                    f"the document states a different theorem than {name} proves"
+                ),
+                expected=result.authored,
+                actual=statement,
+                evidence=evidence,
+            )
+
+        return Finding(
+            verifier_id=VERIFIER_ID,
+            status=Status.PASS,
+            location=result.location,
+            message=f"{name} proves the stated claim with no unproved assumptions",
+            expected=result.authored,
+            actual=statement,
+            evidence=evidence,
         )
 
     def _evaluate(
@@ -450,8 +604,56 @@ def _summarize(output: str) -> str:
     return summary
 
 
+def _section(output: str, begin: str, end: str) -> str | None:
+    """Read the text bracketed by two sentinel lines."""
+    lines = output.splitlines()
+    try:
+        start = lines.index(begin)
+        stop = lines.index(end, start + 1)
+    except ValueError:
+        return None
+    return "\n".join(lines[start + 1 : stop])
+
+
+def _strip_declaration_prefix(statement: str, name: str) -> str:
+    """``#check @foo`` prints ``foo : <statement>``; keep the statement."""
+    prefix = f"{name} :"
+    stripped = statement.strip()
+    if stripped.startswith(prefix):
+        return stripped[len(prefix) :].strip()
+    return stripped
+
+
+def _unexpected_axioms(
+    axioms_text: str,
+    attributes: Mapping[str, str],
+) -> set[str]:
+    """Return the axioms a claim rests on beyond the permitted set."""
+    if _NO_AXIOMS_PATTERN.search(axioms_text):
+        return set()
+    match = _AXIOM_LIST_PATTERN.search(axioms_text)
+    if match is None:
+        return set()
+    found = {item.strip() for item in match.group(1).split(",") if item.strip()}
+    declared = attributes.get("axioms") or attributes.get("data-axioms") or ""
+    permitted = STANDARD_AXIOMS | {
+        item.strip() for item in declared.split(",") if item.strip()
+    }
+    return found - permitted
+
+
+def _normalize(text: str) -> str:
+    """Compare statements up to the line wrapping the pretty-printer chooses."""
+    return " ".join(text.split())
+
+
 def _is_lean(language: str) -> bool:
-    return language.strip().lower() in LEAN_LANGUAGE_NAMES
+    name = language.strip().lower()
+    return name in LEAN_LANGUAGE_NAMES or name in LEAN_PROOF_LANGUAGE_NAMES
+
+
+def _is_lean_proof(language: str) -> bool:
+    return language.strip().lower() in LEAN_PROOF_LANGUAGE_NAMES
 
 
 def _has_lean_events(document: Document) -> bool:
