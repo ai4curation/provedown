@@ -98,5 +98,11 @@ gate.
 
 The default registry currently includes:
 
+- `lean-results` for `lean` and `lean4` code;
 - `python-results` for `python` and `py` code;
 - `sql-results` for `sql`, `duckdb`, and `duckdb-sql` code.
+
+`lean-results` shells out to a Lean 4 toolchain, which Provedown does not
+bundle. It returns findings only for documents that contain Lean events, and
+reports an error rather than a skip when no toolchain is on `PATH`. See
+[Verify Lean Claims](../how-to-guides/verify-lean-claims.md).

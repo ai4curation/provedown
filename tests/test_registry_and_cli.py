@@ -60,7 +60,11 @@ def test_cli_list_verifiers(capsys: CaptureFixture[str]) -> None:
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert captured.out.splitlines() == ["python-results", "sql-results"]
+    assert captured.out.splitlines() == [
+        "lean-results",
+        "python-results",
+        "sql-results",
+    ]
 
 
 def test_cli_verify_json_output_fails_on_mismatch(

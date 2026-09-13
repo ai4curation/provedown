@@ -74,7 +74,7 @@ HTML file remains the source of truth.
 
 ## Capabilities
 
-- Execute embedded Python or DuckDB SQL.
+- Execute embedded Python, DuckDB SQL, or Lean 4.
 - Query local CSV files from SQL or Python reports.
 - Check exact values, numeric tolerances, and set equality.
 - Reuse named calculations across multiple claims.
@@ -84,6 +84,7 @@ HTML file remains the source of truth.
 ## Learn More
 
 - [Use SQL and CSV files](https://ai4curation.io/provedown/how-to-guides/use-sql-and-csv-files/)
+- [Verify Lean claims](https://ai4curation.io/provedown/how-to-guides/verify-lean-claims/)
 - [Customize evidence rendering](https://ai4curation.io/provedown/how-to-guides/customize-evidence-rendering/)
 - [CLI reference](https://ai4curation.io/provedown/reference/cli/)
 - [Python API](https://ai4curation.io/provedown/reference/python-api/)
