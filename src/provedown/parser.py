@@ -562,7 +562,7 @@ def _mask_markdown_fenced_code(source: str) -> str:
     fence_len = 0
 
     for line in lines:
-        marker = _fence_marker(line)
+        marker = fence_marker(line)
         if fence_char is None:
             masked.append(line)
             if marker is not None:
@@ -583,7 +583,14 @@ def _mask_markdown_fenced_code(source: str) -> str:
     return "".join(masked)
 
 
-def _fence_marker(line: str) -> tuple[str, int] | None:
+def fence_marker(line: str) -> tuple[str, int] | None:
+    """Return the fence character and run length when ``line`` opens or closes a fence.
+
+    Shared with integrations that need to agree with the parser about which
+    lines delimit Markdown fenced code, so a document region is never masked by
+    one and treated as live markup by the other.
+    """
+
     stripped = line.lstrip()
     if not stripped.startswith(("```", "~~~")):
         return None

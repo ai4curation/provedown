@@ -80,10 +80,12 @@ HTML file remains the source of truth.
 - Reuse named calculations across multiple claims.
 - Inspect dependencies between evidence and claims.
 - Render evidence as visible, expandable, or claim-only HTML.
+- Verify Open Knowledge Format (OKF) bundles, including attested computations.
 
 ## Learn More
 
 - [Use SQL and CSV files](https://ai4curation.io/provedown/how-to-guides/use-sql-and-csv-files/)
+- [Verify an OKF bundle](https://ai4curation.io/provedown/how-to-guides/verify-an-okf-bundle/)
 - [Customize evidence rendering](https://ai4curation.io/provedown/how-to-guides/customize-evidence-rendering/)
 - [CLI reference](https://ai4curation.io/provedown/reference/cli/)
 - [Python API](https://ai4curation.io/provedown/reference/python-api/)

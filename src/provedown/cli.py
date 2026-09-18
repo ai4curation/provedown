@@ -8,11 +8,22 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from provedown.inspection import InspectionEvent, InspectionReport, inspect_file
-from provedown.linting import LintReport, lint_file
+from provedown.inspection import (
+    InspectionEvent,
+    InspectionReport,
+    inspect_document,
+    inspect_file,
+)
+from provedown.integrations.okf import parse_okf_file, verify_okf_file
+from provedown.linting import LintReport, lint_document, lint_file
 from provedown.report import Finding, Report, Status
 from provedown.runner import verify_file
 from provedown.verifiers import default_registry
+
+OKF_HELP = (
+    "treat inputs as Open Knowledge Format documents and lift an attested "
+    "computation into an executable named code block"
+)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -58,6 +69,7 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=("uv",),
         help="verify Python in an isolated uv environment (prototype)",
     )
+    verify.add_argument("--okf", action="store_true", help=OKF_HELP)
 
     inspect = subparsers.add_parser(
         "inspect",
@@ -70,6 +82,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default="text",
         help="output format",
     )
+    inspect.add_argument("--okf", action="store_true", help=OKF_HELP)
 
     lint = subparsers.add_parser(
         "lint",
@@ -82,6 +95,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default="text",
         help="output format",
     )
+    lint.add_argument("--okf", action="store_true", help=OKF_HELP)
 
     subparsers.add_parser("list-verifiers", help="list available verifier ids")
     return parser
@@ -101,10 +115,11 @@ def _verify(args: argparse.Namespace) -> int:
         )
         return 2
 
+    verify = verify_okf_file if args.okf else verify_file
     reports: list[Report] = []
     for path in args.paths:
         reports.append(
-            verify_file(
+            verify(
                 path,
                 verifier_ids=verifier_ids,
                 sandbox=args.sandbox,
@@ -130,7 +145,12 @@ def _verify(args: argparse.Namespace) -> int:
 
 
 def _inspect(args: argparse.Namespace) -> int:
-    reports = [inspect_file(path) for path in args.paths]
+    if args.okf:
+        reports = [
+            inspect_document(parse_okf_file(path).document) for path in args.paths
+        ]
+    else:
+        reports = [inspect_file(path) for path in args.paths]
 
     if args.format == "json":
         payload = {
@@ -145,7 +165,10 @@ def _inspect(args: argparse.Namespace) -> int:
 
 
 def _lint(args: argparse.Namespace) -> int:
-    reports = [lint_file(path) for path in args.paths]
+    if args.okf:
+        reports = [lint_document(parse_okf_file(path).document) for path in args.paths]
+    else:
+        reports = [lint_file(path) for path in args.paths]
 
     if args.format == "json":
         payload = {
