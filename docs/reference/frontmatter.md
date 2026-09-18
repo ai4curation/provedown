@@ -105,5 +105,10 @@ They are ignored otherwise.
   `runtime` key. Set this when a computation declares a runtime Provedown
   cannot run but is portable enough to check with another.
 
+`bundle_root`
+: Optional path, relative to the document, bounding where the OKF `computation`
+  key may point. Defaults to `.`, the document's own directory. A reference
+  resolving outside the root is a blocking diagnostic rather than a file read.
+
 `computation_name`
 : Optional name for the lifted computation block. Defaults to `computation`.

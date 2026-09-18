@@ -207,6 +207,254 @@ def test_binding_value_must_match_the_declared_type() -> None:
     assert any("is not a valid integer" in item for item in okf.document.diagnostics)
 
 
+PREFIX_DOC = """---
+type: Attested Computation
+runtime: duckdb
+parameters:
+  - { name: year, type: integer, required: true }
+  - { name: year_end, type: integer, required: true }
+provedown:
+  okf:
+    bindings:
+      span: { year: 2025, year_end: 2027 }
+---
+
+# Computation
+
+```sql
+SELECT @year_end - @year
+```
+
+Span:
+<span class="result" data-code="#span">2<span class="method"></span></span>
+"""
+
+
+def test_a_shorter_parameter_name_does_not_rewrite_a_longer_one() -> None:
+    okf = parse_okf_document(PREFIX_DOC)
+
+    assert okf.document.diagnostics == []
+    assert okf.bindings["span"].code == "SELECT 2027 - 2025"
+    assert verify_document(okf.document).ok
+
+
+def test_parameter_names_are_matched_at_a_boundary() -> None:
+    source = PREFIX_DOC.replace(
+        "SELECT @year_end - @year",
+        "SELECT @year_end - @year, 'ops@yearly.example'",
+    )
+
+    okf = parse_okf_document(source)
+
+    assert okf.bindings["span"].code == (
+        "SELECT 2027 - 2025, 'ops@yearly.example'"
+    )
+
+
+def test_placeholders_inside_sql_string_literals_are_left_alone() -> None:
+    source = PREFIX_DOC.replace(
+        "SELECT @year_end - @year",
+        "SELECT @year_end - @year, '@year'",
+    )
+
+    okf = parse_okf_document(source)
+
+    assert okf.bindings["span"].code == "SELECT 2027 - 2025, '@year'"
+
+
+def test_a_name_only_inside_a_literal_does_not_count_as_referenced() -> None:
+    source = """---
+type: Attested Computation
+runtime: duckdb
+parameters:
+  - { name: year, type: integer }
+  - { name: n, type: integer, required: true }
+provedown:
+  okf:
+    bindings:
+      only_n: { n: 1 }
+---
+
+# Computation
+
+```sql
+SELECT @n, 'filed @year'
+```
+"""
+
+    okf = parse_okf_document(source)
+
+    assert okf.document.diagnostics == []
+    assert okf.bindings["only_n"].code == "SELECT 1, 'filed @year'"
+
+
+def test_string_parameters_are_quoted_and_escaped() -> None:
+    source = """---
+type: Attested Computation
+runtime: duckdb
+parameters:
+  - { name: status, type: string, required: true }
+provedown:
+  okf:
+    bindings:
+      quoted: { status: "it's delivered" }
+---
+
+# Computation
+
+```sql
+SELECT @status
+```
+
+Value:
+<span class="result" data-code="#quoted">it's delivered<span
+  class="method"></span></span>
+"""
+
+    okf = parse_okf_document(source)
+
+    assert okf.bindings["quoted"].code == "SELECT 'it''s delivered'"
+    assert verify_document(okf.document).ok
+
+
+def test_boolean_parameters_reject_non_boolean_values() -> None:
+    source = """---
+type: Attested Computation
+runtime: duckdb
+parameters:
+  - { name: flag, type: boolean, required: true }
+provedown:
+  okf:
+    bindings:
+      good: { flag: false }
+      bad: { flag: nonsense }
+---
+
+# Computation
+
+```sql
+SELECT @flag
+```
+"""
+
+    okf = parse_okf_document(source)
+
+    assert okf.bindings["good"].code == "SELECT FALSE"
+    assert "bad" not in okf.bindings
+    assert any("not a valid boolean" in item for item in okf.document.diagnostics)
+
+
+def test_integer_parameters_reject_non_integral_values() -> None:
+    source = COMPUTATION_DOC.replace(
+        "fy2025: { year: 2025 }", "fy2025: { year: 2025.9 }"
+    )
+
+    okf = parse_okf_document(source)
+
+    assert any("not a valid integer" in item for item in okf.document.diagnostics)
+
+
+def test_untyped_parameters_follow_the_value_type() -> None:
+    source = """---
+type: Attested Computation
+runtime: duckdb
+parameters:
+  - { name: year }
+provedown:
+  okf:
+    bindings:
+      y: { year: 2026 }
+---
+
+# Computation
+
+```sql
+SELECT @year + 1
+```
+
+Next:
+<span class="result" data-code="#y">2027<span class="method"></span></span>
+"""
+
+    okf = parse_okf_document(source)
+
+    assert okf.bindings["y"].code == "SELECT 2026 + 1"
+    assert verify_document(okf.document).ok
+
+
+def test_a_fence_tagged_for_the_runtime_wins() -> None:
+    source = """---
+type: Attested Computation
+runtime: duckdb
+---
+
+# Computation
+
+```text
+a note, not the computation
+```
+
+```sql
+SELECT 41 + 1
+```
+
+Answer:
+<span class="result" data-code="#computation">42<span class="method"></span></span>
+"""
+
+    okf = parse_okf_document(source)
+
+    assert okf.computation is not None
+    assert okf.computation.code == "SELECT 41 + 1"
+    assert verify_document(okf.document).ok
+
+
+def test_an_untagged_fence_is_used_when_none_matches_the_runtime() -> None:
+    source = """---
+type: Attested Computation
+runtime: duckdb
+---
+
+# Computation
+
+```
+SELECT 41 + 1
+```
+
+Answer:
+<span class="result" data-code="#computation">42<span class="method"></span></span>
+"""
+
+    okf = parse_okf_document(source)
+
+    assert okf.computation is not None
+    assert okf.computation.code == "SELECT 41 + 1"
+
+
+def test_computation_name_override_renames_the_lifted_block() -> None:
+    source = COMPUTATION_DOC.replace(
+        "  okf:\n", "  okf:\n    computation_name: sanctioned\n"
+    ).replace('data-code="#fy2025"', 'data-code="#sanctioned"')
+
+    okf = parse_okf_document(source)
+
+    assert okf.computation is not None
+    assert okf.computation.name == "sanctioned"
+    assert "sanctioned" in okf.document.named_code
+    assert "computation" not in okf.document.named_code
+
+
+def test_a_binding_may_not_take_the_computation_name() -> None:
+    source = COMPUTATION_DOC.replace(
+        "fy2025: { year: 2025 }", "computation: { year: 2025 }"
+    )
+
+    okf = parse_okf_document(source)
+
+    assert "computation" not in okf.bindings
+    assert any("collides with" in item for item in okf.document.diagnostics)
+
+
 def test_unrunnable_runtime_is_reported_rather_than_guessed() -> None:
     source = COMPUTATION_DOC.replace("runtime: duckdb", "runtime: bigquery")
 
@@ -341,6 +589,86 @@ Answer:
     assert okf.computation.code == "SELECT 41 + 1"
     assert okf.computation.location.path == tmp_path / "revenue.sql"
     assert verify_okf_file(document).ok
+
+
+def _bundle_with_computation_key(
+    tmp_path: Path,
+    reference: str,
+    extra: str = "",
+) -> Path:
+    (tmp_path / "bundle").mkdir(exist_ok=True)
+    (tmp_path / "outside.sql").write_text("SELECT 1\n", encoding="utf-8")
+    document = tmp_path / "bundle" / "revenue.md"
+    document.write_text(
+        f"""---
+type: Attested Computation
+runtime: duckdb
+computation: {reference}
+{extra}---
+""",
+        encoding="utf-8",
+    )
+    return document
+
+
+def test_a_computation_outside_the_bundle_root_is_refused(tmp_path: Path) -> None:
+    document = _bundle_with_computation_key(tmp_path, "../outside.sql")
+
+    okf = parse_okf_file(document)
+
+    assert okf.computation is None
+    assert any("outside the bundle root" in i for i in okf.document.diagnostics)
+    assert not verify_okf_file(document).ok
+
+
+def test_an_absolute_computation_path_is_refused(tmp_path: Path) -> None:
+    document = _bundle_with_computation_key(
+        tmp_path, str((tmp_path / "outside.sql").resolve())
+    )
+
+    okf = parse_okf_file(document)
+
+    assert okf.computation is None
+    assert any("outside the bundle root" in i for i in okf.document.diagnostics)
+
+
+def test_bundle_root_widens_the_allowed_area(tmp_path: Path) -> None:
+    document = _bundle_with_computation_key(
+        tmp_path,
+        "../outside.sql",
+        extra="provedown:\n  okf:\n    bundle_root: ..\n",
+    )
+
+    okf = parse_okf_file(document)
+
+    assert okf.document.diagnostics == []
+    assert okf.computation is not None
+    assert okf.computation.code == "SELECT 1"
+
+
+def test_the_computation_key_is_not_backfilled_by_a_fence(tmp_path: Path) -> None:
+    document = tmp_path / "revenue.md"
+    document.write_text(
+        """---
+type: Attested Computation
+runtime: duckdb
+computation: missing.sql
+---
+
+# Computation
+
+```sql
+SELECT 'the fence must not stand in for the named file'
+```
+""",
+        encoding="utf-8",
+    )
+
+    okf = parse_okf_file(document)
+
+    assert okf.computation is None
+    assert len(okf.document.diagnostics) == 1
+    assert "cannot read computation" in okf.document.diagnostics[0]
 
 
 def test_unreadable_external_computation_is_reported(tmp_path: Path) -> None:

@@ -12,30 +12,55 @@ from typing import Any
 
 _COMMENT = re.compile(r"--[^\n]*")
 _WHITESPACE = re.compile(r"\s+")
+_STRING = re.compile(r"('(?:[^']|'')*')")  # captured, so split keeps the literals
 
 
 def canonicalize(sql: str) -> str:
-    """Reduce SQL to a form that ignores comments, spacing, and keyword case."""
+    """Reduce SQL to a form that ignores comments, spacing, and keyword case.
+
+    Case is folded outside string literals only. Lowercasing the whole
+    statement would make `order_status = 'delivered'` and `= 'DELIVERED'`
+    compare equal, and a changed predicate is exactly what this check exists to
+    reject.
+    """
 
     without_comments = _COMMENT.sub(" ", sql)
-    return _WHITESPACE.sub(" ", without_comments).strip().rstrip(";").lower()
+    folded = "".join(
+        part if index % 2 else part.lower()
+        for index, part in enumerate(_STRING.split(without_comments))
+    )
+    collapsed = _WHITESPACE.sub(" ", folded).strip()
+    return collapsed.rstrip(";").strip()
 
 
 def bind(sql: str, parameters: dict[str, Any]) -> str:
     """Substitute declared ``@name`` parameters, as the executor is required to.
 
     The executor reports the statement it actually ran, so the sanctioned SQL
-    has to be bound the same way before the two can be compared.
+    has to be bound the same way before the two can be compared. Names are
+    matched at a boundary and outside string literals, so `@year` does not
+    rewrite `@year_end` or `'ops@yearly.example'`.
     """
 
-    for name, value in parameters.items():
-        literal = (
+    if not parameters:
+        return sql
+
+    literals = {
+        name: (
             str(value)
             if isinstance(value, (int, float)) and not isinstance(value, bool)
             else "'" + str(value).replace("'", "''") + "'"
         )
-        sql = sql.replace(f"@{name}", literal)
-    return sql
+        for name, value in parameters.items()
+    }
+    names = sorted(literals, key=len, reverse=True)
+    pattern = re.compile(
+        r"@(" + "|".join(re.escape(name) for name in names) + r")(?![0-9A-Za-z_])"
+    )
+    return "".join(
+        part if index % 2 else pattern.sub(lambda m: literals[m.group(1)], part)
+        for index, part in enumerate(_STRING.split(sql))
+    )
 
 
 def attest(

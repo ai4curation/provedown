@@ -107,6 +107,24 @@ def test_cli_verify_without_okf_leaves_the_fence_alone(
     assert "unknown result code reference" in captured.out
 
 
+def test_cli_lint_okf_resolves_the_lifted_reference(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    report_path = tmp_path / "revenue.md"
+    report_path.write_text(OKF_DOCUMENT, encoding="utf-8")
+
+    okf_exit = main(["lint", "--okf", str(report_path)])
+    okf_output = capsys.readouterr().out
+    plain_exit = main(["lint", str(report_path)])
+    plain_output = capsys.readouterr().out
+
+    assert okf_exit == 0
+    assert "errors=0" in okf_output
+    assert plain_exit == 1
+    assert "unresolved-result-reference" in plain_output
+
+
 def test_cli_inspect_okf_resolves_the_lifted_reference(
     tmp_path: Path,
     capsys: CaptureFixture[str],

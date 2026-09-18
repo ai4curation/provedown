@@ -40,7 +40,7 @@ SELECT * FROM read_csv_auto('../data/orders.csv');
 <code use="orders"/>
 
 The table holds
-<span class="result" data-code="SELECT COUNT(*) FROM orders">7<span class="method"></span></span>
+<span class="result" data-code="SELECT COUNT(*) FROM orders">10<span class="method"></span></span>
 orders.
 ````
 
@@ -140,14 +140,57 @@ blocking:
 - a value that does not match its declared type is an error.
 
 Literals are rendered for the target language: quoted and escaped for SQL,
-`repr` for Python. Only declared parameter names are substituted, so an `@` in a
-string literal is never mistaken for a placeholder.
+`repr` for Python. A declared type is enforced rather than coerced, so `boolean`
+takes a boolean and `integer` takes a whole number; an undeclared type follows
+the value's own type, so an untyped `2026` stays a number instead of becoming a
+quoted string.
+
+Substitution is deliberately narrow. Only declared names are substituted, only
+at a name boundary, and — for SQL — only outside string literals. So with a
+declared `year`, none of `@yearly`, `@year_end`, `'ops@yearly.example'`, or
+`WHERE note = 'filed @year'` is touched. A warehouse does not bind a placeholder
+inside a quoted literal, and neither does the shim.
+
+## Where the Computation Comes From
+
+`computation` in frontmatter is authoritative when present: the named file is
+used, and a `# Computation` fence never quietly stands in for it. If the file
+cannot be read, that is the error. With no `computation` key, the fence under
+`# Computation` is used — the one tagged for the runtime's language if the
+section holds several, so a `text` note or a `yaml` receipt sample before the
+SQL does not get lifted by mistake.
+
+A `computation` reference is confined to the bundle root, which defaults to the
+document's own directory:
+
+```text
+revenue.md:1:1: okf: computation '../shared/revenue.sql' resolves outside the
+bundle root '.'; set provedown.okf.bundle_root if the computation genuinely
+lives further up the tree
+```
+
+Lifting turns a path into executed code, and an OKF bundle may have been written
+by an agent rather than by whoever runs `verify`, so escaping the root is a
+blocking diagnostic rather than a read. When a bundle genuinely shares
+computations across directories, widen the root explicitly:
+
+```yaml
+provedown:
+  okf:
+    bundle_root: ..
+```
 
 ## Runtimes Provedown Cannot Run
 
 `runtime` names an execution context — `bigquery`, `postgres`, `dbt`, `python`,
-`duckdb`. The built-in verifiers cover `python` and DuckDB SQL. A computation
-declaring any other runtime is **reported, not guessed at**:
+`duckdb`. The built-in verifiers cover `python` and DuckDB SQL.
+
+One runtime value is treated loosely: a bare `runtime: sql` is taken as DuckDB,
+matching how the core `sql-results` verifier already claims the `sql` language.
+If a bundle's SQL is Postgres or BigQuery, name that dialect in `runtime` rather
+than `sql`, so the check below applies to it.
+
+A computation declaring any other runtime is **reported, not guessed at**:
 
 ```text
 revenue.md:1:1: okf: no built-in verifier runs the 'bigquery' runtime; set

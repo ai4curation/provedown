@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -49,6 +49,8 @@ from provedown.parser import fence_marker, parse_document
 from provedown.report import Report
 from provedown.runner import verify_document
 from provedown.verifiers import VerificationContext, VerifierRegistry
+from provedown.verifiers.python import PYTHON_LANGUAGE_NAMES
+from provedown.verifiers.sql import SQL_LANGUAGE_NAMES
 
 ATTESTED_COMPUTATION_TYPE = "attested computation"
 COMPUTATION_HEADING = "computation"
@@ -74,11 +76,15 @@ RUNTIME_LANGUAGES: Mapping[str, str] = {
 }
 
 _HEADING = re.compile(r"^(#{1,6})\s+(?P<title>.+?)\s*$")
-_PARAMETER_REFERENCE = "@{name}"
+_SQL_STRING = re.compile(r"'(?:[^']|'')*'")
 
 _INTEGER_TYPES = {"integer", "int", "int64", "bigint", "smallint"}
 _NUMBER_TYPES = {"number", "float", "float64", "double", "numeric", "decimal"}
 _BOOLEAN_TYPES = {"boolean", "bool"}
+
+
+def _is_sql(language: str) -> bool:
+    return language.strip().lower() in SQL_LANGUAGE_NAMES
 
 
 @dataclass(frozen=True)
@@ -160,6 +166,7 @@ class OkfConfig:
 
     computation_name: str = DEFAULT_COMPUTATION_NAME
     runtime_language: str | None = None
+    bundle_root: str = "."
     bindings: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 
 
@@ -334,6 +341,7 @@ def _config(
             _text(raw.get("computation_name")) or DEFAULT_COMPUTATION_NAME
         ),
         runtime_language=_text(raw.get("runtime_language")),
+        bundle_root=_text(raw.get("bundle_root")) or ".",
         bindings=bindings,
     )
 
@@ -389,19 +397,24 @@ def _computation_block(
         )
         return None
 
-    located = _external_computation(metadata, path, diagnostics)
-    if located is None:
-        located = _fenced_computation(source, path)
-    if located is None:
-        diagnostics.append(
-            _diagnostic(
-                path,
-                "attested computation has no computation: add a fenced code "
-                f"block under a '# {COMPUTATION_HEADING.title()}' heading, or "
-                "name one with the computation frontmatter key",
+    # The computation frontmatter key is authoritative when set: a document
+    # that names a computation file is never quietly served by a fence instead.
+    if metadata.computation is not None:
+        located = _external_computation(metadata, config, path, diagnostics)
+        if located is None:
+            return None
+    else:
+        located = _fenced_computation(source, path, language)
+        if located is None:
+            diagnostics.append(
+                _diagnostic(
+                    path,
+                    "attested computation has no computation: add a fenced code "
+                    f"block under a '# {COMPUTATION_HEADING.title()}' heading, or "
+                    "name one with the computation frontmatter key",
+                )
             )
-        )
-        return None
+            return None
 
     code, location = located
     if not code.strip():
@@ -419,25 +432,45 @@ def _computation_block(
 
 def _external_computation(
     metadata: OkfMetadata,
+    config: OkfConfig,
     path: Path | None,
     diagnostics: list[str],
 ) -> tuple[str, SourceLocation] | None:
+    """Read the computation named by the ``computation`` frontmatter key.
+
+    The reference is confined to the bundle root, which defaults to the
+    document's own directory. Lifting turns a path into executed code, and an
+    OKF bundle may have been written by an agent rather than by whoever runs
+    ``verify``, so a reference that escapes the root is a diagnostic rather
+    than a read.
+    """
+
     reference = metadata.computation
     if reference is None:
         return None
 
-    target = Path(reference)
-    if not target.is_absolute():
-        if path is None:
-            diagnostics.append(
-                _diagnostic(
-                    path,
-                    f"cannot resolve relative computation {reference!r} for a "
-                    "document parsed without a path",
-                )
+    if path is None:
+        diagnostics.append(
+            _diagnostic(
+                path,
+                f"cannot resolve computation {reference!r} for a document "
+                "parsed without a path",
             )
-            return None
-        target = path.parent / target
+        )
+        return None
+
+    root = (path.parent / config.bundle_root).resolve()
+    target = (path.parent / Path(reference)).resolve()
+    if not _is_within(target, root):
+        diagnostics.append(
+            _diagnostic(
+                path,
+                f"computation {reference!r} resolves outside the bundle root "
+                f"{str(config.bundle_root)!r}; set provedown.okf.bundle_root if "
+                "the computation genuinely lives further up the tree",
+            )
+        )
+        return None
 
     try:
         code = target.read_text(encoding="utf-8")
@@ -450,15 +483,27 @@ def _external_computation(
     return code, SourceLocation(path=target, line=1, column=1)
 
 
+def _is_within(target: Path, root: Path) -> bool:
+    return target == root or root in target.parents
+
+
 def _fenced_computation(
     source: str,
     path: Path | None,
+    language: str,
 ) -> tuple[str, SourceLocation] | None:
-    """Locate the first fenced block under the ``# Computation`` heading.
+    """Locate the computation fence under the ``# Computation`` heading.
+
+    A fence tagged for the runtime's language wins, so a section that opens
+    with a ``text`` note or a ``yaml`` receipt sample before the SQL lifts the
+    SQL. With no tagged fence the first one in the section is used.
 
     Fence detection is shared with the parser, so the region lifted here is
     exactly the region the parser masks.
     """
+
+    aliases = _language_aliases(language)
+    candidates: list[tuple[str, SourceLocation, str]] = []
 
     lines = source.splitlines(keepends=True)
     index = _body_start(lines)
@@ -470,8 +515,13 @@ def _fenced_computation(
         if marker is not None:
             closing = _fence_close(lines, index + 1, marker)
             if in_computation_section:
-                body = "".join(lines[index + 1 : closing])
-                return body, SourceLocation(path=path, line=index + 2, column=1)
+                candidates.append(
+                    (
+                        "".join(lines[index + 1 : closing]),
+                        SourceLocation(path=path, line=index + 2, column=1),
+                        _fence_info(line, marker),
+                    )
+                )
             index = closing + 1
             continue
 
@@ -481,7 +531,30 @@ def _fenced_computation(
             in_computation_section = title == COMPUTATION_HEADING
         index += 1
 
-    return None
+    if not candidates:
+        return None
+    for code, location, info in candidates:
+        if info in aliases:
+            return code, location
+    code, location, _ = candidates[0]
+    return code, location
+
+
+def _fence_info(line: str, marker: tuple[str, int]) -> str:
+    """Return the opening fence's info string, lowercased."""
+
+    _, length = marker
+    info = line.lstrip()[length:].strip().lower()
+    return info.split()[0] if info else ""
+
+
+def _language_aliases(language: str) -> set[str]:
+    name = language.strip().lower()
+    if name in SQL_LANGUAGE_NAMES:
+        return set(SQL_LANGUAGE_NAMES)
+    if name in PYTHON_LANGUAGE_NAMES:
+        return set(PYTHON_LANGUAGE_NAMES)
+    return {name}
 
 
 def _fence_close(
@@ -603,7 +676,7 @@ def _bind(
     if not ok:
         return None
 
-    code = computation.code
+    literals: dict[str, str] = {}
     for parameter in metadata.parameters:
         if parameter.name not in values:
             continue
@@ -613,30 +686,102 @@ def _bind(
             language=computation.language,
         )
         if literal is None:
+            declared = parameter.type or "value"
             diagnostics.append(
                 _diagnostic(
                     path,
                     f"binding {binding!r} value for {parameter.name!r} is not a "
-                    f"valid {parameter.type}",
+                    f"valid {declared}",
                 )
             )
             return None
-        code = code.replace(_PARAMETER_REFERENCE.format(name=parameter.name), literal)
-    return code
+        literals[parameter.name] = literal
+
+    pattern = _parameter_pattern(literals)
+    if pattern is None:
+        return computation.code
+    return _substitute(
+        computation.code,
+        pattern,
+        lambda match: literals[match.group(1)],
+        language=computation.language,
+    )
+
+
+def _parameter_pattern(names: Iterable[str]) -> re.Pattern[str] | None:
+    """Match ``@name`` for the given names, and only at a name boundary.
+
+    Longest name first, with a trailing word character blocking the match, so
+    ``@year`` does not match inside ``@year_end`` and ``ops@yearly.example``
+    keeps its text.
+    """
+
+    ordered = sorted(set(names), key=len, reverse=True)
+    if not ordered:
+        return None
+    alternation = "|".join(re.escape(name) for name in ordered)
+    return re.compile(rf"@({alternation})(?![0-9A-Za-z_])")
+
+
+def _substitute(
+    code: str,
+    pattern: re.Pattern[str],
+    replace: Callable[[re.Match[str]], str],
+    *,
+    language: str,
+) -> str:
+    """Apply ``pattern`` outside SQL string literals.
+
+    A warehouse does not bind a placeholder that appears inside a quoted
+    literal, so neither does the shim: ``WHERE note = 'filed @year'`` keeps its
+    text. Literal detection is SQL-specific, so other languages substitute
+    throughout.
+    """
+
+    if not _is_sql(language):
+        return pattern.sub(replace, code)
+
+    parts: list[str] = []
+    cursor = 0
+    for literal in _SQL_STRING.finditer(code):
+        parts.append(pattern.sub(replace, code[cursor : literal.start()]))
+        parts.append(literal.group(0))
+        cursor = literal.end()
+    parts.append(pattern.sub(replace, code[cursor:]))
+    return "".join(parts)
 
 
 def _referenced_parameters(code: str, metadata: OkfMetadata) -> frozenset[str]:
     """Return declared parameters that appear as ``@name`` in the computation.
 
-    Only declared names count, so an ``@`` inside a string literal (an email
-    address, say) is never mistaken for a placeholder.
+    Matching follows the same rules as substitution, so a name that only occurs
+    as part of a longer one, or inside a SQL string literal, does not count as
+    referenced.
     """
 
-    return frozenset(
-        parameter.name
-        for parameter in metadata.parameters
-        if _PARAMETER_REFERENCE.format(name=parameter.name) in code
+    names = [parameter.name for parameter in metadata.parameters]
+    pattern = _parameter_pattern(names)
+    if pattern is None:
+        return frozenset()
+
+    found: set[str] = set()
+
+    def record(match: re.Match[str]) -> str:
+        found.add(match.group(1))
+        return match.group(0)
+
+    _substitute(
+        code,
+        pattern,
+        record,
+        language=_parameter_scan_language(metadata),
     )
+    return frozenset(found)
+
+
+def _parameter_scan_language(metadata: OkfMetadata) -> str:
+    runtime = (metadata.runtime or "").strip().lower()
+    return RUNTIME_LANGUAGES.get(runtime, runtime)
 
 
 def _literal(
@@ -645,27 +790,87 @@ def _literal(
     parameter: OkfParameter,
     language: str,
 ) -> str | None:
-    declared = (parameter.type or "").strip().lower()
+    """Render one binding value as a literal, or ``None`` if it is not valid.
 
-    try:
-        if declared in _INTEGER_TYPES:
-            coerced: Any = int(value)
-        elif declared in _NUMBER_TYPES:
-            coerced = float(value)
-        elif declared in _BOOLEAN_TYPES:
-            coerced = bool(value)
-        else:
-            coerced = str(value)
-    except (TypeError, ValueError):
+    A declared type is enforced rather than coerced: a `boolean` accepts only a
+    boolean, an `integer` only a whole number. An undeclared type falls back to
+    the value's own Python type, so an untyped `2026` stays a number instead of
+    becoming a quoted string.
+    """
+
+    if value is None or isinstance(value, (Mapping, list, tuple, set)):
         return None
 
-    if language.strip().lower() in {"python", "py"}:
-        return repr(coerced)
-    if isinstance(coerced, bool):
-        return "TRUE" if coerced else "FALSE"
-    if isinstance(coerced, (int, float)):
-        return str(coerced)
-    return "'" + str(coerced).replace("'", "''") + "'"
+    declared = (parameter.type or "").strip().lower()
+    coerced: Any
+    if declared in _INTEGER_TYPES:
+        coerced = _as_integer(value)
+    elif declared in _NUMBER_TYPES:
+        coerced = _as_number(value)
+    elif declared in _BOOLEAN_TYPES:
+        coerced = _as_boolean(value)
+    elif declared:
+        coerced = _text(value)
+    else:
+        coerced = _as_value_type(value)
+
+    if coerced is None:
+        return None
+    return _render(coerced, language)
+
+
+def _as_integer(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else None
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _as_number(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _as_boolean(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in {"true", "false"}:
+            return text == "true"
+    return None
+
+
+def _as_value_type(value: Any) -> Any:
+    if isinstance(value, (bool, int, float)):
+        return value
+    return _text(value)
+
+
+def _render(value: Any, language: str) -> str:
+    if language.strip().lower() in PYTHON_LANGUAGE_NAMES:
+        return repr(value)
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return "'" + str(value).replace("'", "''") + "'"
 
 
 def _lifted(

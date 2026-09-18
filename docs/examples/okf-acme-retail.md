@@ -29,6 +29,12 @@ examples/okf/
 follows OKF's conventions, including footnote citations tied to `sources` ids and
 the `executor`/`attester` contract on the computation.
 
+The computation keeps the policy's 30-day return window, so it reads
+`CURRENT_DATE`. The shipped figures are stable regardless: every delivered order
+is already past its window, and the one recent row is `pending`. Adding a row to
+the CSV changes the figures — which is the point of the example, and what
+`provedown verify` is there to report.
+
 Today the bundle is green:
 
 ```bash
