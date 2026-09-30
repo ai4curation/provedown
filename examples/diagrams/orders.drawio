@@ -1,0 +1,33 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="orders" name="Orders">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <object id="evidence" label="Evidence: load orders" name="orders" provedown-code="import csv&#xa;&#xa;with open(&quot;../data/orders.csv&quot;, newline=&quot;&quot;) as handle:&#xa;    orders = list(csv.DictReader(handle))&#xa;&#xa;paid = [row for row in orders if row[&quot;status&quot;] == &quot;paid&quot;]&#xa;paid_total = sum(float(row[&quot;amount&quot;]) for row in paid)">
+          <mxCell style="shape=note;whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontColor=#666666;" vertex="1" parent="1">
+            <mxGeometry x="40" y="200" width="200" height="40" as="geometry"/>
+          </mxCell>
+        </object>
+        <object id="all-orders" label="All orders&lt;br&gt;&lt;b&gt;%result%&lt;/b&gt;" placeholders="1" result="6" data-code="len(orders)">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+            <mxGeometry x="40" y="40" width="140" height="60" as="geometry"/>
+          </mxCell>
+        </object>
+        <object id="paid-orders" label="Paid&lt;br&gt;&lt;b&gt;%result%&lt;/b&gt;" placeholders="1" result="4" data-code="len(paid)">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;" vertex="1" parent="1">
+            <mxGeometry x="260" y="40" width="140" height="60" as="geometry"/>
+          </mxCell>
+        </object>
+        <mxCell id="edge" value="filter status = paid" style="endArrow=classic;html=1;" edge="1" parent="1" source="all-orders" target="paid-orders">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <object id="revenue" label="$461.00" data-code="f'${paid_total:.2f}'">
+          <mxCell style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+            <mxGeometry x="480" y="40" width="120" height="60" as="geometry"/>
+          </mxCell>
+        </object>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

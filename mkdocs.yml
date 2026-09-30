@@ -93,3 +93,4 @@ nav:
       - Pure HTML Report: examples/html-report.md
   - Design Notes:
       - Verifiable Literate Weave: ideas/verifiable-weave-spec.md
+      - Verifiable Diagrams: ideas/diagram-markup.md
