@@ -40,7 +40,7 @@ from urllib.parse import unquote
 from xml.etree import ElementTree
 
 CODE_PROPERTY = "provedown-code"
-RESULT_PROPERTY = "result"
+RESULT_PROPERTY = "provedown-result"
 RESULT_ATTRIBUTES = {
     "data-code",
     "data-compare",
@@ -61,7 +61,7 @@ class Lowering:
 
     html: str
     claims: int
-    diagnostics: list[str]
+    diagnostics: tuple[str, ...]
 
     @property
     def ok(self) -> bool:
@@ -118,10 +118,15 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                 f"{where}: has a {RESULT_PROPERTY} property but no data-code, "
                 "so the value has no evidence"
             )
-        elif cell.html_label and (_has_result_class(label) or "<code" in label):
+        elif _has_result_class(label) or "<code" in label:
             # Agent-authored HTML labels. draw.io's sanitizer drops data-*
             # attributes when a person edits such a label in the editor.
-            if _has_result_class(label) and "<code" in label:
+            if not cell.html_label:
+                diagnostics.append(
+                    f"{where}: label contains Provedown markup but the shape "
+                    "style lacks html=1, so draw.io shows it as literal text"
+                )
+            elif _has_result_class(label) and "<code" in label:
                 diagnostics.append(
                     f"{where}: HTML label mixes evidence and claims; "
                     "split them into separate shapes"
@@ -129,13 +134,15 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
             elif _has_result_class(label):
                 claims.append(f"{comment}\n<div>{label}</div>")
             else:
-                code.append(f"{comment}\n<div>{label}</div>")
+                # draw.io stores label line breaks as <br>; the parser rejects
+                # tags nested in <code>, so turn them back into newlines.
+                code.append(f"{comment}\n<div>{_br_to_newline(label)}</div>")
 
     if not claims:
         diagnostics.append(f"{origin}: no claims found")
     header = f"<!-- generated from {escape(origin)} by diagram_to_provedown.py -->"
     html = "\n\n".join([header, *code, *claims]) + "\n"
-    return Lowering(html=html, claims=len(claims), diagnostics=diagnostics)
+    return Lowering(html=html, claims=len(claims), diagnostics=tuple(diagnostics))
 
 
 def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
@@ -154,7 +161,9 @@ def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
     if rewriter.claims == 0:
         diagnostics.append(f"{origin}: no claims found")
     return Lowering(
-        html=rewriter.output(), claims=rewriter.claims, diagnostics=diagnostics
+        html=rewriter.output(),
+        claims=rewriter.claims,
+        diagnostics=tuple(diagnostics),
     )
 
 
@@ -246,6 +255,10 @@ def _label_text(cell: Cell) -> str:
     return extractor.text().strip()
 
 
+def _br_to_newline(label: str) -> str:
+    return re.sub(r"<br\s*/?>", "\n", label, flags=re.IGNORECASE)
+
+
 def _has_result_class(label: str) -> bool:
     pattern = r"class=[\"'](?:[^\"']*\s)?result(?:\s[^\"']*)?[\"']"
     return re.search(pattern, label) is not None
@@ -293,13 +306,18 @@ class _SvgResultRewriter(HTMLParser):
         self._parts.append(raw)
 
     def handle_endtag(self, tag: str) -> None:
-        original, renamed = self._stack.pop() if self._stack else (tag, False)
+        if not self._stack:
+            self._error(f"unexpected </{tag}> with no open element")
+            self._parts.append(f"</{tag}>")
+            return
+        original, renamed = self._stack.pop()
         if original.lower() != tag:
-            line, column = self.getpos()
-            self.diagnostics.append(
-                f"{self.origin}:{line}:{column + 1}: unexpected </{tag}>"
-            )
+            self._error(f"unexpected </{tag}>")
         self._parts.append("</span>" if renamed else f"</{original}>")
+
+    def _error(self, message: str) -> None:
+        line, column = self.getpos()
+        self.diagnostics.append(f"{self.origin}:{line}:{column + 1}: {message}")
 
     def handle_data(self, data: str) -> None:
         self._parts.append(data)
@@ -353,7 +371,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     output = args.output or args.path.with_name(args.path.name + ".provedown.html")
-    lowering = convert(args.path)
+    try:
+        lowering = convert(args.path)
+    except (OSError, ValueError, ElementTree.ParseError, zlib.error) as exc:
+        # binascii.Error (bad base64) is a ValueError subclass.
+        print(f"error: {args.path}: {exc}", file=sys.stderr)
+        return 1
     output.write_text(lowering.html, encoding="utf-8")
     print(f"{output}: {lowering.claims} claim(s)")
     for diagnostic in lowering.diagnostics:

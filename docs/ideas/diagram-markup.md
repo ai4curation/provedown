@@ -44,8 +44,9 @@ When a person edits such a label in the editor, or exports to SVG, the
 claim that has lost its evidence.
 
 Agents that write `.drawio` XML directly can still use HTML labels, and the
-prototype accepts them. They just won't survive a round trip through a human
-editor.
+prototype accepts them. The shape style must include `html=1`, and line breaks
+in an evidence label (stored by draw.io as `<br>`) are turned back into
+newlines. Such labels won't survive a round trip through a human editor.
 
 ### Recommended: Shape Properties
 
@@ -56,28 +57,30 @@ render a property into the label with `%name%`. The prototype uses the same
 attribute names as the HTML contract:
 
 ```xml
-<object id="paid-orders" label="Paid&lt;br&gt;&lt;b&gt;%result%&lt;/b&gt;"
-        placeholders="1" result="4" data-code="len(paid)">
+<object id="paid-orders" label="Paid&lt;br&gt;&lt;b&gt;%provedown-result%&lt;/b&gt;"
+        placeholders="1" provedown-result="4" data-code="len(paid)">
   <mxCell style="rounded=1;html=1;" vertex="1" parent="1">...</mxCell>
 </object>
 ```
 
 - **Claim**: any shape with a `data-code` property. `data-compare`, `tol`,
   `seed`, and `data-language` work as they do on `span.result`.
-- **Authored value**: the `result` property if present and non-empty,
-  otherwise the label's whole visible text. The fallback only works when the
-  label is exactly the value (`$461.00`, not `Revenue: $461.00`), so prefer the
-  `result` property. With `placeholders="1"` and `%result%` in the label, the
-  number appears once, in the property, and the diagram renders it. Editing it
-  in the Edit Data dialog updates the picture.
+- **Authored value**: the `provedown-result` property if present and
+  non-empty, otherwise the label's whole visible text. The fallback only works
+  when the label is exactly the value (`$461.00`, not `Revenue: $461.00`), so
+  prefer the property. With `placeholders="1"` and `%provedown-result%` in the
+  label, the number appears once, in the property, and the diagram renders it.
+  Editing it in the Edit Data dialog updates the picture. The property is
+  namespaced like `provedown-code` because a bare `result` is a common name in
+  imported shape data.
 - **Evidence**: a shape with a `provedown-code` property, a multi-line value
   that the Edit Data dialog edits as a textarea, plus an optional `name`. The
   shape itself can be a small "evidence" note, or it can sit on a hidden layer
   or a separate page. Long code belongs in an importable Python module next to
   the diagram, as it does for Markdown reports.
 
-The placeholder regex (`%(date\{.*\}|[^%{}"'=;]+)%`) allows hyphens, so names
-such as `%data-value%` would also work if we prefer a namespaced property.
+The placeholder regex (`%(date\{.*\}|[^%{}"'=;]+)%`) allows hyphens, which is
+what makes `%provedown-result%` work.
 
 ### Execution Order
 
@@ -128,8 +131,9 @@ paid = [row for row in orders if row["status"] == "paid"]
   the parser should support it (see below).
 
 The prototype rewrites result `tspan`/`text` elements to `span` and escapes
-CDATA without moving any text, so the parser's line and column numbers still
-point at the original SVG. `examples/diagrams/orders.svg`
+CDATA without adding or removing lines, so the parser's line numbers still
+point at the original SVG. Columns can shift on lines where CDATA was
+unwrapped or text was escaped. `examples/diagrams/orders.svg`
 renders correctly in Chromium with the evidence hidden (checked by hand).
 
 Namespace hygiene is still open. A bare `<code>` in the SVG namespace is
@@ -180,12 +184,16 @@ Or run `just verify-diagram-examples`, which CI runs as part of
 `just check-examples`. The generated HTML is written next to the input so
 relative data paths such as `../data/orders.csv` still resolve.
 
-The converter fails closed. It exits non-zero, without changing what it
-writes, when a diagram has no claims or when a cell looks like a mistake:
+The converter fails closed. It still writes the HTML, but exits non-zero when
+a diagram has no claims, when the file can't be read or decoded, or when a
+cell looks like a mistake:
 
-- a `result` property with no `data-code`, which is a value with no evidence;
+- a `provedown-result` property with no `data-code`, which is a value with
+  no evidence;
 - a shape that has both `provedown-code` and `data-code`;
 - an HTML label that mixes `<code>` and `class="result"`;
+- a label with Provedown markup on a shape whose style lacks `html=1`, which
+  draw.io would display as literal text;
 - an SVG end tag that doesn't match its start tag.
 
 A misspelled property such as `datacode` can't be told apart from unrelated

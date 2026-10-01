@@ -101,7 +101,7 @@ def test_svg_without_claims_fails_closed() -> None:
     lowering = script.normalize_svg('<svg><text class="no-result">2</text></svg>')
 
     assert not lowering.ok
-    assert lowering.diagnostics == ["<svg>: no claims found"]
+    assert lowering.diagnostics == ("<svg>: no claims found",)
 
 
 def test_svg_mismatched_end_tag_is_reported() -> None:
@@ -115,7 +115,7 @@ def test_svg_mismatched_end_tag_is_reported() -> None:
 
 def test_stale_drawio_property_fails() -> None:
     source = (EXAMPLES / "orders.drawio").read_text(encoding="utf-8")
-    stale = source.replace('result="4"', 'result="5"')
+    stale = source.replace('provedown-result="4"', 'provedown-result="5"')
 
     lowering = script.drawio_to_html(stale)
 
@@ -184,7 +184,7 @@ def test_html_label_evidence_is_emitted_before_claims() -> None:
 @pytest.mark.parametrize(
     ("cells", "message"),
     [
-        (_object("r", label="4", result="4"), "no data-code"),
+        (_object("r", label="4", provedown_result="4"), "no data-code"),
         (
             _object("both", label="4", provedown_code="x = 4", data_code="x"),
             "both provedown-code and data-code",
@@ -197,6 +197,12 @@ def test_html_label_evidence_is_emitted_before_claims() -> None:
         ),
         (_object("typo", label="4", datacode="x"), "no claims found"),
         ('<mxCell id="plain" value="Just a label"/>', "no claims found"),
+        (
+            '<mxCell id="p" style="rounded=1;" value="&lt;span '
+            'class=&quot;result&quot; data-code=&quot;1&quot;&gt;1&lt;/span&gt;"/>'
+            + _object("ok", label="1", data_code="1"),
+            "lacks html=1",
+        ),
     ],
 )
 def test_drawio_authoring_mistakes_fail_closed(cells: str, message: str) -> None:
@@ -209,7 +215,7 @@ def test_drawio_authoring_mistakes_fail_closed(cells: str, message: str) -> None
 def test_empty_result_property_falls_back_to_label() -> None:
     source = _drawio(
         _object("c", label="code", provedown_code="x = 4")
-        + _object("r", label="4", result="", data_code="x")
+        + _object("r", label="4", provedown_result="", data_code="x")
     )
 
     assert _statuses(script.drawio_to_html(source).html) == [Status.PASS]
@@ -230,3 +236,61 @@ def test_main_writes_next_to_input_and_exit_status(tmp_path: Path) -> None:
     assert script.main([str(good)]) == 0
     assert (tmp_path / "good.drawio.provedown.html").exists()
     assert script.main([str(empty)]) == 1
+
+
+def test_html_label_evidence_keeps_line_breaks() -> None:
+    source = _drawio(
+        '<mxCell id="c" style="text;html=1;" value="&lt;pre&gt;&lt;code&gt;'
+        'x = 2&lt;br&gt;y = 3&lt;br/&gt;z = x + y&lt;/code&gt;&lt;/pre&gt;"/>'
+        + _object("r", label="5", data_code="z")
+    )
+
+    lowering = script.drawio_to_html(source)
+
+    assert lowering.ok
+    assert _statuses(lowering.html) == [Status.PASS]
+
+
+def test_unrelated_result_property_is_ignored() -> None:
+    source = _drawio(
+        _object("c", label="code", provedown_code="x = 4")
+        + _object("r", label="4", data_code="x")
+        + _object("test", label="Test run", result="passed")
+    )
+
+    lowering = script.drawio_to_html(source)
+
+    assert lowering.ok
+    assert _statuses(lowering.html) == [Status.PASS]
+
+
+def test_svg_stray_end_tag_is_reported() -> None:
+    lowering = script.normalize_svg(
+        '<svg><text class="result" data-code="1">1</text></svg></clipPath>'
+    )
+
+    assert not lowering.ok
+    assert any("with no open element" in d for d in lowering.diagnostics)
+
+
+@pytest.mark.parametrize(
+    ("name", "content"),
+    [
+        ("missing.drawio", None),
+        ("broken.drawio", "<mxfile><diagram>"),
+        ("bad-base64.drawio", '<mxfile><diagram name="p">!!!</diagram></mxfile>'),
+        ("plain.drawio.svg", '<svg xmlns="http://www.w3.org/2000/svg"/>'),
+    ],
+)
+def test_main_reports_unreadable_input(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    name: str,
+    content: str | None,
+) -> None:
+    path = tmp_path / name
+    if content is not None:
+        path.write_text(content, encoding="utf-8")
+
+    assert script.main([str(path)]) == 1
+    assert capsys.readouterr().err.startswith(f"error: {path}: ")

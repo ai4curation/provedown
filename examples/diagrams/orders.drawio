@@ -9,12 +9,12 @@
             <mxGeometry x="40" y="200" width="200" height="40" as="geometry"/>
           </mxCell>
         </object>
-        <object id="all-orders" label="All orders&lt;br&gt;&lt;b&gt;%result%&lt;/b&gt;" placeholders="1" result="6" data-code="len(orders)">
+        <object id="all-orders" label="All orders&lt;br&gt;&lt;b&gt;%provedown-result%&lt;/b&gt;" placeholders="1" provedown-result="6" data-code="len(orders)">
           <mxCell style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
             <mxGeometry x="40" y="40" width="140" height="60" as="geometry"/>
           </mxCell>
         </object>
-        <object id="paid-orders" label="Paid&lt;br&gt;&lt;b&gt;%result%&lt;/b&gt;" placeholders="1" result="4" data-code="len(paid)">
+        <object id="paid-orders" label="Paid&lt;br&gt;&lt;b&gt;%provedown-result%&lt;/b&gt;" placeholders="1" provedown-result="4" data-code="len(paid)">
           <mxCell style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;" vertex="1" parent="1">
             <mxGeometry x="260" y="40" width="140" height="60" as="geometry"/>
           </mxCell>

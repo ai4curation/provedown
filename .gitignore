@@ -16,4 +16,4 @@ build/
 .coverage
 htmlcov/
 site/
-*.provedown.html
+examples/diagrams/*.provedown.html
