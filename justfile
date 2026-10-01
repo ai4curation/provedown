@@ -34,6 +34,11 @@ inspect-examples:
 lint-examples:
     uv run provedown lint {{examples}}
 
-check-examples: lint-examples inspect-examples verify-examples
+check-examples: lint-examples inspect-examples verify-examples verify-diagram-examples
 
 all: check check-examples docs-build
+
+verify-diagram-examples:
+    uv run python scripts/diagram_to_provedown.py examples/diagrams/orders.drawio
+    uv run python scripts/diagram_to_provedown.py examples/diagrams/orders.svg
+    uv run provedown verify examples/diagrams/orders.drawio.provedown.html examples/diagrams/orders.svg.provedown.html
