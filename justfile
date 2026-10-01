@@ -34,7 +34,7 @@ inspect-examples:
 lint-examples:
     uv run provedown lint {{examples}}
 
-check-examples: lint-examples inspect-examples verify-examples
+check-examples: lint-examples inspect-examples verify-examples verify-diagram-examples
 
 all: check check-examples docs-build
 

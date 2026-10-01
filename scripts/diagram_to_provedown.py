@@ -39,9 +39,6 @@ from pathlib import Path
 from urllib.parse import unquote
 from xml.etree import ElementTree
 
-# draw.io shape properties that are part of the draw.io data model rather than
-# the Provedown contract, and therefore never copied onto generated elements.
-DRAWIO_RESERVED = {"id", "label", "placeholders", "tooltip", "link"}
 CODE_PROPERTY = "provedown-code"
 RESULT_PROPERTY = "result"
 RESULT_ATTRIBUTES = {
@@ -59,6 +56,20 @@ CODE_ATTRIBUTES = {"name", "data-language", "language", "lang"}
 
 
 @dataclass(frozen=True)
+class Lowering:
+    """Generated Provedown HTML plus what the lowering found along the way."""
+
+    html: str
+    claims: int
+    diagnostics: list[str]
+
+    @property
+    def ok(self) -> bool:
+        # Fail closed: a diagram with no claims would otherwise verify as ok.
+        return self.claims > 0 and not self.diagnostics
+
+
+@dataclass(frozen=True)
 class Cell:
     page: str
     cell_id: str
@@ -66,19 +77,19 @@ class Cell:
     html_label: bool
 
 
-def convert(path: Path) -> str:
-    """Return Provedown HTML for a draw.io or SVG diagram."""
+def convert(path: Path) -> Lowering:
+    """Lower a draw.io or SVG diagram to Provedown HTML."""
 
     source = path.read_text(encoding="utf-8")
     name = path.name.lower()
     if name.endswith(".drawio.svg"):
         return drawio_to_html(_drawio_svg_content(source), origin=path.name)
     if name.endswith(".svg"):
-        return normalize_svg(source)
+        return normalize_svg(source, origin=path.name)
     return drawio_to_html(source, origin=path.name)
 
 
-def drawio_to_html(source: str, origin: str = "<diagram>") -> str:
+def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
     """Lower draw.io XML to Provedown HTML.
 
     A diagram has no reading order, so all evidence cells are emitted before
@@ -87,22 +98,47 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> str:
 
     code: list[str] = []
     claims: list[str] = []
+    diagnostics: list[str] = []
     for cell in _drawio_cells(source):
-        comment = f"<!-- {escape(origin)} page={cell.page!r} cell={cell.cell_id!r} -->"
-        if CODE_PROPERTY in cell.attributes:
+        where = f"{origin}: page {cell.page!r} cell {cell.cell_id!r}"
+        comment = f"<!-- {escape(where)} -->"
+        attributes = cell.attributes
+        label = attributes.get("label", "")
+        if CODE_PROPERTY in attributes and "data-code" in attributes:
+            diagnostics.append(
+                f"{where}: has both {CODE_PROPERTY} and data-code; "
+                "split evidence and claim into separate shapes"
+            )
+        elif CODE_PROPERTY in attributes:
             code.append(f"{comment}\n{_code_element(cell)}")
-        elif "data-code" in cell.attributes:
+        elif "data-code" in attributes:
             claims.append(f"{comment}\n<p>{_result_element(cell)}</p>")
-        elif cell.html_label and _has_html_contract(cell.attributes.get("label", "")):
+        elif RESULT_PROPERTY in attributes:
+            diagnostics.append(
+                f"{where}: has a {RESULT_PROPERTY} property but no data-code, "
+                "so the value has no evidence"
+            )
+        elif cell.html_label and (_has_result_class(label) or "<code" in label):
             # Agent-authored HTML labels. draw.io's sanitizer drops data-*
             # attributes when a person edits such a label in the editor.
-            claims.append(f"{comment}\n<div>{cell.attributes['label']}</div>")
+            if _has_result_class(label) and "<code" in label:
+                diagnostics.append(
+                    f"{where}: HTML label mixes evidence and claims; "
+                    "split them into separate shapes"
+                )
+            elif _has_result_class(label):
+                claims.append(f"{comment}\n<div>{label}</div>")
+            else:
+                code.append(f"{comment}\n<div>{label}</div>")
 
+    if not claims:
+        diagnostics.append(f"{origin}: no claims found")
     header = f"<!-- generated from {escape(origin)} by diagram_to_provedown.py -->"
-    return "\n\n".join([header, *code, *claims]) + "\n"
+    html = "\n\n".join([header, *code, *claims]) + "\n"
+    return Lowering(html=html, claims=len(claims), diagnostics=diagnostics)
 
 
-def normalize_svg(source: str) -> str:
+def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
     """Rewrite SVG-native Provedown markup to the HTML contract in place."""
 
     source = re.sub(
@@ -111,10 +147,15 @@ def normalize_svg(source: str) -> str:
         source,
         flags=re.DOTALL,
     )
-    rewriter = _SvgResultRewriter()
+    rewriter = _SvgResultRewriter(origin)
     rewriter.feed(source)
     rewriter.close()
-    return rewriter.output()
+    diagnostics = list(rewriter.diagnostics)
+    if rewriter.claims == 0:
+        diagnostics.append(f"{origin}: no claims found")
+    return Lowering(
+        html=rewriter.output(), claims=rewriter.claims, diagnostics=diagnostics
+    )
 
 
 def _drawio_cells(source: str) -> Iterator[Cell]:
@@ -178,9 +219,9 @@ def _code_element(cell: Cell) -> str:
 
 def _result_element(cell: Cell) -> str:
     attrs = _copy_attributes(cell.attributes, RESULT_ATTRIBUTES)
-    authored = cell.attributes.get(RESULT_PROPERTY)
-    if authored is None:
-        authored = _label_text(cell)
+    # Without a result property the whole visible label is the authored value,
+    # so the label must be exactly the value (e.g. "$461.00", not "Total: …").
+    authored = cell.attributes.get(RESULT_PROPERTY) or _label_text(cell)
     return (
         f'<span class="result"{attrs}>{escape(authored, quote=False)}'
         '<span class="method"></span></span>'
@@ -191,7 +232,7 @@ def _copy_attributes(attributes: dict[str, str], allowed: set[str]) -> str:
     return "".join(
         f' {key}="{escape(value)}"'
         for key, value in attributes.items()
-        if key in allowed and key not in DRAWIO_RESERVED
+        if key in allowed
     )
 
 
@@ -205,9 +246,9 @@ def _label_text(cell: Cell) -> str:
     return extractor.text().strip()
 
 
-def _has_html_contract(label: str) -> bool:
-    result_class = re.search(r"class=[\"'][^\"']*\bresult\b", label)
-    return "<code" in label or result_class is not None
+def _has_result_class(label: str) -> bool:
+    pattern = r"class=[\"'](?:[^\"']*\s)?result(?:\s[^\"']*)?[\"']"
+    return re.search(pattern, label) is not None
 
 
 class _TextExtractor(HTMLParser):
@@ -225,34 +266,40 @@ class _TextExtractor(HTMLParser):
 class _SvgResultRewriter(HTMLParser):
     """Rename SVG result elements to ``span`` without moving any text."""
 
-    def __init__(self) -> None:
+    def __init__(self, origin: str) -> None:
         super().__init__(convert_charrefs=False)
+        self.origin = origin
+        self.claims = 0
+        self.diagnostics: list[str] = []
         self._parts: list[str] = []
-        # Original (case-preserved) tag names, or None where renamed to span.
-        self._stack: list[str | None] = []
+        # Original (case-preserved) tag name and whether it became a span.
+        self._stack: list[tuple[str, bool]] = []
 
-    def handle_starttag(
-        self, tag: str, attrs: list[tuple[str, str | None]]
-    ) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         raw = self.get_starttag_text() or ""
         if tag in {"text", "tspan"} and _is_result(attrs):
-            self._stack.append(None)
+            self.claims += 1
+            self._stack.append((tag, True))
             self._parts.append(_rename_tag(raw, "span"))
         else:
-            self._stack.append(_tag_name(raw) or tag)
+            self._stack.append((_tag_name(raw) or tag, False))
             self._parts.append(raw)
 
-    def handle_startendtag(
-        self, tag: str, attrs: list[tuple[str, str | None]]
-    ) -> None:
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         raw = self.get_starttag_text() or ""
         if tag in {"text", "tspan"} and _is_result(attrs):
+            self.claims += 1
             raw = _rename_tag(raw, "span")
         self._parts.append(raw)
 
     def handle_endtag(self, tag: str) -> None:
-        original = self._stack.pop() if self._stack else tag
-        self._parts.append(f"</{original or 'span'}>")
+        original, renamed = self._stack.pop() if self._stack else (tag, False)
+        if original.lower() != tag:
+            line, column = self.getpos()
+            self.diagnostics.append(
+                f"{self.origin}:{line}:{column + 1}: unexpected </{tag}>"
+            )
+        self._parts.append("</span>" if renamed else f"</{original}>")
 
     def handle_data(self, data: str) -> None:
         self._parts.append(data)
@@ -306,9 +353,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     output = args.output or args.path.with_name(args.path.name + ".provedown.html")
-    output.write_text(convert(args.path), encoding="utf-8")
-    print(output)
-    return 0
+    lowering = convert(args.path)
+    output.write_text(lowering.html, encoding="utf-8")
+    print(f"{output}: {lowering.claims} claim(s)")
+    for diagnostic in lowering.diagnostics:
+        print(f"error: {diagnostic}", file=sys.stderr)
+    return 0 if lowering.ok else 1
 
 
 if __name__ == "__main__":

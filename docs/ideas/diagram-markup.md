@@ -64,8 +64,10 @@ attribute names as the HTML contract:
 
 - **Claim**: any shape with a `data-code` property. `data-compare`, `tol`,
   `seed`, and `data-language` work as they do on `span.result`.
-- **Authored value**: the `result` property if present, otherwise the label's
-  visible text. With `placeholders="1"` and `%result%` in the label, the
+- **Authored value**: the `result` property if present and non-empty,
+  otherwise the label's whole visible text. The fallback only works when the
+  label is exactly the value (`$461.00`, not `Revenue: $461.00`), so prefer the
+  `result` property. With `placeholders="1"` and `%result%` in the label, the
   number appears once, in the property, and the diagram renders it. Editing it
   in the Edit Data dialog updates the picture.
 - **Evidence**: a shape with a `provedown-code` property, a multi-line value
@@ -174,5 +176,26 @@ python scripts/diagram_to_provedown.py examples/diagrams/orders.svg
 provedown verify examples/diagrams/orders.svg.provedown.html
 ```
 
-Or run `just verify-diagram-examples`. The generated HTML is written next to
-the input so relative data paths such as `../data/orders.csv` still resolve.
+Or run `just verify-diagram-examples`, which CI runs as part of
+`just check-examples`. The generated HTML is written next to the input so
+relative data paths such as `../data/orders.csv` still resolve.
+
+The converter fails closed. It exits non-zero, without changing what it
+writes, when a diagram has no claims or when a cell looks like a mistake:
+
+- a `result` property with no `data-code`, which is a value with no evidence;
+- a shape that has both `provedown-code` and `data-code`;
+- an HTML label that mixes `<code>` and `class="result"`;
+- an SVG end tag that doesn't match its start tag.
+
+A misspelled property such as `datacode` can't be told apart from unrelated
+shape data, so it's caught only when the whole diagram ends up with no claims.
+
+## Trust Boundary
+
+A diagram is now executable input. Lowering a `.drawio` or SVG file produces
+Python or SQL that `verify` runs, so the posture for untrusted Markdown applies
+unchanged: only verify diagrams you would be willing to run as code, or use the
+uv sandbox. The prototype also decompresses and parses diagram XML with the
+standard library, which is not hardened against decompression bombs or entity
+expansion.
