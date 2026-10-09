@@ -813,8 +813,7 @@ def test_svg_void_element_in_ignored_region_is_reported_when_verify_drops_claims
     assert not lowering.ok
     assert lowering.claims == 1
     assert lowering.diagnostics == (
-        "o.svg:4:1: verify would skip this claim (1 checked, 2 outside ignored "
-        f"regions); {DROPPED_CAUSE}",
+        f"o.svg:4:1: verify would skip this claim; {DROPPED_CAUSE}",
     )
 
 
@@ -834,8 +833,7 @@ def test_svg_every_claim_dropped_by_verify_names_the_cause(ignored: str) -> None
 
     assert lowering.claims == 0
     assert lowering.diagnostics == (
-        "o.svg:3:1: verify would skip this claim (0 checked, 1 outside ignored "
-        f"regions); {DROPPED_CAUSE}",
+        f"o.svg:3:1: verify would skip this claim; {DROPPED_CAUSE}",
     )
 
 
@@ -854,7 +852,7 @@ def test_drawio_label_ignored_region_dropping_claims_names_the_cause() -> None:
     assert lowering.claims == 0
     assert lowering.diagnostics == (
         "t.drawio: page 'p' cell 'r' (label column 46): verify would skip this "
-        f"claim (0 checked, 1 outside ignored regions); {DROPPED_CAUSE}",
+        f"claim; {DROPPED_CAUSE}",
     )
 
 
@@ -870,8 +868,8 @@ def test_svg_stray_void_end_tag_in_ignored_region_is_reported() -> None:
 
     assert not lowering.ok
     assert lowering.diagnostics == (
-        "o.svg:3:34: verify would check this claim inside an ignored region "
-        f"(2 checked, 1 outside ignored regions); {GAINED_CAUSE}",
+        "o.svg:3:34: verify would check this claim inside an ignored region; "
+        f"{GAINED_CAUSE}",
     )
 
 
@@ -888,9 +886,11 @@ def test_svg_claim_gained_and_claim_lost_do_not_cancel_out() -> None:
         origin="o.svg",
     )
 
+    # Both halves are reported, so fixing one doesn't reveal the other.
     assert lowering.diagnostics == (
-        "o.svg:4:1: verify would skip this claim (1 checked, 1 outside ignored "
-        f"regions); {DROPPED_CAUSE}",
+        f"o.svg:4:1: verify would skip this claim; {DROPPED_CAUSE}",
+        "o.svg:2:34: verify would check this claim inside an ignored region; "
+        f"{GAINED_CAUSE}",
     )
 
 
@@ -908,8 +908,7 @@ def test_svg_dropped_claim_position_is_its_source_position() -> None:
     )
 
     assert lowering.diagnostics == (
-        "o.svg:4:1: verify would skip this claim (2 checked, 3 outside ignored "
-        f"regions); {DROPPED_CAUSE}",
+        f"o.svg:4:1: verify would skip this claim; {DROPPED_CAUSE}",
     )
 
 
@@ -930,8 +929,7 @@ def test_svg_claim_dropped_on_first_line_cites_its_source_column() -> None:
     )
 
     assert lowering.diagnostics == (
-        "o.svg:1:42: verify would skip this claim (0 checked, 1 outside ignored "
-        f"regions); {DROPPED_CAUSE}",
+        f"o.svg:1:42: verify would skip this claim; {DROPPED_CAUSE}",
     )
 
 
@@ -950,6 +948,90 @@ def test_drawio_label_claim_gained_by_stray_end_tag_names_the_cell() -> None:
 
     assert lowering.diagnostics == (
         "t.drawio: page 'p' cell 'i' (label column 81): verify would check this "
-        "claim inside an ignored region (2 checked, 1 outside ignored regions); "
+        "claim inside an ignored region; "
         f"{GAINED_CAUSE}",
     )
+
+
+def test_svg_gained_and_lost_claims_sharing_a_data_code_do_not_cancel_out() -> None:
+    # A legend illustrating the same expression it is ignored for.
+    lowering = script.normalize_svg(
+        "<svg>\n"
+        '<g class="provedown-ignore">e.g. </br>'
+        '<text class="result" data-code="x">4</text></g>\n'
+        '<g class="provedown-ignore"><foreignObject><div>a<br>b</div>'
+        "</foreignObject></g>\n"
+        '<text class="result" data-code="x">99</text>\n</svg>',
+        origin="o.svg",
+    )
+
+    assert lowering.diagnostics == (
+        f"o.svg:4:1: verify would skip this claim; {DROPPED_CAUSE}",
+        "o.svg:2:39: verify would check this claim inside an ignored region; "
+        f"{GAINED_CAUSE}",
+    )
+
+
+def test_svg_every_dropped_claim_is_counted() -> None:
+    lowering = script.normalize_svg(
+        '<svg>\n<br class="provedown-ignore">\n'
+        '<text class="result" data-code="1">1</text>\n'
+        '<text class="result" data-code="2">2</text>\n'
+        '<text class="result" data-code="3">3</text>\n</svg>',
+        origin="o.svg",
+    )
+
+    assert lowering.diagnostics == (
+        f"o.svg:3:1: verify would skip this claim and 2 later ones; {DROPPED_CAUSE}",
+    )
+
+
+def test_svg_position_after_cdata_is_its_source_column() -> None:
+    source = (
+        "<svg>\n"
+        "<metadata><code><![CDATA[x = 4]]></code></metadata>"
+        '<br class="provedown-ignore"><text class="result" data-code="x">4</text>'
+        "\n</svg>"
+    )
+
+    lowering = script.normalize_svg(source, origin="o.svg")
+
+    column = source.split("\n")[1].index("<text") + 1
+    assert lowering.diagnostics == (
+        f"o.svg:2:{column}: verify would skip this claim; {DROPPED_CAUSE}",
+    )
+
+
+def test_drawio_ignored_claim_in_evidence_label_is_located() -> None:
+    label = (
+        "<pre><code>x = 4</code></pre>"
+        '<div class="provedown-ignore">e.g. </br>'
+        '<span class="result" data-code="x">4</span></div>'
+    )
+    source = _drawio(
+        f'<mxCell id="ev" style="html=1;" value={quoteattr(label)}/>'
+        + _object("r", label="4", data_code="x")
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    assert lowering.diagnostics == (
+        "t.drawio: page 'p' cell 'ev' (label column 70): verify would check this "
+        f"claim inside an ignored region; {GAINED_CAUSE}",
+    )
+
+
+def test_drawio_multiline_label_claims_match_verify() -> None:
+    label = (
+        'Paid\n<span class="result" data-code="x">4</span> of '
+        '<span class="result" data-code="x">4</span>'
+    )
+    source = _drawio(
+        _object("c", label="code", provedown_code="x = 4")
+        + f'<mxCell id="i" style="html=1;" value={quoteattr(label)}/>'
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    assert lowering.ok
+    assert lowering.claims == 2

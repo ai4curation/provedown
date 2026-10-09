@@ -29,11 +29,10 @@ from __future__ import annotations
 
 import argparse
 import base64
-import difflib
 import re
 import sys
 import zlib
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from html import escape, unescape
 from html.parser import HTMLParser
@@ -142,10 +141,9 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
     all claim cells. Within each group, pages and cells keep file order.
     """
 
-    code: list[str] = []
-    claims: list[str] = []
+    code: list[_Block] = []
+    claims: list[_Block] = []
     diagnostics: list[str] = []
-    records: list[ClaimRecord] = []
     for cell in _drawio_cells(source):
         where = f"{origin}: page {cell.page!r} cell {cell.cell_id!r}"
         comment = f"<!-- {escape(where)} -->"
@@ -164,7 +162,7 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                     + _html_note(cell, markup)
                 )
             else:
-                code.append(f"{comment}\n{_code_element(cell)}")
+                code.append(_Block(f"{comment}\n{_code_element(cell)}"))
         elif "data-code" in attributes:
             if markup:
                 diagnostics.append(
@@ -185,9 +183,14 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                     f"the authored value now goes in {RESULT_PROPERTY!r}"
                 )
             else:
-                code_value = attributes["data-code"].strip()
-                records.append(ClaimRecord(code_value, where, ignored=False))
-                claims.append(f"{comment}\n<p>{_result_element(cell)}</p>")
+                prefix = f"{comment}\n<p>"
+                claim = LabelClaim(attributes["data-code"].strip(), 1, 1, False)
+                claims.append(
+                    _Block(
+                        f"{prefix}{_result_element(cell)}</p>",
+                        [(claim, where, _end_position(prefix))],
+                    )
+                )
         elif RESULT_PROPERTY in attributes:
             diagnostics.append(
                 f"{where}: has a {RESULT_PROPERTY} property but no data-code, "
@@ -212,44 +215,78 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                     "split them into separate shapes"
                 )
             elif markup.result:
-                records.extend(
-                    ClaimRecord(
-                        code_value,
-                        f"{where} (label line {line}, column {column})"
-                        if line > 1
-                        else f"{where} (label column {column})",
-                        ignored,
-                    )
-                    for code_value, line, column, ignored in markup.claims
-                )
-                claims.append(f"{comment}\n{LABEL_WRAPPER}{label}</div>")
+                claims.append(_label_block(comment, where, label))
             else:
                 # draw.io stores label line breaks as <br>; the parser rejects
                 # tags nested in <code>, so turn them back into newlines. Labels
-                # routed here hold only evidence, so the whole label is safe.
-                code.append(f"{comment}\n{LABEL_WRAPPER}{_br_to_newline(label)}</div>")
+                # routed here hold only evidence (and perhaps ignored claims),
+                # so the whole label is safe.
+                code.append(_label_block(comment, where, _br_to_newline(label)))
 
     header = f"{GENERATED_HEADER} {escape(origin)} by diagram_to_provedown.py -->"
-    html = "\n\n".join([header, *code, *claims]) + "\n"
+    html = header
+    records: list[ClaimRecord] = []
+    for block in [*code, *claims]:
+        html += "\n\n"
+        start = html.count("\n") + 1
+        for claim, where, (line, column) in block.claims:
+            records.append(
+                ClaimRecord(
+                    claim.code,
+                    where,
+                    claim.ignored,
+                    (start + line - 1, column),
+                )
+            )
+        html += block.text
+    html += "\n"
     return _lowering(
         html, origin, diagnostics, keeps_source_lines=False, records=records
     )
 
 
+@dataclass
+class _Block:
+    """A piece of generated HTML and the claims in it.
+
+    Each claim carries where the author wrote it and its position within
+    ``text``, which ``drawio_to_html`` shifts to the whole document's.
+    """
+
+    text: str
+    claims: list[tuple[LabelClaim, str, tuple[int, int]]] = field(default_factory=list)
+
+
+def _label_block(comment: str, where: str, label: str) -> _Block:
+    prefix = f"{comment}\n{LABEL_WRAPPER}"
+    prefix_line, prefix_column = _end_position(prefix)
+    claims = []
+    for claim in _label_markup(label).claims:
+        if claim.line > 1:
+            described = f"{where} (label line {claim.line}, column {claim.column})"
+            position = (prefix_line + claim.line - 1, claim.column)
+        else:
+            described = f"{where} (label column {claim.column})"
+            position = (prefix_line, prefix_column + claim.column - 1)
+        claims.append((claim, described, position))
+    return _Block(f"{prefix}{label}</div>", claims)
+
+
+def _end_position(text: str) -> tuple[int, int]:
+    """The 1-based line and column of the character that would follow text."""
+
+    return text.count("\n") + 1, len(text) - text.rfind("\n")
+
+
 def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
     """Rewrite SVG-native Provedown markup to the HTML contract in place."""
 
-    source = re.sub(
-        r"<!\[CDATA\[(.*?)\]\]>",
-        lambda match: escape(match.group(1), quote=False),
-        source,
-        flags=re.DOTALL,
-    )
-    rewriter = _SvgResultRewriter(origin)
-    rewriter.feed(source)
-    rewriter.close()
+    source, source_column = _unwrap_cdata(source)
     # The header shares line 1 so line numbers still match the original SVG.
     header = f"{GENERATED_HEADER} {escape(origin)} by diagram_to_provedown.py -->"
+    rewriter = _SvgResultRewriter(origin, source_column, len(header))
+    rewriter.feed(source)
+    rewriter.close()
     return _lowering(
         header + rewriter.output(),
         origin,
@@ -257,6 +294,35 @@ def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
         keeps_source_lines=True,
         records=rewriter.claims,
     )
+
+
+def _unwrap_cdata(source: str) -> tuple[str, Callable[[int, int], int]]:
+    """Replace CDATA sections with escaped text, keeping every line number.
+
+    Returns the new text and a function mapping a 1-based (line, column) in it
+    back to the column in the original, so messages cite the author's file.
+    """
+
+    parts: list[str] = []
+    # Per line: (column in the new text, offset to add from that column on).
+    shifts: dict[int, list[tuple[int, int]]] = {}
+    end = 0
+    for match in re.finditer(r"<!\[CDATA\[(.*?)\]\]>", source, flags=re.DOTALL):
+        parts += [source[end : match.start()], escape(match[1], quote=False)]
+        end = match.end()
+        line, new_column = _end_position("".join(parts))
+        _, old_column = _end_position(source[:end])
+        shifts.setdefault(line, []).append((new_column, old_column - new_column))
+    parts.append(source[end:])
+
+    def source_column(line: int, column: int) -> int:
+        offset = 0
+        for start, shift in shifts.get(line, []):
+            if column >= start:
+                offset = shift
+        return column + offset
+
+    return "".join(parts), source_column
 
 
 def _lowering(
@@ -291,52 +357,65 @@ def _lowering(
     # With parser errors, a claim mismatch is a consequence, not the cause.
     # Checked before "no claims found", so a diagram whose every claim was
     # dropped gets this explanation instead.
-    mismatch = _claim_mismatch(parsed.events, records)
-    if mismatch and not parser_diagnostics:
-        diagnostics.append(mismatch)
+    mismatches = _claim_mismatches(parsed.events, records, origin)
+    if mismatches and not parser_diagnostics:
+        diagnostics += mismatches
     elif claims == 0 and not parser_diagnostics:
         diagnostics.append(f"{origin}: no claims found")
     return Lowering(html=html, claims=claims, diagnostics=tuple(diagnostics))
 
 
-def _claim_mismatch(
-    events: list[DocumentEvent], records: list[ClaimRecord]
-) -> str | None:
+def _claim_mismatches(
+    events: list[DocumentEvent], records: list[ClaimRecord], origin: str
+) -> list[str]:
     """Describe where verify and the converter disagree on the claims.
 
-    Claims are matched by their data-code in document order, not by count, so
-    a claim gained in one region and lost in another cannot cancel out, and
-    not by position, which the rewrite changes. The message cites where the
-    author wrote the first claim the two disagree on.
+    Claims are matched by their position in the generated HTML, which is
+    unique per claim, so a claim gained in one region cannot hide one lost in
+    another, even when the two share a data-code. Each message cites where the
+    author wrote the first claim of its kind, and how many more follow.
     """
 
-    expected = [record for record in records if not record.ignored]
-    checked = [event.code for event in events if isinstance(event, ResultAssertion)]
-    wanted = [record.code for record in expected]
-    if checked == wanted:
-        return None
-    matcher = difflib.SequenceMatcher(None, wanted, checked, autojunk=False)
-    tag, first_wanted, _, first_checked, _ = next(
-        opcode for opcode in matcher.get_opcodes() if opcode[0] != "equal"
-    )
-    counts = f"{len(checked)} checked, {len(wanted)} outside ignored regions"
-    if tag in {"delete", "replace"}:
-        where = expected[first_wanted].where
-        return (
-            f"{where}: verify would skip this claim ({counts}); most likely a "
-            "void element such as <br> inside or carrying provedown-ignore, or "
-            "an ignored region left open, makes verify skip everything after it"
+    checked = {
+        (event.location.line, event.location.column)
+        for event in events
+        if isinstance(event, ResultAssertion)
+    }
+    known = {record.position for record in records}
+    lost = [r for r in records if not r.ignored and r.position not in checked]
+    gained = [r.where for r in records if r.ignored and r.position in checked]
+    # A claim verify found where the converter recorded none; not expected,
+    # but reported rather than trusted.
+    gained += [
+        f"{origin}: generated line {line}, column {column}"
+        for line, column in sorted(checked - known)
+    ]
+    messages = []
+    if lost:
+        messages.append(
+            f"{lost[0].where}: verify would skip this claim"
+            + _and_more(len(lost) - 1)
+            + "; most likely a void element such as <br> inside or carrying "
+            "provedown-ignore, or an ignored region left open, makes verify "
+            "skip everything after it"
         )
-    # Only an end tag can make verify stop ignoring before the converter does;
-    # every void-element skew makes verify ignore more, not less.
-    gained = checked[first_checked]
-    ignored = next((r for r in records if r.ignored and r.code == gained), None)
-    where = ignored.where if ignored else "(unknown position)"
-    return (
-        f"{where}: verify would check this claim inside an ignored region "
-        f"({counts}); most likely an end tag with no matching start tag, such "
-        "as a stray </br>, makes verify stop ignoring early"
-    )
+    if gained:
+        # Only an end tag can make verify stop ignoring before the converter
+        # does; every void-element skew makes verify ignore more, not less.
+        messages.append(
+            f"{gained[0]}: verify would check this claim inside an ignored "
+            "region"
+            + _and_more(len(gained) - 1)
+            + "; most likely an end tag with no matching start tag, such as a "
+            "stray </br>, makes verify stop ignoring early"
+        )
+    return messages
+
+
+def _and_more(count: int) -> str:
+    if count == 0:
+        return ""
+    return f" and {count} later {'one' if count == 1 else 'ones'}"
 
 
 def _without_unclosed_code_cascade(diagnostics: list[str]) -> list[str]:
@@ -485,6 +564,21 @@ class ClaimRecord:
     where: str
     # Inside a provedown-ignore region, so verify should not check it.
     ignored: bool
+    # Line and column of its start tag in the generated HTML, where the core
+    # parser reports it. Unique per claim, unlike data-code, so it is the key
+    # claims are matched on.
+    position: tuple[int, int]
+
+
+@dataclass(frozen=True)
+class LabelClaim:
+    """A class="result" element in a draw.io label."""
+
+    code: str
+    line: int
+    column: int
+    # Inside a provedown-ignore region, so verify should not check it.
+    ignored: bool
 
 
 @dataclass
@@ -492,16 +586,17 @@ class LabelMarkup:
     """The Provedown markup found in a draw.io label."""
 
     code: bool = False
-    # class="result" elements, as (data-code, label line, label column,
-    # ignored); only those outside ignored regions are checked.
-    claims: list[tuple[str, int, int, bool]] = field(default_factory=list)
+    # class="result" elements; only those outside ignored regions are checked.
+    claims: list[LabelClaim] = field(default_factory=list)
     # Elements verify would not check: data-code without class="result", or
     # class="result" on a tag other than <span>.
     unchecked: list[str] = field(default_factory=list)
 
     @property
     def result(self) -> bool:
-        return any(not ignored for *_, ignored in self.claims)
+        """Whether the label has a claim verify should check."""
+
+        return any(not claim.ignored for claim in self.claims)
 
     def __bool__(self) -> bool:
         return self.code or self.result or bool(self.unchecked)
@@ -560,7 +655,7 @@ class _LabelScanner(HTMLParser):
         if tag in LABEL_RESULT_TAGS and _is_result(attrs):
             line, column = self.getpos()
             code = (dict(attrs).get("data-code") or "").strip()
-            self.markup.claims.append((code, line, column + 1, True))
+            self.markup.claims.append(LabelClaim(code, line, column + 1, True))
 
     def handle_endtag(self, tag: str) -> None:
         self._regions.leave(tag)
@@ -580,7 +675,7 @@ class _LabelScanner(HTMLParser):
         elif _is_result(attrs):
             line, column = self.getpos()
             code = (dict(attrs).get("data-code") or "").strip()
-            self.markup.claims.append((code, line, column + 1, False))
+            self.markup.claims.append(LabelClaim(code, line, column + 1, False))
 
 
 class _IgnoredRegions:
@@ -670,11 +765,20 @@ class _TextExtractor(HTMLParser):
 class _SvgResultRewriter(HTMLParser):
     """Rename SVG result elements to ``span`` without moving any text."""
 
-    def __init__(self, origin: str) -> None:
+    def __init__(
+        self,
+        origin: str,
+        source_column: Callable[[int, int], int],
+        header_length: int,
+    ) -> None:
         super().__init__(convert_charrefs=False)
         self.origin = origin
         self.diagnostics: list[str] = []
+        self._source_column = source_column
         self._parts: list[str] = []
+        # Where the next output character lands, after the header on line 1.
+        self._line = 1
+        self._column = header_length + 1
         # Original (case-preserved) tag name and whether it became a span.
         self._stack: list[tuple[str, bool]] = []
         self._regions = _IgnoredRegions()
@@ -689,13 +793,13 @@ class _SvgResultRewriter(HTMLParser):
             self._check_markup(tag, attrs, raw)
         if tag in {"text", "tspan"} and _is_result(attrs):
             self._stack.append((tag, True))
-            self._parts.append(_rename_tag(raw, "span"))
+            self._emit(_rename_tag(raw, "span"))
             return
         if tag in HTML_VOID_ELEMENTS:
-            self._parts.append(raw)
+            self._emit(raw)
         else:
             self._stack.append((_tag_name(raw) or tag, False))
-            self._parts.append(raw)
+            self._emit(raw)
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         raw = self.get_starttag_text() or ""
@@ -705,7 +809,7 @@ class _SvgResultRewriter(HTMLParser):
             self._check_markup(tag, attrs, raw)
         if tag in {"text", "tspan"} and _is_result(attrs):
             raw = _rename_tag(raw, "span")
-        self._parts.append(raw)
+        self._emit(raw)
 
     def handle_endtag(self, tag: str) -> None:
         self._regions.leave(tag)
@@ -715,16 +819,16 @@ class _SvgResultRewriter(HTMLParser):
             # outside any element is worth reporting.
             if not self._stack:
                 self._error(f"unexpected </{tag}> with no open element")
-            self._parts.append(f"</{tag}>")
+            self._emit(f"</{tag}>")
             return
         if not self._stack:
             self._error(f"unexpected </{tag}> with no open element")
-            self._parts.append(f"</{tag}>")
+            self._emit(f"</{tag}>")
             return
         original, renamed = self._stack.pop()
         if original.lower() != tag:
             self._error(f"unexpected </{tag}>")
-        self._parts.append("</span>" if renamed else f"</{original}>")
+        self._emit("</span>" if renamed else f"</{original}>")
 
     def _check_markup(
         self, tag: str, attrs: list[tuple[str, str | None]], raw: str
@@ -742,35 +846,45 @@ class _SvgResultRewriter(HTMLParser):
         self, tag: str, attrs: list[tuple[str, str | None]], *, ignored: bool
     ) -> None:
         if tag in SVG_RESULT_TAGS and _is_result(attrs):
-            line, column = self.getpos()
             code = (dict(attrs).get("data-code") or "").strip()
-            where = f"{self.origin}:{line}:{column + 1}"
-            self.claims.append(ClaimRecord(code, where, ignored))
+            position = (self._line, self._column)
+            self.claims.append(ClaimRecord(code, self._where(), ignored, position))
 
     def _error(self, message: str) -> None:
+        self.diagnostics.append(f"{self._where()}: {message}")
+
+    def _where(self) -> str:
         line, column = self.getpos()
-        self.diagnostics.append(f"{self.origin}:{line}:{column + 1}: {message}")
+        return f"{self.origin}:{line}:{self._source_column(line, column + 1)}"
 
     def handle_data(self, data: str) -> None:
-        self._parts.append(data)
+        self._emit(data)
 
     def handle_entityref(self, name: str) -> None:
-        self._parts.append(f"&{name};")
+        self._emit(f"&{name};")
 
     def handle_charref(self, name: str) -> None:
-        self._parts.append(f"&#{name};")
+        self._emit(f"&#{name};")
 
     def handle_comment(self, data: str) -> None:
-        self._parts.append(f"<!--{data}-->")
+        self._emit(f"<!--{data}-->")
 
     def handle_decl(self, decl: str) -> None:
-        self._parts.append(f"<!{decl}>")
+        self._emit(f"<!{decl}>")
 
     def handle_pi(self, data: str) -> None:
-        self._parts.append(f"<?{data}>")
+        self._emit(f"<?{data}>")
 
     def unknown_decl(self, data: str) -> None:
-        self._parts.append(f"<![{data}]>")
+        self._emit(f"<![{data}]>")
+
+    def _emit(self, text: str) -> None:
+        self._parts.append(text)
+        if "\n" in text:
+            self._line += text.count("\n")
+            self._column = len(text) - text.rfind("\n")
+        else:
+            self._column += len(text)
 
     def output(self) -> str:
         return "".join(self._parts)
