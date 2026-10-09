@@ -209,14 +209,14 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                     "split them into separate shapes"
                 )
             elif markup.result:
-                claims.append(_label_block(comment, where, label, label))
+                claims.append(_label_block(comment, where, markup, label))
             else:
                 # draw.io stores label line breaks as <br>; the parser rejects
                 # tags nested in <code>, so turn them back into newlines. Labels
                 # routed here hold only evidence (and perhaps ignored claims),
                 # so the whole label is safe.
                 emitted = _br_to_newline(label)
-                code.append(_label_block(comment, where, label, emitted))
+                code.append(_label_block(comment, where, markup, emitted))
 
     header = f"{GENERATED_HEADER} {escape(origin)} by diagram_to_provedown.py -->"
     parts = [header]
@@ -262,17 +262,18 @@ def _property_block(comment: str, where: str, fragment: str) -> _Block:
     return _Block(prefix + fragment, records)
 
 
-def _label_block(comment: str, where: str, label: str, emitted: str) -> _Block:
+def _label_block(comment: str, where: str, markup: LabelMarkup, emitted: str) -> _Block:
     """Wrap a label, emitted as ``emitted`` (the label, perhaps converted).
 
-    Messages cite positions in the label as the author wrote it; matching
-    uses positions in what is emitted. Converting line breaks moves elements
-    but never adds, removes or re-ignores one, so the two scans pair up.
+    ``markup`` is the scan of the label as the author wrote it, which the
+    routing decision used. Messages cite positions in it; matching uses
+    positions in what is emitted. Converting line breaks moves elements but
+    never adds, removes or re-ignores one, so the two scans pair up.
     """
 
     prefix = f"{comment}\n{LABEL_WRAPPER}"
-    placed = _label_markup(emitted).elements
-    written = _label_markup(label).elements
+    written = markup.elements
+    placed = _label_markup(emitted).elements if emitted != markup.label else written
     if len(written) != len(placed):
         written = placed
     records = [
@@ -405,24 +406,31 @@ def _markup_mismatches(
     code the author excluded. Elements are matched by their position in the
     generated HTML, which is unique per element, so one gained in one region
     cannot hide one lost in another. Each message cites where the author
-    wrote the first element of its kind, and how many more there are.
+    wrote the first element of its kind (for draw.io, first in the generated
+    document, where evidence precedes claims), and how many more there are.
     """
+
+    known = {record.position for record in records}
+    # Each element starts at its own position; the check depends on it.
+    assert len(known) == len(records), "two markup records share a position"
 
     seen = {
         (event.location.line, event.location.column)
         for event in events
         if isinstance(event, ResultAssertion | CodeBlock | CodeUse)
     }
-    known = {record.position for record in records}
     lost = [r for r in records if not r.ignored and r.position not in seen]
     gained = [(r.where, r.kind) for r in records if r.ignored and r.position in seen]
-    # Markup verify found where the converter recorded none; not expected,
-    # but reported rather than trusted.
-    gained += [
-        (f"{origin}: generated line {line}, column {column}", "markup")
+    # Markup verify reads where the converter recorded none. Unreachable
+    # today, since both scanners record every element the core parser
+    # honours, ignored or not; reported rather than trusted, as a converter
+    # bug rather than an authoring mistake.
+    messages = [
+        f"{origin}: verify would read markup at line {line}, column {column} "
+        "of the generated HTML that the converter did not record; this is a "
+        "bug in the converter"
         for line, column in sorted(seen - known)
     ]
-    messages = []
     if lost:
         messages.append(
             f"{lost[0].where}: verify would skip this {_NOUNS[lost[0].kind]}"
@@ -445,8 +453,8 @@ def _markup_mismatches(
     return messages
 
 
-_NOUNS = {"claim": "claim", "evidence": "<code> block", "markup": "element"}
-_VERBS = {"claim": "check", "evidence": "run", "markup": "read"}
+_NOUNS = {"claim": "claim", "evidence": "<code> block"}
+_VERBS = {"claim": "check", "evidence": "run"}
 
 
 def _and_more(count: int) -> str:
@@ -621,6 +629,8 @@ class LabelElement:
 class LabelMarkup:
     """The Provedown markup found in a draw.io label."""
 
+    # The label text that was scanned.
+    label: str = ""
     # <code> and class="result" elements, in order; only those outside
     # ignored regions are checked.
     elements: list[LabelElement] = field(default_factory=list)
@@ -670,6 +680,7 @@ def _label_markup(label: str) -> LabelMarkup:
     """
 
     scanner = _LabelScanner()
+    scanner.markup.label = label
     scanner.feed(label)
     scanner.close()
     return scanner.markup

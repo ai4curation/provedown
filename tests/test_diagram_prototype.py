@@ -1106,3 +1106,26 @@ def test_drawio_evidence_label_position_is_in_the_authored_label() -> None:
         f"t.drawio: page 'p' cell 'ev' (label column {column}): verify would "
         f"check this claim inside an ignored region; {GAINED_CAUSE}",
     )
+
+
+def test_svg_claim_after_cdata_on_the_same_line_verifies() -> None:
+    lowering = script.normalize_svg(
+        "<svg><metadata><code><![CDATA[x = 2 < 4]]></code></metadata>"
+        '<text class="result" data-code="x">2</text></svg>',
+        origin="o.svg",
+    )
+
+    assert lowering.ok
+    assert lowering.claims == 1
+
+
+def test_svg_rewriter_error_after_cdata_cites_its_source_column() -> None:
+    source = (
+        "<svg>\n<metadata><code><![CDATA[x = 4]]></code></metadata></g>"
+        '<text class="result" data-code="x">4</text>\n</svg>'
+    )
+
+    lowering = script.normalize_svg(source, origin="o.svg")
+
+    column = source.split("\n")[1].index("</g>") + 1
+    assert lowering.diagnostics[0] == f"o.svg:2:{column}: unexpected </g>"
