@@ -287,8 +287,29 @@ def test_label_data_code_without_result_class_is_reported(span: str) -> None:
     lowering = script.drawio_to_html(source, origin="t.drawio")
 
     assert lowering.diagnostics == (
-        "t.drawio: page 'p' cell 'bad': label has data-code on an element "
-        'without class="result", so the value would not be checked',
+        "t.drawio: page 'p' cell 'bad': data-code on <span> without "
+        'class="result", so it is not checked',
+    )
+
+
+@pytest.mark.parametrize(
+    "label",
+    ['<b class="result" data-code="x">99</b>', '<b class="result">99</b>'],
+)
+def test_label_result_class_on_unchecked_tag_is_reported(label: str) -> None:
+    # verify only honours class="result" on <span>; a bold number would
+    # otherwise pass through as a claim and never be compared.
+    source = _drawio(
+        _object("c", label="code", provedown_code="x = 4")
+        + f'<mxCell id="bad" style="html=1;" value={quoteattr(label)}/>'
+        + _object("ok", label="4", data_code="x")
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    assert lowering.diagnostics == (
+        "t.drawio: page 'p' cell 'bad': class=\"result\" on <b>, which is only "
+        "checked on <span>",
     )
 
 
@@ -314,7 +335,35 @@ def test_svg_data_code_without_result_class_is_reported() -> None:
 
     assert not lowering.ok
     assert lowering.diagnostics == (
-        'o.svg:3:7: <tspan> has data-code but no class="result"',
+        'o.svg:3:7: data-code on <tspan> without class="result", so it is not checked',
+    )
+
+
+def test_svg_result_class_on_unchecked_tag_is_reported() -> None:
+    lowering = script.normalize_svg(
+        '<svg>\n<text class="result" data-code="1">1</text>\n'
+        '<textPath class="result" data-code="1">999</textPath></svg>',
+        origin="o.svg",
+    )
+
+    assert lowering.diagnostics == (
+        'o.svg:3:1: class="result" on <textpath>, which is only checked on '
+        "<span> or <text> or <tspan>",
+    )
+
+
+def test_svg_unchecked_markup_in_ignored_region_is_not_reported() -> None:
+    lowering = script.normalize_svg(
+        '<svg>\n<text class="result" data-code="1">1</text>\n'
+        '<g class="provedown-ignore"><text><tspan data-code="2">2</tspan></text>'
+        '<textPath class="result">3</textPath></g>\n'
+        '<text><tspan data-code="4">4</tspan></text></svg>',
+        origin="o.svg",
+    )
+
+    # Only the element after the ignored <g> closes is reported.
+    assert lowering.diagnostics == (
+        'o.svg:4:7: data-code on <tspan> without class="result", so it is not checked',
     )
 
 

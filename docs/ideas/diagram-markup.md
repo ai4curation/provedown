@@ -212,10 +212,13 @@ writes the HTML but exits non-zero:
 - an HTML label that mixes `<code>` and `class="result"`;
 - a label with Provedown markup on a shape whose style lacks `html=1`, which
   draw.io would display as literal text;
-- an element (in an HTML label or an SVG) that has `data-code` but no
-  `class="result"`, such as a misspelled `class="results"`, which neither the
-  converter nor `verify` would otherwise check. Labels are parsed as HTML, so
-  every spelling `verify` accepts (such as unquoted `class=result`) works;
+- markup that `verify` would silently skip, in an HTML label or an SVG: an
+  element with `data-code` but no `class="result"` (such as a misspelled
+  `class="results"`), or `class="result"` on a tag `verify` doesn't check
+  (anything but `<span>` in a label, or `<text>`, `<tspan>` and `<span>` in
+  an SVG). Ignored regions are skipped, as `verify` skips them. Labels are
+  parsed as HTML, so every spelling `verify` accepts (such as unquoted
+  `class=result`) works, and spellings it would ignore are reported;
 - an SVG end tag that doesn't match its start tag, or has no start tag;
 - anything the Provedown parser would reject in the generated HTML, since
   `verify` refuses to run such a document. A tag nested inside `<code>` is
