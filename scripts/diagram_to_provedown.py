@@ -32,9 +32,9 @@ import base64
 import re
 import sys
 import zlib
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from html import escape
+from html import escape, unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote
@@ -44,6 +44,10 @@ from provedown.model import ResultAssertion
 from provedown.parser import parse_document
 
 GENERATED_HEADER = "<!-- generated from"
+# "<string>:LINE:COL: message", as rendered by SourceLocation for path=None.
+PARSER_LOCATION = re.compile(r"<string>:(?P<line>\d+):\d+: (?P<message>.*)", re.DOTALL)
+# The comment drawio_to_html writes before each cell's block.
+CELL_COMMENT = re.compile(r"<!-- (?P<where>.*: page .* cell .*) -->")
 CODE_PROPERTY = "provedown-code"
 RESULT_PROPERTY = "provedown-result"
 # Earlier name of RESULT_PROPERTY; only an error next to data-code, since a bare
@@ -109,10 +113,10 @@ def convert(path: Path) -> Lowering:
     source = path.read_text(encoding="utf-8")
     name = path.name.lower()
     if name.endswith(".drawio.svg"):
-        return drawio_to_html(_drawio_svg_content(source), origin=path.name)
+        return drawio_to_html(_drawio_svg_content(source), origin=str(path))
     if name.endswith(".svg"):
-        return normalize_svg(source, origin=path.name)
-    return drawio_to_html(source, origin=path.name)
+        return normalize_svg(source, origin=str(path))
+    return drawio_to_html(source, origin=str(path))
 
 
 def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
@@ -176,7 +180,7 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
 
     header = f"{GENERATED_HEADER} {escape(origin)} by diagram_to_provedown.py -->"
     html = "\n\n".join([header, *code, *claims]) + "\n"
-    return _lowering(html, origin, diagnostics)
+    return _lowering(html, origin, diagnostics, locate=_drawio_cell_for_line)
 
 
 def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
@@ -196,16 +200,45 @@ def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
     return _lowering(header + rewriter.output(), origin, rewriter.diagnostics)
 
 
-def _lowering(html: str, origin: str, diagnostics: list[str]) -> Lowering:
-    # Parse the output the way verify will: count only claims it will check
-    # (not ones in ignored regions), and surface its errors, since verify
-    # refuses to run a document with any of them.
-    parsed = parse_document(html, path=Path(origin))
+def _lowering(
+    html: str,
+    origin: str,
+    diagnostics: list[str],
+    locate: Callable[[str, int], str | None] | None = None,
+) -> Lowering:
+    """Parse the output the way verify will.
+
+    Counts only claims verify will check (not ones in ignored regions) and
+    surfaces the parser's errors, since verify refuses to run a document with
+    any of them. SVG output keeps the source's line numbers, so its errors cite
+    the SVG directly. draw.io output has its own numbering, so ``locate`` maps
+    each error back to the draw.io cell that produced that line.
+    """
+
+    parsed = parse_document(html, path=None if locate else Path(origin))
     claims = sum(isinstance(event, ResultAssertion) for event in parsed.events)
-    diagnostics = [*diagnostics, *parsed.diagnostics]
-    if claims == 0:
+    for diagnostic in parsed.diagnostics:
+        match = PARSER_LOCATION.match(diagnostic) if locate else None
+        if locate and match:
+            where = locate(html, int(match["line"])) or origin
+            diagnostics.append(f"{where}: {match['message']}")
+        else:
+            diagnostics.append(diagnostic)
+    # With parser errors, "no claims" is a consequence rather than the cause.
+    if claims == 0 and not parsed.diagnostics:
         diagnostics.append(f"{origin}: no claims found")
     return Lowering(html=html, claims=claims, diagnostics=tuple(diagnostics))
+
+
+def _drawio_cell_for_line(html: str, line: int) -> str | None:
+    """Return the page/cell description of the block containing ``line``."""
+
+    lines = html.splitlines()[:line]
+    for text in reversed(lines):
+        match = CELL_COMMENT.fullmatch(text.strip())
+        if match:
+            return unescape(match["where"])
+    return None
 
 
 def _drawio_cells(source: str) -> Iterator[Cell]:
@@ -347,8 +380,12 @@ class _SvgResultRewriter(HTMLParser):
         self._parts.append(raw)
 
     def handle_endtag(self, tag: str) -> None:
-        if tag in HTML_VOID_ELEMENTS and (not self._stack or self._stack[-1][0] != tag):
-            # XML-style <br></br>: the start tag was never pushed.
+        if tag in HTML_VOID_ELEMENTS:
+            # Void start tags are never pushed, so an end tag such as the
+            # XML-style <br></br> closes nothing on the stack. Only one
+            # outside any element is worth reporting.
+            if not self._stack:
+                self._error(f"unexpected </{tag}> with no open element")
             self._parts.append(f"</{tag}>")
             return
         if not self._stack:
@@ -408,7 +445,9 @@ def _remove_stale_output(output: Path) -> None:
     """Remove output from an earlier run so a later verify can't check it.
 
     Only files this script wrote (identified by the header) are removed, so a
-    mistyped input path never deletes an unrelated --output target.
+    mistyped input path never deletes an unrelated --output target. A write
+    that fails partway can still leave an unrelated -o target truncated, as
+    with any tool that overwrites its output path.
     """
 
     try:

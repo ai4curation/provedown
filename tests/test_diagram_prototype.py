@@ -445,4 +445,68 @@ def test_parser_errors_in_lowered_output_are_reported(
     lowering = script.drawio_to_html(source, origin="t.drawio")
 
     assert not lowering.ok
-    assert any(d.startswith("t.drawio:") and message in d for d in lowering.diagnostics)
+    # Errors name the draw.io cell, not a line of the generated HTML.
+    prefix = f"t.drawio: page 'p' cell 'ev': {message}"
+    assert any(d.startswith(prefix) for d in lowering.diagnostics)
+    # "No claims" would be a consequence of the parser error, not a cause.
+    assert not any("no claims found" in d for d in lowering.diagnostics)
+
+
+def test_svg_stray_void_end_tag_is_reported() -> None:
+    lowering = script.normalize_svg(
+        '<svg><text class="result" data-code="1">1</text></svg></br>'
+    )
+
+    assert not lowering.ok
+    assert any(
+        "unexpected </br> with no open element" in d for d in lowering.diagnostics
+    )
+
+
+def _good_drawio(tmp_path: Path) -> Path:
+    good = tmp_path / "good.drawio"
+    good.write_text(
+        _drawio(
+            _object("c", label="code", provedown_code="x = 4")
+            + _object("r", label="4", data_code="x")
+        ),
+        encoding="utf-8",
+    )
+    return good
+
+
+def test_main_removes_partial_output_after_failed_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    good = _good_drawio(tmp_path)
+    output = tmp_path / "good.drawio.provedown.html"
+
+    def partial_write(self: Path, data: str, encoding: str | None = None) -> int:
+        with self.open("w", encoding=encoding) as handle:
+            handle.write(data[:40])
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "write_text", partial_write)
+
+    assert script.main([str(good)]) == 1
+    assert not output.exists()
+
+
+def test_main_reports_failed_stale_removal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    stale = tmp_path / "missing.drawio.provedown.html"
+    stale.write_text(
+        "<!-- generated from missing.drawio by diagram_to_provedown.py -->",
+        encoding="utf-8",
+    )
+
+    def deny(self: Path, missing_ok: bool = False) -> None:
+        raise PermissionError("read-only directory")
+
+    monkeypatch.setattr(Path, "unlink", deny)
+
+    assert script.main([str(tmp_path / "missing.drawio")]) == 1
+    assert "could not remove stale" in capsys.readouterr().err
