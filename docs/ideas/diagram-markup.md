@@ -233,9 +233,9 @@ writes the HTML but exits non-zero:
   `class=result`) works, and spellings it would ignore are reported;
 - claims `verify` would check, or evidence it would run, that differ from
   the ones the converter found outside ignored regions, including no claims
-  at all. Evidence counts as much as claims: a skipped `<code>` block takes
-  its assertions with it, and one run from an ignored region executes code
-  the author excluded. Elements are matched by the position of their start
+  at all. Evidence counts as much as claims: a skipped `<code>` element
+  takes its assertions with it, and one run from an ignored region
+  executes code the author excluded. Elements are matched by the position of their start
   tag in the generated HTML, which is unique per element (a `data-code` is
   not: a legend often shows the same expression it illustrates), so one
   gained in one place cannot hide one lost in another. Today this catches
@@ -243,9 +243,9 @@ writes the HTML but exits non-zero:
   `provedown-ignore` makes `verify` skip later markup, and a stray `</br>`
   inside a region makes it read markup the author ignored. Skipped and
   wrongly read claims and evidence are each reported separately, naming
-  the first such element by its source line and column in an SVG, or in draw.io by
-  its page and cell, plus its position in the label as written when it is
-  in a label, with a count of any more;
+  the first such element by its source line and column in an SVG, or in
+  draw.io by its page and cell, plus its position in the label as written
+  when it is in a label, with a count of any more;
 - an SVG end tag that doesn't match its start tag, or has no start tag;
 - anything the Provedown parser would reject in the generated HTML, since
   `verify` refuses to run such a document. A tag nested inside `<code>` is

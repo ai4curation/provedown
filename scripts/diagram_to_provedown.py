@@ -163,7 +163,9 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                     + _html_note(cell, markup)
                 )
             else:
-                code.append(_property_block(comment, where, _code_element(cell)))
+                code.append(
+                    _property_block(comment, where, _code_element(cell), diagnostics)
+                )
         elif "data-code" in attributes:
             if markup:
                 diagnostics.append(
@@ -185,7 +187,7 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                 )
             else:
                 claim = f"<p>{_result_element(cell)}</p>"
-                claims.append(_property_block(comment, where, claim))
+                claims.append(_property_block(comment, where, claim, diagnostics))
         elif RESULT_PROPERTY in attributes:
             diagnostics.append(
                 f"{where}: has a {RESULT_PROPERTY} property but no data-code, "
@@ -200,8 +202,10 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                     "style lacks html=1, so draw.io shows it as literal text"
                 )
             elif markup.unchecked:
+                # The shape is left out, so verify reads none of it.
                 diagnostics.extend(
-                    f"{where}: {problem}" for problem in markup.unchecked
+                    f"{where}: {problem}, which verify would not check"
+                    for problem in markup.unchecked
                 )
             elif markup.code and markup.result:
                 diagnostics.append(
@@ -209,14 +213,14 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                     "split them into separate shapes"
                 )
             elif markup.result:
-                claims.append(_label_block(comment, where, markup, label))
+                claims.append(_label_block(comment, where, markup, label, diagnostics))
             else:
                 # draw.io stores label line breaks as <br>; the parser rejects
                 # tags nested in <code>, so turn them back into newlines. Labels
                 # routed here hold only evidence (and perhaps ignored claims),
                 # so the whole label is safe.
                 emitted = _br_to_newline(label)
-                code.append(_label_block(comment, where, markup, emitted))
+                code.append(_label_block(comment, where, markup, emitted, diagnostics))
 
     header = f"{GENERATED_HEADER} {escape(origin)} by diagram_to_provedown.py -->"
     parts = [header]
@@ -251,13 +255,17 @@ class _Block:
     records: list[MarkupRecord]
 
 
-def _property_block(comment: str, where: str, fragment: str) -> _Block:
+def _property_block(
+    comment: str, where: str, fragment: str, diagnostics: list[str]
+) -> _Block:
     """Wrap HTML the converter generated from a shape's properties."""
 
     prefix = f"{comment}\n"
     markup = _label_markup(fragment)
     if markup.unchecked:
-        raise ValueError(f"{where}: converter emitted {_join(markup.unchecked)}")
+        diagnostics.append(
+            f"{where}: generated {_join(markup.unchecked)}; {CONVERTER_BUG}"
+        )
     records = [
         MarkupRecord(element.kind, where, element.ignored, _shift(prefix, element))
         for element in markup.elements
@@ -265,7 +273,13 @@ def _property_block(comment: str, where: str, fragment: str) -> _Block:
     return _Block(prefix + fragment, records)
 
 
-def _label_block(comment: str, where: str, markup: LabelMarkup, emitted: str) -> _Block:
+def _label_block(
+    comment: str,
+    where: str,
+    markup: LabelMarkup,
+    emitted: str,
+    diagnostics: list[str],
+) -> _Block:
     """Wrap a label, emitted as ``emitted`` (the label, perhaps converted).
 
     ``markup`` is the scan of the label as the author wrote it, which the
@@ -277,8 +291,12 @@ def _label_block(comment: str, where: str, markup: LabelMarkup, emitted: str) ->
     prefix = f"{comment}\n{LABEL_WRAPPER}"
     written = markup.elements
     placed = _label_markup(emitted).elements if emitted != markup.label else written
-    if [e.kind for e in written] != [e.kind for e in placed]:
-        raise ValueError(f"{where}: converting line breaks changed the label's markup")
+    if [(e.kind, e.ignored) for e in written] != [(e.kind, e.ignored) for e in placed]:
+        diagnostics.append(
+            f"{where}: converting line breaks changed the label's markup; "
+            + CONVERTER_BUG
+        )
+        written = placed
     records = [
         MarkupRecord(
             element.kind,
@@ -436,13 +454,14 @@ def _markup_mismatches(
     # Markup verify reads where the converter recorded none. Unreachable
     # today, since both scanners record every element the core parser
     # honours, ignored or not; reported rather than trusted.
-    lines = "the SVG's own line" if keeps_source_lines else "the generated HTML"
+    lines = "the SVG's own lines" if keeps_source_lines else "the generated HTML"
     messages = [
         f"{origin}: verify would read markup the converter did not record, at "
         f"line {line} of {lines} (column {column} of the output); {CONVERTER_BUG}"
         for (line, column), _ in sorted(seen - keys)
     ]
-    for kind in ("evidence", "claim"):
+    kinds: tuple[MarkupKind, ...] = ("evidence", "claim")
+    for kind in kinds:
         of_kind = [record for record in records if record.kind == kind]
         lost = [r for r in of_kind if not r.ignored and (r.position, kind) not in seen]
         gained = [r for r in of_kind if r.ignored and (r.position, kind) in seen]
@@ -669,7 +688,7 @@ class LabelMarkup:
 
         return self._has("claim")
 
-    def _has(self, kind: str) -> bool:
+    def _has(self, kind: MarkupKind) -> bool:
         return any(e.kind == kind and not e.ignored for e in self.elements)
 
     def __bool__(self) -> bool:
@@ -812,7 +831,8 @@ def _unchecked_markup(
 ) -> str | None:
     """Name claim markup on this element that verify would not check.
 
-    ``at`` (such as " at label column 3") goes before the consequence.
+    Returns a noun phrase, ending with ``at`` (such as " at label column 3"),
+    so callers can list it or state their own consequence after it.
     """
 
     shown = shown_tag or tag
@@ -823,10 +843,7 @@ def _unchecked_markup(
         problem = f'data-code on <{shown}> without class="result"'
     else:
         return None
-    if tag == "code":
-        # Still evidence: verify runs it, whatever its claim markup says.
-        return f"{problem}{at}, which verify would run as code, not check as a claim"
-    return f"{problem}{at}, which verify would not check"
+    return problem + at
 
 
 def _join(items: list[str], conjunction: str = "and") -> str:
@@ -937,8 +954,11 @@ class _SvgResultRewriter(HTMLParser):
         # that neither this rewriter nor the core parser would check passes
         # unverified, so report it; record the rest as markup verify should see.
         problem = _unchecked_markup(tag, attrs, SVG_RESULT_TAGS, _tag_name(raw))
-        if problem:
-            self._error(problem)
+        if problem and tag == "code":
+            # Written through, so still evidence whatever its claim markup.
+            self._error(f"{problem}, which verify would run as code, not check")
+        elif problem:
+            self._error(f"{problem}, which verify would not check")
         # A <code> is evidence even with misplaced claim markup on it, and the
         # rewriter writes it through, so verify reads it.
         if not problem or _markup_kind(tag, attrs, SVG_RESULT_TAGS) == "evidence":

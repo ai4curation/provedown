@@ -1144,9 +1144,7 @@ def test_svg_claim_markup_on_code_is_reported_as_run(marker: str) -> None:
     shown = marker.split("=")[0]
     assert len(lowering.diagnostics) == 1
     assert lowering.diagnostics[0].startswith(f"o.svg:2:11: {shown}")
-    assert lowering.diagnostics[0].endswith(
-        "which verify would run as code, not check as a claim"
-    )
+    assert lowering.diagnostics[0].endswith("which verify would run as code, not check")
 
 
 def test_drawio_leak_dropping_property_evidence_and_claims_reports_both() -> None:
@@ -1168,4 +1166,38 @@ def test_drawio_leak_dropping_property_evidence_and_claims_reports_both() -> Non
         f"t.drawio: page 'p' cell 'c': verify would skip this <code> element; "
         f"{DROPPED_CAUSE}",
         f"t.drawio: page 'p' cell 'r': verify would skip this claim; {DROPPED_CAUSE}",
+    )
+
+
+def test_drawio_claim_markup_on_code_label_is_not_said_to_run() -> None:
+    # draw.io leaves the shape out, so nothing from it is run.
+    label = '<code class="result">x = 4</code>'
+    source = _drawio(
+        f'<mxCell id="ev" style="html=1;" value={quoteattr(label)}/>'
+        + _object("c", label="code", provedown_code="x = 4")
+        + _object("r", label="4", data_code="x")
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    assert lowering.diagnostics == (
+        "t.drawio: page 'p' cell 'ev': class=\"result\" on <code> (only checked "
+        "on <span>) at label column 1, which verify would not check",
+    )
+
+
+def test_unchecked_label_markup_lists_cleanly_beside_a_property() -> None:
+    label = '<code>y = 1</code> <b class="result">4</b>'
+    source = _drawio(
+        _object("x", label=label, provedown_code="x = 4")
+        + _object("r", label="4", data_code="x")
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    assert lowering.diagnostics[0] == (
+        "t.drawio: page 'p' cell 'x': has provedown-code and also a <code> "
+        'label and class="result" on <b> (only checked on <span>) at label '
+        "column 20; put each piece of evidence and each claim in its own "
+        "shape; its style also lacks html=1, so draw.io shows the label as text"
     )
