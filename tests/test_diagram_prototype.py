@@ -210,7 +210,8 @@ def test_html_label_evidence_is_emitted_before_claims() -> None:
         (
             _object("note", label="4", provedown_code="x = 4", provedown_result="4")
             + _object("r", label="4", data_code="x"),
-            "has provedown-code and also provedown-result;",
+            "has provedown-code and also provedown-result; put each piece of "
+            "evidence and each claim in its own shape",
         ),
         ('<mxCell id="plain" value="Just a label"/>', "no claims found"),
         (
@@ -237,7 +238,8 @@ def test_html_label_evidence_is_emitted_before_claims() -> None:
         (
             _object("c", label="code", provedown_code="x = 4")
             + _object("r", label='<span class="result">4</span> paid', data_code="x"),
-            'has data-code and also a class="result" label; put the value in '
+            'has data-code and also a class="result" label; put each piece of '
+            "evidence and each claim in its own shape, with the value in "
             "provedown-result",
         ),
         (
@@ -253,6 +255,67 @@ def test_drawio_authoring_mistakes_fail_closed(cells: str, message: str) -> None
 
     assert not lowering.ok
     assert any(message in diagnostic for diagnostic in lowering.diagnostics)
+
+
+def test_property_only_collision_does_not_mention_html() -> None:
+    lowering = script.drawio_to_html(
+        _drawio(
+            _object("note", label="4", provedown_code="x = 4", provedown_result="4")
+            + _object("r", label="4", data_code="x")
+        ),
+        origin="t.drawio",
+    )
+
+    assert lowering.diagnostics == (
+        "t.drawio: page 'p' cell 'note': has provedown-code and also "
+        "provedown-result; put each piece of evidence and each claim in its own "
+        "shape",
+    )
+
+
+@pytest.mark.parametrize(
+    "span",
+    ['<span class="results" data-code="x">4</span>', '<span data-code="x">4</span>'],
+)
+def test_label_data_code_without_result_class_is_reported(span: str) -> None:
+    source = _drawio(
+        _object("c", label="code", provedown_code="x = 4")
+        + f'<mxCell id="bad" style="html=1;" value={quoteattr(span)}/>'
+        + _object("ok", label="4", data_code="x")
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    assert lowering.diagnostics == (
+        "t.drawio: page 'p' cell 'bad': label has data-code on an element "
+        'without class="result", so the value would not be checked',
+    )
+
+
+def test_unquoted_result_class_in_label_is_a_claim() -> None:
+    source = _drawio(
+        _object("c", label="code", provedown_code="x = 4")
+        + '<mxCell id="r" style="html=1;" '
+        'value="&lt;span class=result data-code=x&gt;4&lt;/span&gt;"/>'
+    )
+
+    lowering = script.drawio_to_html(source)
+
+    assert lowering.ok
+    assert _statuses(lowering.html) == [Status.PASS]
+
+
+def test_svg_data_code_without_result_class_is_reported() -> None:
+    lowering = script.normalize_svg(
+        '<svg>\n<text class="result" data-code="1">1</text>\n'
+        '<text><tspan data-code="2">2</tspan></text></svg>',
+        origin="o.svg",
+    )
+
+    assert not lowering.ok
+    assert lowering.diagnostics == (
+        'o.svg:3:7: <tspan> has data-code but no class="result"',
+    )
 
 
 def test_empty_result_property_falls_back_to_label() -> None:

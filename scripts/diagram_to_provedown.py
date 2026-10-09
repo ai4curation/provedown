@@ -55,6 +55,10 @@ DIAGNOSTIC_POSITION = re.compile(r".*?:(?P<line>\d+):(?P<column>\d+): ", re.DOTA
 # Parser messages for an unclosed <code> and for each tag it swallowed.
 UNCLOSED_CODE = "unclosed <code> block"
 NESTED_TAG = "nested HTML tag inside <code>"
+# What _label_markup reports finding in a label.
+CODE_LABEL = "a <code> label"
+RESULT_LABEL = 'a class="result" label'
+ORPHAN_DATA_CODE = 'a data-code element without class="result"'
 # drawio_to_html wraps each HTML label in this element.
 LABEL_WRAPPER = "<div>"
 # The comment drawio_to_html writes before each cell's block.
@@ -162,8 +166,13 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
         elif "data-code" in attributes:
             if markup:
                 diagnostics.append(
-                    f"{where}: has data-code and also {_join(markup)}; put the "
-                    f"value in {RESULT_PROPERTY} and evidence in its own shape"
+                    f"{where}: has data-code and also {_join(markup)}; "
+                    "put each piece of evidence and each claim in its own shape"
+                    + (
+                        f", with the value in {RESULT_PROPERTY}"
+                        if RESULT_LABEL in markup
+                        else ""
+                    )
                     + _html_note(cell, markup)
                 )
             elif LEGACY_RESULT_PROPERTY in attributes and (
@@ -180,7 +189,7 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                 f"{where}: has a {RESULT_PROPERTY} property but no data-code, "
                 "so the value has no evidence"
             )
-        elif _has_result_class(label) or "<code" in label:
+        elif markup:
             # Agent-authored HTML labels. draw.io's sanitizer drops data-*
             # attributes when a person edits such a label in the editor.
             if not cell.html_label:
@@ -188,12 +197,17 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                     f"{where}: label contains Provedown markup but the shape "
                     "style lacks html=1, so draw.io shows it as literal text"
                 )
-            elif _has_result_class(label) and "<code" in label:
+            elif ORPHAN_DATA_CODE in markup:
+                diagnostics.append(
+                    f'{where}: label has data-code on an element without class="'
+                    'result", so the value would not be checked'
+                )
+            elif CODE_LABEL in markup and RESULT_LABEL in markup:
                 diagnostics.append(
                     f"{where}: HTML label mixes evidence and claims; "
                     "split them into separate shapes"
                 )
-            elif _has_result_class(label):
+            elif RESULT_LABEL in markup:
                 claims.append(f"{comment}\n{LABEL_WRAPPER}{label}</div>")
             else:
                 # draw.io stores label line breaks as <br>; the parser rejects
@@ -400,18 +414,53 @@ def _label_text(cell: Cell) -> str:
 
 
 def _label_markup(label: str) -> list[str]:
-    """Name the Provedown markup found in a label, for diagnostics."""
+    """Name the Provedown markup in a label, by parsing it as HTML.
 
+    Parsing rather than pattern-matching accepts every spelling the core
+    parser does (such as an unquoted ``class=result``), and also catches a
+    ``data-code`` element whose result class is missing or misspelled, which
+    neither the converter nor the core parser would otherwise check.
+    """
+
+    scanner = _LabelScanner()
+    scanner.feed(label)
+    scanner.close()
     found = []
-    if "<code" in label:
-        found.append("a <code> label")
-    if _has_result_class(label):
-        found.append('a class="result" label')
+    if scanner.code:
+        found.append(CODE_LABEL)
+    if scanner.result:
+        found.append(RESULT_LABEL)
+    if scanner.orphan_data_code:
+        found.append(ORPHAN_DATA_CODE)
     return found
 
 
+class _LabelScanner(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.code = False
+        self.result = False
+        self.orphan_data_code = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "code":
+            self.code = True
+        if _is_result(attrs):
+            self.result = True
+        elif "data-code" in dict(attrs):
+            self.orphan_data_code = True
+
+    handle_startendtag = handle_starttag
+
+
 def _join(items: list[str]) -> str:
-    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + f" and {items[-1]}"
+    """Join one or more names as "a", "a and b" or "a, b and c"."""
+
+    if not items:
+        raise ValueError("_join needs at least one item")
+    if len(items) == 1:
+        return items[0]
+    return ", ".join(items[:-1]) + f" and {items[-1]}"
 
 
 def _html_note(cell: Cell, markup: list[str]) -> str:
@@ -422,11 +471,6 @@ def _html_note(cell: Cell, markup: list[str]) -> str:
 
 def _br_to_newline(label: str) -> str:
     return re.sub(r"<br\s*/?>", "\n", label, flags=re.IGNORECASE)
-
-
-def _has_result_class(label: str) -> bool:
-    pattern = r"class=[\"'](?:[^\"']*\s)?result(?:\s[^\"']*)?[\"']"
-    return re.search(pattern, label) is not None
 
 
 class _TextExtractor(HTMLParser):
@@ -454,6 +498,7 @@ class _SvgResultRewriter(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         raw = self.get_starttag_text() or ""
+        self._check_orphan_data_code(tag, attrs)
         if tag in {"text", "tspan"} and _is_result(attrs):
             self._stack.append((tag, True))
             self._parts.append(_rename_tag(raw, "span"))
@@ -466,6 +511,7 @@ class _SvgResultRewriter(HTMLParser):
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         raw = self.get_starttag_text() or ""
+        self._check_orphan_data_code(tag, attrs)
         if tag in {"text", "tspan"} and _is_result(attrs):
             raw = _rename_tag(raw, "span")
         self._parts.append(raw)
@@ -487,6 +533,14 @@ class _SvgResultRewriter(HTMLParser):
         if original.lower() != tag:
             self._error(f"unexpected </{tag}>")
         self._parts.append("</span>" if renamed else f"</{original}>")
+
+    def _check_orphan_data_code(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        # Neither this rewriter nor the core parser checks a value whose
+        # element lacks class="result", so it would pass unverified.
+        if "data-code" in dict(attrs) and not _is_result(attrs):
+            self._error(f'<{tag}> has data-code but no class="result"')
 
     def _error(self, message: str) -> None:
         line, column = self.getpos()
