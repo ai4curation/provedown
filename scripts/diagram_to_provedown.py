@@ -395,6 +395,18 @@ def _lowering(
     """
 
     diagnostics = list(diagnostics)
+    fences = _fence_lines(html)
+    for line, column in fences:
+        where = (
+            f"{origin}:{line}"
+            if keeps_source_lines
+            else _drawio_location(html, line, origin, column)
+        )
+        diagnostics.append(
+            f"{where}: a line starting with ``` or ~~~ reads to verify as a "
+            "Markdown code fence, so it skips everything up to the matching "
+            "fence; start the line with something else"
+        )
     parsed = parse_document(html, path=Path(origin) if keeps_source_lines else None)
     claims = sum(isinstance(event, ResultAssertion) for event in parsed.events)
     parser_diagnostics = _without_unclosed_code_cascade(parsed.diagnostics)
@@ -412,11 +424,35 @@ def _lowering(
     mismatches = _markup_mismatches(
         parsed.events, records, origin, keeps_source_lines=keeps_source_lines
     )
-    if mismatches and not parser_diagnostics:
+    # A fence explains any markup verify skips, so it stands alone.
+    if mismatches and not parser_diagnostics and not fences:
         diagnostics += mismatches
-    elif claims == 0 and not parser_diagnostics:
+    elif claims == 0 and not parser_diagnostics and not fences:
         diagnostics.append(f"{origin}: no claims found")
     return Lowering(html=html, claims=claims, diagnostics=tuple(diagnostics))
+
+
+def _fence_lines(html: str) -> list[tuple[int, int]]:
+    """Lines that open a Markdown code fence, as the core parser sees them.
+
+    ``parse_document`` blanks fenced lines before parsing HTML, so markup in
+    them is never read. Mirrors its rule: three or more backticks or tildes
+    after leading whitespace, closed by at least as many of the same.
+    """
+
+    openers = []
+    fence: tuple[str, int] | None = None
+    for number, text in enumerate(html.splitlines(), 1):
+        match = re.match(r"\s*(`{3,}|~{3,})", text)
+        if not match:
+            continue
+        marker = match[1]
+        if fence is None:
+            fence = (marker[0], len(marker))
+            openers.append((number, match.start(1) + 1))
+        elif marker[0] == fence[0] and len(marker) >= fence[1]:
+            fence = None
+    return openers
 
 
 def _markup_mismatches(
@@ -460,30 +496,40 @@ def _markup_mismatches(
         f"line {line} of {lines} (column {column} of the output); {CONVERTER_BUG}"
         for (line, column), _ in sorted(seen - keys)
     ]
+    # Each message is placed by its first element, in record order: source
+    # order for SVG, generated order (evidence first) for draw.io.
+    order = {id(record): index for index, record in enumerate(records)}
+    placed: list[tuple[int, str]] = []
     kinds: tuple[MarkupKind, ...] = ("evidence", "claim")
     for kind in kinds:
         of_kind = [record for record in records if record.kind == kind]
         lost = [r for r in of_kind if not r.ignored and (r.position, kind) not in seen]
         gained = [r for r in of_kind if r.ignored and (r.position, kind) in seen]
         if lost:
-            messages.append(
-                f"{lost[0].where}: verify would skip this {_NOUNS[kind]}"
-                + _and_more(len(lost) - 1)
-                + "; most likely a void element such as <br> inside or "
-                "carrying provedown-ignore, or an ignored region left open, "
-                "makes verify skip everything after it"
+            placed.append(
+                (
+                    order[id(lost[0])],
+                    f"{lost[0].where}: verify would skip this {_NOUNS[kind]}"
+                    + _and_more(len(lost) - 1)
+                    + "; most likely a void element such as <br> inside or "
+                    "carrying provedown-ignore, or an ignored region left open, "
+                    "makes verify skip everything after it",
+                )
             )
         if gained:
             # Only an end tag can make verify stop ignoring before the
             # converter does; every void-element skew makes it ignore more.
-            messages.append(
-                f"{gained[0].where}: verify would {_VERBS[kind]} this "
-                f"{_NOUNS[kind]} inside an ignored region"
-                + _and_more(len(gained) - 1)
-                + "; most likely an end tag with no matching start tag, such "
-                "as a stray </br>, makes verify stop ignoring early"
+            placed.append(
+                (
+                    order[id(gained[0])],
+                    f"{gained[0].where}: verify would {_VERBS[kind]} this "
+                    f"{_NOUNS[kind]} inside an ignored region"
+                    + _and_more(len(gained) - 1)
+                    + "; most likely an end tag with no matching start tag, such "
+                    "as a stray </br>, makes verify stop ignoring early",
+                )
             )
-    return messages
+    return messages + [message for _, message in sorted(placed)]
 
 
 CONVERTER_BUG = "this is a bug in the converter"
@@ -764,9 +810,9 @@ class _LabelScanner(HTMLParser):
         problem = _unchecked_markup(tag, attrs, LABEL_RESULT_TAGS, shown, at)
         if problem:
             self.markup.unchecked.append(problem)
-        # A <code> is evidence even with misplaced claim markup on it.
-        if not problem or _markup_kind(tag, attrs, LABEL_RESULT_TAGS) == "evidence":
-            self._record(tag, attrs, ignored=False)
+        # Unconditional: a problem means the kind is evidence (a <code>
+        # with misplaced claim markup, still read) or none, never a claim.
+        self._record(tag, attrs, ignored=False)
 
 
 def _markup_kind(
@@ -959,10 +1005,10 @@ class _SvgResultRewriter(HTMLParser):
             self._error(f"{problem}, which verify would run as code, not check")
         elif problem:
             self._error(f"{problem}, which verify would not check")
-        # A <code> is evidence even with misplaced claim markup on it, and the
-        # rewriter writes it through, so verify reads it.
-        if not problem or _markup_kind(tag, attrs, SVG_RESULT_TAGS) == "evidence":
-            self._record(tag, attrs, ignored=False)
+        # Unconditional: a problem means the kind is evidence (a <code>
+        # with misplaced claim markup, which the rewriter writes through and
+        # verify runs) or none, never a claim.
+        self._record(tag, attrs, ignored=False)
 
     def _record(
         self, tag: str, attrs: list[tuple[str, str | None]], *, ignored: bool

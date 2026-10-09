@@ -228,7 +228,9 @@ writes the HTML but exits non-zero:
   element with `data-code` but no `class="result"` (such as a misspelled
   `class="results"`), or `class="result"` on a tag `verify` doesn't check
   (anything but `<span>` in a label, or `<text>`, `<tspan>` and `<span>` in
-  an SVG). Ignored regions are skipped, as `verify` skips them. Labels are
+  an SVG). A `<code>` carrying either is still evidence, which an SVG
+  passes through for `verify` to run, so that is reported too. Ignored
+  regions are skipped, as `verify` skips them. Labels are
   parsed as HTML, so every spelling `verify` accepts (such as unquoted
   `class=result`) works, and spellings it would ignore are reported;
 - claims `verify` would check, or evidence it would run, that differ from
@@ -246,6 +248,9 @@ writes the HTML but exits non-zero:
   the first such element by its source line and column in an SVG, or in
   draw.io by its page and cell, plus its position in the label as written
   when it is in a label, with a count of any more;
+- a line of the output starting with ```` ``` ```` or `~~~` (from SVG text
+  or a `provedown-code` value), which `verify` reads as a Markdown code
+  fence and skips up to the matching fence;
 - an SVG end tag that doesn't match its start tag, or has no start tag;
 - anything the Provedown parser would reject in the generated HTML, since
   `verify` refuses to run such a document. A tag nested inside `<code>` is

@@ -12,7 +12,7 @@ from xml.sax.saxutils import quoteattr
 import pytest
 
 from provedown import Status, VerificationContext, parse_document, verify_document
-from provedown.model import ResultAssertion
+from provedown.model import ResultAssertion, SourceLocation
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples/diagrams"
@@ -886,11 +886,12 @@ def test_svg_claim_gained_and_claim_lost_do_not_cancel_out() -> None:
         origin="o.svg",
     )
 
-    # Both halves are reported, so fixing one doesn't reveal the other.
+    # Both halves are reported, in document order, so fixing one doesn't
+    # reveal the other.
     assert lowering.diagnostics == (
-        f"o.svg:4:1: verify would skip this claim; {DROPPED_CAUSE}",
         "o.svg:2:34: verify would check this claim inside an ignored region; "
         f"{GAINED_CAUSE}",
+        f"o.svg:4:1: verify would skip this claim; {DROPPED_CAUSE}",
     )
 
 
@@ -966,9 +967,9 @@ def test_svg_gained_and_lost_claims_sharing_a_data_code_do_not_cancel_out() -> N
     )
 
     assert lowering.diagnostics == (
-        f"o.svg:4:1: verify would skip this claim; {DROPPED_CAUSE}",
         "o.svg:2:39: verify would check this claim inside an ignored region; "
         f"{GAINED_CAUSE}",
+        f"o.svg:4:1: verify would skip this claim; {DROPPED_CAUSE}",
     )
 
 
@@ -1201,3 +1202,53 @@ def test_unchecked_label_markup_lists_cleanly_beside_a_property() -> None:
         "column 20; put each piece of evidence and each claim in its own "
         "shape; its style also lacks html=1, so draw.io shows the label as text"
     )
+
+
+FENCE_CAUSE = (
+    "a line starting with ``` or ~~~ reads to verify as a Markdown code "
+    "fence, so it skips everything up to the matching fence; start the line "
+    "with something else"
+)
+
+
+def test_svg_fence_shaped_line_is_named_as_the_cause() -> None:
+    lowering = script.normalize_svg(
+        "<svg>\n<metadata><code>paid = 4</code></metadata>\n"
+        '<text>\n```\n<tspan class="result" data-code="paid">4</tspan>\n'
+        "```</text>\n</svg>",
+        origin="o.svg",
+    )
+
+    # The fence explains the skipped claim, so no void-element guess follows.
+    assert lowering.diagnostics == (f"o.svg:4: {FENCE_CAUSE}",)
+
+
+def test_drawio_fence_in_code_property_is_named_as_the_cause() -> None:
+    source = _drawio(
+        _object("c", label="code", provedown_code="x = 4\n```")
+        + _object("r", label="4", data_code="x")
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    assert lowering.diagnostics[0] == (
+        f"t.drawio: page 'p' cell 'c' (line 3 of its block, column 1): {FENCE_CAUSE}"
+    )
+
+
+def test_markup_verify_reads_but_the_converter_missed_is_a_converter_bug() -> None:
+    event = ResultAssertion(authored="4", code="x", location=SourceLocation(None, 3, 5))
+
+    assert script._markup_mismatches([event], [], "o.svg", keeps_source_lines=True) == [
+        "o.svg: verify would read markup the converter did not record, at line "
+        "3 of the SVG's own lines (column 5 of the output); this is a bug in "
+        "the converter"
+    ]
+
+
+def test_markup_records_sharing_a_position_are_a_converter_bug() -> None:
+    record = script.MarkupRecord("claim", "o.svg:1:1", False, (1, 1))
+
+    assert script._markup_mismatches(
+        [], [record, record], "o.svg", keeps_source_lines=True
+    ) == ["o.svg: two markup elements share a position; this is a bug in the converter"]
