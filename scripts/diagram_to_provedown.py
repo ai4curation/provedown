@@ -305,7 +305,9 @@ def _label_block(
     ``markup`` is the scan of the label as the author wrote it, which the
     routing decision used. Messages cite positions in it; matching uses
     positions in what is emitted. Converting line breaks moves elements but
-    never adds, removes or re-ignores one, so the two scans pair up.
+    never adds, removes or re-ignores one, so the two scans pair up; if they
+    ever don't, that is reported as a converter bug and messages fall back
+    to positions in the emitted label.
     """
 
     prefix = f"{comment}\n{LABEL_WRAPPER}"
@@ -429,15 +431,20 @@ def _lowering(
     # A fence wholly inside one ignored region hides only what verify skips
     # anyway; if the region ends inside it instead, the region leaks and the
     # mismatch check reports that.
-    fences = [
-        (opener, closer)
-        for opener, closer in _fences(html)
-        if not any(
+    lines = html.splitlines()
+    # Lines verify never reads, because a fence that matters hides them.
+    masked: set[int] = set()
+    for opener, closer in _fences(html):
+        last = closer[0] - 1 if closer != END else len(lines)
+        hidden = range(opener[0] + 1, last + 1)
+        inside_region = any(
             start < opener and (closer < end or end == END)
             for start, end in ignored_spans
         )
-    ]
-    for (line, column), _ in fences:
+        if inside_region or not any(lines[n - 1].strip() for n in hidden):
+            continue
+        masked.update(hidden)
+        line, column = opener
         # A fence line holds no tags before the fence, so on an SVG's own
         # lines the output column is the source column.
         where = (
@@ -445,11 +452,17 @@ def _lowering(
             if keeps_source_lines
             else _drawio_location(html, line, origin, column)
         )
+        # Counted from the opener, so it reads the same in either format.
+        until = (
+            f"the matching fence {closer[0] - line} lines down"
+            if closer != END
+            else "the end, since nothing closes it"
+        )
         diagnostics.append(
             f"{where}: a line starting with ``` or ~~~ reads to verify as a "
-            "Markdown code fence, so it skips every line up to the matching "
-            "fence, or to the end if there is none; start the line with "
-            "something else, or put the example in a provedown-ignore region"
+            f"Markdown code fence, so it skips every line up to {until}; start "
+            "the line with something else, or put the example in a "
+            "provedown-ignore region"
         )
     parsed = parse_document(html, path=Path(origin) if keeps_source_lines else None)
     claims = sum(isinstance(event, ResultAssertion) for event in parsed.events)
@@ -465,18 +478,18 @@ def _lowering(
     # With parser errors, a claim mismatch is a consequence, not the cause.
     # Checked before "no claims found", so a diagram whose every claim was
     # dropped gets this explanation instead.
-    # A fence masks only the lines after it, so markup up to the first one
-    # is still compared; past it, the fence is the explanation.
+    # A fence masks only the lines between it and its closer; markup there
+    # is explained by the fence, and everywhere else is still compared.
     mismatches = _markup_mismatches(
         parsed.events,
         records,
         origin,
         keeps_source_lines=keeps_source_lines,
-        until_line=fences[0][0][0] if fences else None,
+        masked_lines=masked,
     )
     if mismatches and not parser_diagnostics:
         diagnostics += mismatches
-    elif claims == 0 and not parser_diagnostics and not fences:
+    elif claims == 0 and not parser_diagnostics and not masked:
         diagnostics.append(f"{origin}: no claims found")
     return Lowering(html=html, claims=claims, diagnostics=tuple(diagnostics))
 
@@ -513,7 +526,7 @@ def _markup_mismatches(
     origin: str,
     *,
     keeps_source_lines: bool,
-    until_line: int | None = None,
+    masked_lines: set[int] | None = None,
 ) -> list[str]:
     """Describe where verify and the converter disagree on the markup.
 
@@ -526,10 +539,10 @@ def _markup_mismatches(
     draw.io, first in the generated document), and how many more there are.
     """
 
-    if until_line is not None:
-        # Only lines after a fence are masked; it explains everything there.
-        records = [record for record in records if record.position[0] <= until_line]
-        events = [event for event in events if event.location.line <= until_line]
+    if masked_lines:
+        # A fence explains everything on the lines it hides.
+        records = [r for r in records if r.position[0] not in masked_lines]
+        events = [e for e in events if e.location.line not in masked_lines]
     known = {record.position for record in records}
     if len(known) != len(records):
         # Each element starts at its own position; matching depends on it.

@@ -1208,12 +1208,15 @@ def test_unchecked_label_markup_lists_cleanly_beside_a_property() -> None:
     )
 
 
-FENCE_CAUSE = (
-    "a line starting with ``` or ~~~ reads to verify as a Markdown code "
-    "fence, so it skips every line up to the matching fence, or to the end if "
-    "there is none; start the line with something else, or put the example "
-    "in a provedown-ignore region"
-)
+def fence_cause(until: str) -> str:
+    return (
+        "a line starting with ``` or ~~~ reads to verify as a Markdown code "
+        f"fence, so it skips every line up to {until}; start the line with "
+        "something else, or put the example in a provedown-ignore region"
+    )
+
+
+UNCLOSED = "the end, since nothing closes it"
 
 
 def test_svg_fence_shaped_line_is_named_as_the_cause() -> None:
@@ -1225,7 +1228,9 @@ def test_svg_fence_shaped_line_is_named_as_the_cause() -> None:
     )
 
     # The fence explains the skipped claim, so no void-element guess follows.
-    assert lowering.diagnostics == (f"o.svg:4:1: {FENCE_CAUSE}",)
+    assert lowering.diagnostics == (
+        f"o.svg:4:1: {fence_cause('the matching fence 2 lines down')}",
+    )
 
 
 def test_drawio_fence_in_code_property_is_named_as_the_cause() -> None:
@@ -1237,7 +1242,8 @@ def test_drawio_fence_in_code_property_is_named_as_the_cause() -> None:
     lowering = script.drawio_to_html(source, origin="t.drawio")
 
     assert lowering.diagnostics[0] == (
-        f"t.drawio: page 'p' cell 'c' (line 3 of its block, column 1): {FENCE_CAUSE}"
+        "t.drawio: page 'p' cell 'c' (line 3 of its block, column 1): "
+        + fence_cause(UNCLOSED)
     )
 
 
@@ -1283,7 +1289,7 @@ def test_svg_claim_dropped_before_a_fence_is_still_reported() -> None:
     )
 
     assert lowering.diagnostics == (
-        f"o.svg:6:1: {FENCE_CAUSE}",
+        f"o.svg:6:1: {fence_cause(UNCLOSED)}",
         f"o.svg:4:1: verify would skip this claim; {DROPPED_CAUSE}",
     )
 
@@ -1299,5 +1305,45 @@ def test_drawio_closed_fence_inside_code_property_is_caught() -> None:
     lowering = script.drawio_to_html(source, origin="t.drawio")
 
     assert lowering.diagnostics == (
-        f"t.drawio: page 'p' cell 'c' (line 3 of its block, column 1): {FENCE_CAUSE}",
+        "t.drawio: page 'p' cell 'c' (line 3 of its block, column 1): "
+        + fence_cause("the matching fence 2 lines down"),
     )
+
+
+def test_svg_fence_hiding_nothing_is_allowed_and_others_still_reported() -> None:
+    # The fence closes at once, so it hides no line; the leaked <br> is
+    # still the reported cause.
+    lowering = script.normalize_svg(
+        "<svg>\n<metadata><code>paid = 4</code></metadata>\n"
+        '<g class="provedown-ignore"><foreignObject><div>a<br>b</div>'
+        "</foreignObject></g>\n"
+        '<text class="result" data-code="paid">4</text>\n'
+        "<text>\n```\n```\n</text>\n</svg>",
+        origin="o.svg",
+    )
+
+    assert lowering.diagnostics == (
+        f"o.svg:4:1: verify would skip this claim; {DROPPED_CAUSE}",
+    )
+
+
+def test_fence_rule_matches_the_core_parser() -> None:
+    # If core's fence rule changes, the converter's copy of it must too. A
+    # closer needs at least as many of the same character, so ``` can't
+    # close ````.
+    document = (
+        "<p>x</p>\n  ~~~~\n"
+        '<span class="result" data-code="1">1</span>\n~~~~~\n'
+        '<span class="result" data-code="2">2</span>\n````\n'
+        '<span class="result" data-code="3">3</span>\n```\n'
+        '<span class="result" data-code="4">4</span>\n'
+    )
+
+    read = [
+        event.location.line
+        for event in parse_document(document).events
+        if isinstance(event, ResultAssertion)
+    ]
+
+    assert script._fences(document) == [((2, 3), (4, 1)), ((6, 1), script.END)]
+    assert read == [5]

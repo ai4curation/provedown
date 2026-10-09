@@ -177,6 +177,8 @@ In rough priority order:
    `<string>:LINE:COL` back out of each message to point it at a cell. Each
    record also needs a stable diagnostic code, so an adapter can tell a cause
    (an unclosed `<code>`) from its cascade without matching message text.
+   Building the IR directly also sidesteps Markdown fence masking, which the
+   prototype can only detect by copying the parser's fence rule.
 5. **Fix ignored-region tracking in the core parser.** `_ignore_depth` adds
    one for every start tag and subtracts one for every end tag, but a bare
    void element such as `<br>` has no end tag. One `<br>` inside a
@@ -252,10 +254,11 @@ writes the HTML but exits non-zero:
 - a line of the output starting with ```` ``` ```` or `~~~` (from SVG
   text, a `provedown-code` value, or an evidence label once its `<br>`s
   become line breaks), which `verify` reads as a Markdown code fence,
-  skipping every line up to the matching fence or the end. A fence wholly
-  inside one ignored region, such as a legend showing a fenced example,
-  hides only what `verify` skips anyway, so it is allowed. Markup before
-  the first other fence is still compared;
+  skipping every line up to the matching fence or the end. A fence that
+  hides no non-blank line, or sits wholly inside one ignored region (such
+  as a legend showing a fenced example), changes nothing `verify` reads,
+  so it is allowed. Otherwise the fence is reported in place of mismatch
+  messages for the lines it hides; markup elsewhere is still compared;
 - an SVG end tag that doesn't match its start tag, or has no start tag;
 - anything the Provedown parser would reject in the generated HTML, since
   `verify` refuses to run such a document. A tag nested inside `<code>` is
