@@ -181,10 +181,12 @@ In rough priority order:
    one for every start tag and subtracts one for every end tag, but a bare
    void element such as `<br>` has no end tag. One `<br>` inside a
    `provedown-ignore` region leaves the parser ignoring everything after the
-   region, so later claims are silently skipped. This affects ordinary
+   region, and a void element that itself carries the marker (such as
+   `<br class="provedown-ignore">`) starts a region that never ends. Either
+   way, later claims are silently skipped. This affects ordinary
    Markdown and HTML documents, not only diagrams. The fix is to skip
-   `HTML_VOID_ELEMENTS` when counting, as the prototype's `_IgnoredRegions`
-   does.
+   `HTML_VOID_ELEMENTS` when counting and treat a void element carrying the
+   marker as ignoring only itself, as the prototype's `_IgnoredRegions` does.
 6. **Add rendering later.** Evidence disclosure on a diagram could be a
    draw.io tooltip or link on claim shapes, which draw.io already supports
    through properties.
@@ -224,12 +226,14 @@ writes the HTML but exits non-zero:
   element with `data-code` but no `class="result"` (such as a misspelled
   `class="results"`), or `class="result"` on a tag `verify` doesn't check
   (anything but `<span>` in a label, or `<text>`, `<tspan>` and `<span>` in
-  an SVG). Ignored regions are skipped, as `verify` skips them;
-- fewer claims seen by `verify` than the converter found outside ignored
-  regions. Today this catches a core parser bug (see below) where a `<br>`
-  inside an ignored region makes `verify` skip later claims. Labels are
+  an SVG). Ignored regions are skipped, as `verify` skips them. Labels are
   parsed as HTML, so every spelling `verify` accepts (such as unquoted
   `class=result`) works, and spellings it would ignore are reported;
+- fewer claims seen by `verify` than the converter found outside ignored
+  regions, including none at all. Today this catches the core parser bug in
+  proposal 5 above, where a `<br>` inside or carrying `provedown-ignore`
+  makes `verify` skip later claims. For SVG, the message gives the position
+  of the first claim `verify` would skip;
 - an SVG end tag that doesn't match its start tag, or has no start tag;
 - anything the Provedown parser would reject in the generated HTML, since
   `verify` refuses to run such a document. A tag nested inside `<code>` is

@@ -288,7 +288,7 @@ def test_label_data_code_without_result_class_is_reported(span: str) -> None:
 
     assert lowering.diagnostics == (
         "t.drawio: page 'p' cell 'bad': data-code on <span> without "
-        'class="result", which verify would not check',
+        'class="result" at label column 1, which verify would not check',
     )
 
 
@@ -309,7 +309,7 @@ def test_label_result_class_on_unchecked_tag_is_reported(label: str) -> None:
 
     assert lowering.diagnostics == (
         "t.drawio: page 'p' cell 'bad': class=\"result\" on <b> (only checked on "
-        "<span>), which verify would not check",
+        "<span>) at label column 1, which verify would not check",
     )
 
 
@@ -767,7 +767,7 @@ def test_label_markup_in_ignored_region_is_skipped() -> None:
     assert "legend" not in lowering.html
 
 
-def test_label_duplicate_unchecked_markup_is_reported_once() -> None:
+def test_label_unchecked_markup_is_reported_per_element() -> None:
     label = '<b class="result">1</b> and <b class="result">2</b>'
     source = _drawio(
         f'<mxCell id="bad" style="html=1;" value={quoteattr(label)}/>'
@@ -777,7 +777,11 @@ def test_label_duplicate_unchecked_markup_is_reported_once() -> None:
 
     lowering = script.drawio_to_html(source)
 
-    assert len(lowering.diagnostics) == 1
+    # Two separate elements, so two errors, each with its own position.
+    assert [d.split(" at ")[1] for d in lowering.diagnostics] == [
+        "label column 1, which verify would not check",
+        "label column 29, which verify would not check",
+    ]
 
 
 def test_svg_void_element_in_ignored_region_is_reported_when_verify_drops_claims() -> (
@@ -797,7 +801,49 @@ def test_svg_void_element_in_ignored_region_is_reported_when_verify_drops_claims
     assert not lowering.ok
     assert lowering.claims == 1
     assert lowering.diagnostics == (
-        "o.svg: verify would check only 1 of 2 claims; a void element such as "
-        "<br> inside a provedown-ignore region makes verify skip the claims "
-        "after it",
+        "o.svg:4:1: verify would check only 1 of 2 claims; a void element such "
+        "as <br> inside or carrying provedown-ignore makes verify skip "
+        "everything after it",
+    )
+
+
+@pytest.mark.parametrize(
+    "ignored",
+    [
+        '<g class="provedown-ignore"><foreignObject><div>a<br>b</div>'
+        "</foreignObject></g>",
+        '<br class="provedown-ignore">',
+    ],
+)
+def test_svg_every_claim_dropped_by_verify_names_the_cause(ignored: str) -> None:
+    lowering = script.normalize_svg(
+        f'<svg>\n{ignored}\n<text class="result" data-code="4">4</text>\n</svg>',
+        origin="o.svg",
+    )
+
+    assert lowering.claims == 0
+    assert lowering.diagnostics == (
+        "o.svg:3:1: verify would check only 0 of 1 claims; a void element such "
+        "as <br> inside or carrying provedown-ignore makes verify skip "
+        "everything after it",
+    )
+
+
+def test_drawio_label_ignored_region_dropping_claims_names_the_cause() -> None:
+    label = (
+        '<span class="provedown-ignore">a<br>b</span> '
+        '<span class="result" data-code="x">4</span>'
+    )
+    source = _drawio(
+        _object("c", label="code", provedown_code="x = 4")
+        + f'<mxCell id="r" style="html=1;" value={quoteattr(label)}/>'
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    assert lowering.claims == 0
+    assert lowering.diagnostics == (
+        "t.drawio: verify would check only 0 of 1 claims; a void element such "
+        "as <br> inside or carrying provedown-ignore makes verify skip "
+        "everything after it",
     )

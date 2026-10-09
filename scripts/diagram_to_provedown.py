@@ -40,7 +40,7 @@ from pathlib import Path
 from urllib.parse import unquote
 from xml.etree import ElementTree
 
-from provedown.model import ResultAssertion
+from provedown.model import DocumentEvent, ResultAssertion
 from provedown.parser import parse_document
 
 GENERATED_HEADER = "<!-- generated from"
@@ -244,7 +244,12 @@ def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
         origin,
         rewriter.diagnostics,
         keeps_source_lines=True,
-        expected_claims=rewriter.expected_claims,
+        expected_claims=len(rewriter.claim_positions),
+        expected_positions=[
+            # The header shares line 1, so the parser sees its columns shifted.
+            (line, column + len(header) if line == 1 else column)
+            for line, column in rewriter.claim_positions
+        ],
     )
 
 
@@ -255,6 +260,7 @@ def _lowering(
     *,
     keeps_source_lines: bool,
     expected_claims: int,
+    expected_positions: list[tuple[int, int]] | None = None,
 ) -> Lowering:
     """Parse the output the way verify will.
 
@@ -277,19 +283,41 @@ def _lowering(
             diagnostic += match["message"]
         if diagnostic not in diagnostics:
             diagnostics.append(diagnostic)
-    # With parser errors, "no claims" is a consequence rather than the cause.
-    if claims == 0 and not parser_diagnostics:
-        diagnostics.append(f"{origin}: no claims found")
-    elif claims < expected_claims and not parser_diagnostics:
+    # With parser errors, missing claims are a consequence, not the cause.
+    if claims < expected_claims and not parser_diagnostics:
         # The converter and verify disagree on which claims exist. Today this
-        # happens when a void element such as <br> sits inside a
-        # provedown-ignore region: verify then skips the claims after it.
+        # happens when a void element such as <br> sits inside, or carries,
+        # provedown-ignore: verify then skips everything after it. Checked
+        # first, so a diagram whose every claim was dropped gets this cause
+        # rather than "no claims found". (Only this direction is checked: the
+        # converter and verify share _is_result, so it cannot undercount.)
+        where = origin
+        missing = _first_missing_claim(parsed.events, expected_positions)
+        if missing is not None:
+            where = f"{origin}:{missing[0]}:{missing[1]}"
         diagnostics.append(
-            f"{origin}: verify would check only {claims} of {expected_claims} "
-            "claims; a void element such as <br> inside a provedown-ignore "
-            "region makes verify skip the claims after it"
+            f"{where}: verify would check only {claims} of {expected_claims} "
+            "claims; a void element such as <br> inside or carrying "
+            "provedown-ignore makes verify skip everything after it"
         )
+    elif claims == 0 and not parser_diagnostics:
+        diagnostics.append(f"{origin}: no claims found")
     return Lowering(html=html, claims=claims, diagnostics=tuple(diagnostics))
+
+
+def _first_missing_claim(
+    events: list[DocumentEvent], expected: list[tuple[int, int]] | None
+) -> tuple[int, int] | None:
+    """Return the first expected claim position the parser did not report."""
+
+    if not expected:
+        return None
+    seen = {
+        (event.location.line, event.location.column)
+        for event in events
+        if isinstance(event, ResultAssertion)
+    }
+    return next((position for position in expected if position not in seen), None)
 
 
 def _without_unclosed_code_cascade(diagnostics: list[str]) -> list[str]:
@@ -496,10 +524,16 @@ class _LabelScanner(HTMLParser):
     def _classify(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "code":
             self.markup.code = True
-        problem = _unchecked_markup(tag, attrs, LABEL_RESULT_TAGS)
+        shown = _tag_name(self.get_starttag_text() or "")
+        problem = _unchecked_markup(tag, attrs, LABEL_RESULT_TAGS, shown)
         if problem:
-            if problem not in self.markup.unchecked:
-                self.markup.unchecked.append(problem)
+            # The position keeps separate elements apart; only a genuine
+            # repeat (which the parser cannot produce) would be merged.
+            line, column = self.getpos()
+            where = f" at label column {column + 1}"
+            if line > 1:
+                where = f" at label line {line}, column {column + 1}"
+            self.markup.unchecked.append(problem + where)
         elif _is_result(attrs):
             self.markup.results += 1
 
@@ -599,8 +633,9 @@ class _SvgResultRewriter(HTMLParser):
         # Original (case-preserved) tag name and whether it became a span.
         self._stack: list[tuple[str, bool]] = []
         self._regions = _IgnoredRegions()
-        # Result elements outside ignored regions, which verify should check.
-        self.expected_claims = 0
+        # Positions (line, 1-based column) of result elements outside ignored
+        # regions, which verify should check.
+        self.claim_positions: list[tuple[int, int]] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         raw = self.get_starttag_text() or ""
@@ -653,7 +688,8 @@ class _SvgResultRewriter(HTMLParser):
         if problem:
             self._error(f"{problem}, which verify would not check")
         elif _is_result(attrs):
-            self.expected_claims += 1
+            line, column = self.getpos()
+            self.claim_positions.append((line, column + 1))
 
     def _error(self, message: str) -> None:
         line, column = self.getpos()
