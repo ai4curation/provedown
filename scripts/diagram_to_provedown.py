@@ -37,6 +37,7 @@ from dataclasses import dataclass, field, replace
 from html import escape, unescape
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import Literal
 from urllib.parse import unquote
 from xml.etree import ElementTree
 
@@ -200,8 +201,7 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                 )
             elif markup.unchecked:
                 diagnostics.extend(
-                    f"{where}: {problem}, which verify would not check"
-                    for problem in markup.unchecked
+                    f"{where}: {problem}" for problem in markup.unchecked
                 )
             elif markup.code and markup.result:
                 diagnostics.append(
@@ -255,9 +255,12 @@ def _property_block(comment: str, where: str, fragment: str) -> _Block:
     """Wrap HTML the converter generated from a shape's properties."""
 
     prefix = f"{comment}\n"
+    markup = _label_markup(fragment)
+    if markup.unchecked:
+        raise ValueError(f"{where}: converter emitted {_join(markup.unchecked)}")
     records = [
         MarkupRecord(element.kind, where, element.ignored, _shift(prefix, element))
-        for element in _label_markup(fragment).elements
+        for element in markup.elements
     ]
     return _Block(prefix + fragment, records)
 
@@ -274,8 +277,8 @@ def _label_block(comment: str, where: str, markup: LabelMarkup, emitted: str) ->
     prefix = f"{comment}\n{LABEL_WRAPPER}"
     written = markup.elements
     placed = _label_markup(emitted).elements if emitted != markup.label else written
-    if len(written) != len(placed):
-        written = placed
+    if [e.kind for e in written] != [e.kind for e in placed]:
+        raise ValueError(f"{where}: converting line breaks changed the label's markup")
     records = [
         MarkupRecord(
             element.kind,
@@ -388,7 +391,9 @@ def _lowering(
     # With parser errors, a claim mismatch is a consequence, not the cause.
     # Checked before "no claims found", so a diagram whose every claim was
     # dropped gets this explanation instead.
-    mismatches = _markup_mismatches(parsed.events, records, origin)
+    mismatches = _markup_mismatches(
+        parsed.events, records, origin, keeps_source_lines=keeps_source_lines
+    )
     if mismatches and not parser_diagnostics:
         diagnostics += mismatches
     elif claims == 0 and not parser_diagnostics:
@@ -397,7 +402,11 @@ def _lowering(
 
 
 def _markup_mismatches(
-    events: list[DocumentEvent], records: list[MarkupRecord], origin: str
+    events: list[DocumentEvent],
+    records: list[MarkupRecord],
+    origin: str,
+    *,
+    keeps_source_lines: bool,
 ) -> list[str]:
     """Describe where verify and the converter disagree on the markup.
 
@@ -405,56 +414,57 @@ def _markup_mismatches(
     its assertions with it, and one it runs from an ignored region executes
     code the author excluded. Elements are matched by their position in the
     generated HTML, which is unique per element, so one gained in one region
-    cannot hide one lost in another. Each message cites where the author
-    wrote the first element of its kind (for draw.io, first in the generated
-    document, where evidence precedes claims), and how many more there are.
+    cannot hide one lost in another. Each message covers one kind and one
+    direction, citing where the author wrote the first such element (for
+    draw.io, first in the generated document), and how many more there are.
     """
 
     known = {record.position for record in records}
-    # Each element starts at its own position; the check depends on it.
-    assert len(known) == len(records), "two markup records share a position"
-
+    if len(known) != len(records):
+        # Each element starts at its own position; matching depends on it.
+        return [f"{origin}: two markup elements share a position; {CONVERTER_BUG}"]
     seen = {
         (event.location.line, event.location.column)
         for event in events
         if isinstance(event, ResultAssertion | CodeBlock | CodeUse)
     }
-    lost = [r for r in records if not r.ignored and r.position not in seen]
-    gained = [(r.where, r.kind) for r in records if r.ignored and r.position in seen]
     # Markup verify reads where the converter recorded none. Unreachable
     # today, since both scanners record every element the core parser
-    # honours, ignored or not; reported rather than trusted, as a converter
-    # bug rather than an authoring mistake.
+    # honours, ignored or not; reported rather than trusted.
+    lines = "the SVG's own line" if keeps_source_lines else "the generated HTML"
     messages = [
-        f"{origin}: verify would read markup at line {line}, column {column} "
-        "of the generated HTML that the converter did not record; this is a "
-        "bug in the converter"
+        f"{origin}: verify would read markup the converter did not record, at "
+        f"line {line} of {lines} (column {column} of the output); {CONVERTER_BUG}"
         for line, column in sorted(seen - known)
     ]
-    if lost:
-        messages.append(
-            f"{lost[0].where}: verify would skip this {_NOUNS[lost[0].kind]}"
-            + _and_more(len(lost) - 1)
-            + "; most likely a void element such as <br> inside or carrying "
-            "provedown-ignore, or an ignored region left open, makes verify "
-            "skip everything after it"
-        )
-    if gained:
-        where, kind = gained[0]
-        # Only an end tag can make verify stop ignoring before the converter
-        # does; every void-element skew makes verify ignore more, not less.
-        messages.append(
-            f"{where}: verify would {_VERBS[kind]} this {_NOUNS[kind]} inside "
-            "an ignored region"
-            + _and_more(len(gained) - 1)
-            + "; most likely an end tag with no matching start tag, such as a "
-            "stray </br>, makes verify stop ignoring early"
-        )
+    for kind in ("evidence", "claim"):
+        of_kind = [record for record in records if record.kind == kind]
+        lost = [r for r in of_kind if not r.ignored and r.position not in seen]
+        gained = [r for r in of_kind if r.ignored and r.position in seen]
+        if lost:
+            messages.append(
+                f"{lost[0].where}: verify would skip this {_NOUNS[kind]}"
+                + _and_more(len(lost) - 1)
+                + "; most likely a void element such as <br> inside or "
+                "carrying provedown-ignore, or an ignored region left open, "
+                "makes verify skip everything after it"
+            )
+        if gained:
+            # Only an end tag can make verify stop ignoring before the
+            # converter does; every void-element skew makes it ignore more.
+            messages.append(
+                f"{gained[0].where}: verify would {_VERBS[kind]} this "
+                f"{_NOUNS[kind]} inside an ignored region"
+                + _and_more(len(gained) - 1)
+                + "; most likely an end tag with no matching start tag, such "
+                "as a stray </br>, makes verify stop ignoring early"
+            )
     return messages
 
 
-_NOUNS = {"claim": "claim", "evidence": "<code> block"}
-_VERBS = {"claim": "check", "evidence": "run"}
+CONVERTER_BUG = "this is a bug in the converter"
+_NOUNS: dict[MarkupKind, str] = {"claim": "claim", "evidence": "<code> block"}
+_VERBS: dict[MarkupKind, str] = {"claim": "check", "evidence": "run"}
 
 
 def _and_more(count: int) -> str:
@@ -598,12 +608,15 @@ def _label_text(cell: Cell) -> str:
     return extractor.text().strip()
 
 
+# A claim (a result element) or evidence (a <code> element).
+MarkupKind = Literal["claim", "evidence"]
+
+
 @dataclass(frozen=True)
 class MarkupRecord:
     """A claim or evidence element, for checking against what verify sees."""
 
-    # "claim" (a result element) or "evidence" (a <code> element).
-    kind: str
+    kind: MarkupKind
     # Where the author wrote it, for messages: "file:line:col" or a cell.
     where: str
     # Inside a provedown-ignore region, so verify should skip it.
@@ -618,7 +631,7 @@ class MarkupRecord:
 class LabelElement:
     """A claim or evidence element in a label or generated fragment."""
 
-    kind: str
+    kind: MarkupKind
     line: int
     column: int
     # Inside a provedown-ignore region, so verify should skip it.
@@ -719,21 +732,22 @@ class _LabelScanner(HTMLParser):
 
     def _classify(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         shown = _tag_name(self.get_starttag_text() or "")
-        problem = _unchecked_markup(tag, attrs, LABEL_RESULT_TAGS, shown)
+        # The position keeps separate elements apart in the messages.
+        line, column = self.getpos()
+        at = f" at label column {column + 1}"
+        if line > 1:
+            at = f" at label line {line}, column {column + 1}"
+        problem = _unchecked_markup(tag, attrs, LABEL_RESULT_TAGS, shown, at)
         if problem:
-            # The position keeps separate elements apart in the messages.
-            line, column = self.getpos()
-            where = f" at label column {column + 1}"
-            if line > 1:
-                where = f" at label line {line}, column {column + 1}"
-            self.markup.unchecked.append(problem + where)
-        else:
+            self.markup.unchecked.append(problem)
+        # A <code> is evidence even with misplaced claim markup on it.
+        if not problem or _markup_kind(tag, attrs, LABEL_RESULT_TAGS) == "evidence":
             self._record(tag, attrs, ignored=False)
 
 
 def _markup_kind(
     tag: str, attrs: list[tuple[str, str | None]], result_tags: set[str]
-) -> str | None:
+) -> MarkupKind | None:
     if tag == "code":
         return "evidence"
     if tag in result_tags and _is_result(attrs):
@@ -789,16 +803,25 @@ def _unchecked_markup(
     attrs: list[tuple[str, str | None]],
     result_tags: set[str],
     shown_tag: str | None = None,
+    at: str = "",
 ) -> str | None:
-    """Name markup on this element that verify would silently skip."""
+    """Name claim markup on this element that verify would not check.
+
+    ``at`` (such as " at label column 3") goes before the consequence.
+    """
 
     shown = shown_tag or tag
     if _is_result(attrs) and tag not in result_tags:
         allowed = _join([f"<{t}>" for t in sorted(result_tags)], "or")
-        return f'class="result" on <{shown}> (only checked on {allowed})'
-    if "data-code" in dict(attrs) and not _is_result(attrs):
-        return f'data-code on <{shown}> without class="result"'
-    return None
+        problem = f'class="result" on <{shown}> (only checked on {allowed})'
+    elif "data-code" in dict(attrs) and not _is_result(attrs):
+        problem = f'data-code on <{shown}> without class="result"'
+    else:
+        return None
+    if tag == "code":
+        # Still evidence: verify runs it, whatever its claim markup says.
+        return f"{problem}{at}, which verify would run as code, not check as a claim"
+    return f"{problem}{at}, which verify would not check"
 
 
 def _join(items: list[str], conjunction: str = "and") -> str:
@@ -910,8 +933,10 @@ class _SvgResultRewriter(HTMLParser):
         # unverified, so report it; record the rest as markup verify should see.
         problem = _unchecked_markup(tag, attrs, SVG_RESULT_TAGS, _tag_name(raw))
         if problem:
-            self._error(f"{problem}, which verify would not check")
-        else:
+            self._error(problem)
+        # A <code> is evidence even with misplaced claim markup on it, and the
+        # rewriter writes it through, so verify reads it.
+        if not problem or _markup_kind(tag, attrs, SVG_RESULT_TAGS) == "evidence":
             self._record(tag, attrs, ignored=False)
 
     def _record(

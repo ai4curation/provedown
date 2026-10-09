@@ -1129,3 +1129,43 @@ def test_svg_rewriter_error_after_cdata_cites_its_source_column() -> None:
 
     column = source.split("\n")[1].index("</g>") + 1
     assert lowering.diagnostics[0] == f"o.svg:2:{column}: unexpected </g>"
+
+
+@pytest.mark.parametrize("marker", ['class="result"', 'data-code="x"'])
+def test_svg_claim_markup_on_code_is_reported_as_run(marker: str) -> None:
+    # verify still runs the block as evidence, so it is recorded as such and
+    # no converter-bug message follows.
+    lowering = script.normalize_svg(
+        f"<svg>\n<metadata><code {marker}>x = 4</code></metadata>\n"
+        '<text class="result" data-code="x">4</text>\n</svg>',
+        origin="o.svg",
+    )
+
+    shown = marker.split("=")[0]
+    assert len(lowering.diagnostics) == 1
+    assert lowering.diagnostics[0].startswith(f"o.svg:2:11: {shown}")
+    assert lowering.diagnostics[0].endswith(
+        "which verify would run as code, not check as a claim"
+    )
+
+
+def test_drawio_leak_dropping_property_evidence_and_claims_reports_both() -> None:
+    # draw.io converts a bare <br> in an evidence label to a newline, but not
+    # one with attributes, which leaks the region into later blocks.
+    label = (
+        "<pre><code>x = 4</code></pre>"
+        '<span class="provedown-ignore"><br class="a"><br class="a"></span>'
+    )
+    source = _drawio(
+        f'<mxCell id="ev" style="html=1;" value={quoteattr(label)}/>'
+        + _object("c", label="code", provedown_code="assert x == 99")
+        + _object("r", label="4", data_code="x")
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    assert lowering.diagnostics == (
+        f"t.drawio: page 'p' cell 'c': verify would skip this <code> block; "
+        f"{DROPPED_CAUSE}",
+        f"t.drawio: page 'p' cell 'r': verify would skip this claim; {DROPPED_CAUSE}",
+    )

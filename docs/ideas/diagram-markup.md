@@ -242,8 +242,8 @@ writes the HTML but exits non-zero:
   the core parser bug in proposal 5 above: a `<br>` inside or carrying
   `provedown-ignore` makes `verify` skip later markup, and a stray `</br>`
   inside a region makes it read markup the author ignored. Skipped and
-  wrongly read elements are reported separately, each naming the first
-  such element by its source line and column in an SVG, or in draw.io by
+  wrongly read claims and evidence are each reported separately, naming
+  the first such element by its source line and column in an SVG, or in draw.io by
   its page and cell, plus its position in the label as written when it is
   in a label, with a count of any more;
 - an SVG end tag that doesn't match its start tag, or has no start tag;
