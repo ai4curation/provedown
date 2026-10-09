@@ -1227,6 +1227,13 @@ def test_markup_records_sharing_a_position_are_a_converter_bug() -> None:
     ) == ["o.svg: two markup elements share a position; this is a bug in the converter"]
 
 
+def _no_fences(html: str) -> bool:
+    """Whether no line of the output reads to the core parser as a fence."""
+
+    lines = html.splitlines(keepends=True)
+    return all(core_parser._fence_marker(line) is None for line in lines)
+
+
 def _code_blocks(html: str) -> list[str]:
     return [
         event.code
@@ -1246,6 +1253,7 @@ def test_svg_fence_shaped_lines_do_not_hide_a_claim() -> None:
     )
 
     assert lowering.ok
+    assert _no_fences(lowering.html)
     assert _statuses(lowering.html) == [Status.PASS]
 
 
@@ -1262,6 +1270,7 @@ def test_drawio_fence_inside_code_property_runs_every_line() -> None:
     lowering = script.drawio_to_html(source, origin="t.drawio")
 
     assert lowering.ok
+    assert _no_fences(lowering.html)
     assert _code_blocks(lowering.html) == [code]
     assert _statuses(lowering.html) == [Status.PASS]
 
@@ -1275,6 +1284,7 @@ def test_drawio_unclosed_fence_inside_code_property_keeps_the_block_closed() -> 
     lowering = script.drawio_to_html(source, origin="t.drawio")
 
     assert lowering.ok
+    assert _no_fences(lowering.html)
     assert _code_blocks(lowering.html) == ["x = 4\n~~~~"]
 
 
@@ -1289,6 +1299,7 @@ def test_claim_after_a_defused_fence_on_its_line_is_still_matched() -> None:
     )
 
     assert lowering.ok
+    assert _no_fences(lowering.html)
     assert _statuses(lowering.html) == [Status.PASS]
 
 
@@ -1301,3 +1312,47 @@ def test_fence_rule_matches_the_core_parser(line: str) -> None:
     assert bool(script.FENCE.match(line)) == (
         core_parser._fence_marker(line + "\n") is not None
     )
+
+
+def test_tilde_fence_shifts_a_later_claim_by_its_longer_reference() -> None:
+    # &#126; is one character longer than &#96;, and two fences can share a
+    # newline-numbered line when another line break (a form feed) splits it.
+    lowering = script.normalize_svg(
+        "<svg>\n<metadata><code>paid = 4</code></metadata>\n"
+        '<text>\n~~~ \x0c``` <tspan class="result" data-code="paid">4</tspan>'
+        "</text>\n</svg>",
+        origin="o.svg",
+    )
+
+    assert lowering.ok
+    assert _no_fences(lowering.html)
+    assert _statuses(lowering.html) == [Status.PASS]
+
+
+def test_svg_fence_inside_an_ignored_legend_is_allowed() -> None:
+    lowering = script.normalize_svg(
+        "<svg>\n<metadata><code>paid = 4</code></metadata>\n"
+        '<g class="provedown-ignore">\n<text>Mark the number like this:\n'
+        '```\n<tspan class="result">4</tspan>\n```\n</text>\n</g>\n'
+        '<text class="result" data-code="paid">4</text>\n</svg>',
+        origin="o.svg",
+    )
+
+    assert lowering.ok
+    assert _statuses(lowering.html) == [Status.PASS]
+
+
+def test_drawio_fence_from_evidence_label_line_breaks_is_defused() -> None:
+    # The label's <br>s become line breaks, leaving ``` at the start of one.
+    label = '<pre><code>x = 4<br>s = """<br>```<br>"""</code></pre>'
+    source = _drawio(
+        f'<mxCell id="ev" style="html=1;" value={quoteattr(label)}/>'
+        + _object("r", label="4", data_code="x")
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    assert lowering.ok
+    assert _no_fences(lowering.html)
+    assert _code_blocks(lowering.html) == ['x = 4\ns = """\n```\n"""']
+    assert _statuses(lowering.html) == [Status.PASS]

@@ -133,7 +133,8 @@ paid = [row for row in orders if row["status"] == "paid"]
 The prototype rewrites result `tspan`/`text` elements to `span` and escapes
 CDATA without adding or removing lines, so the parser's line numbers still
 point at the original SVG. Columns can shift on lines where CDATA was
-unwrapped or text was escaped. The HTML form `<span class="result">` also works
+unwrapped, text was escaped, or a fence character was written as a
+reference (see below). The HTML form `<span class="result">` also works
 inside a `<foreignObject>`.
 
 A `tspan` claim can sit in the middle of a sentence (`Revenue <tspan
@@ -265,7 +266,10 @@ run with a line missing. Such a line can come from SVG text, a
 `provedown-code` value, or an evidence label once its `<br>`s become line
 breaks. The converter writes the first fence character of any such line as
 a character reference (`&#96;` or `&#126;`), which `verify` decodes back, so
-code and values reach it exactly as authored and nothing is hidden.
+code and values reach it exactly as authored and nothing is hidden. (Inside
+raw-text elements such as `<style>` the reference stays as written, but
+those hold no Provedown markup, and escaping there still keeps the lines
+after them visible.)
 
 A misspelled property such as `datacode` can't be told apart from unrelated
 shape data, so it's caught only when the whole diagram ends up with no claims.

@@ -236,9 +236,11 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
         # Each block starts two lines down, after the blank separator line.
         line += 2
         records += [
-            replace(record, position=(line + row - 1, column))
+            replace(
+                record,
+                position=(line + record.position[0] - 1, record.position[1]),
+            )
             for record in block.records
-            for row, column in [record.position]
         ]
         line += block.text.count("\n")
     html = "\n\n".join(parts) + "\n"
@@ -443,6 +445,8 @@ def _defuse_fences(
     value or a line of SVG text can start that way. Writing the first fence
     character as a character reference stops the line matching, and the
     parser decodes the reference back, in code, text and attributes alike.
+    (Not inside raw-text elements such as ``<style>``, which hold no
+    Provedown markup; escaping there still keeps later lines visible.)
     Records later on such a line are moved along by the extra characters.
     """
 
@@ -450,7 +454,8 @@ def _defuse_fences(
     # on form feeds and the like), but shifts in the newline-only numbering
     # that positions use.
     parts: list[str] = []
-    shifts: dict[int, tuple[int, int]] = {}
+    # Per newline-numbered line: (column, extra characters), one per fence.
+    shifts: dict[int, list[tuple[int, int]]] = {}
     offset = 0
     for text in html.splitlines(keepends=True):
         length = len(text)
@@ -461,7 +466,7 @@ def _defuse_fences(
             at = offset + start
             line = html.count("\n", 0, at) + 1
             column = at - html.rfind("\n", 0, at)
-            shifts[line] = (column, len(reference) - 1)
+            shifts.setdefault(line, []).append((column, len(reference) - 1))
             text = text[:start] + reference + text[start + 1 :]
         parts.append(text)
         offset += length
@@ -470,8 +475,8 @@ def _defuse_fences(
     moved = []
     for record in records:
         line, column = record.position
-        start, extra = shifts.get(line, (column, 0))
-        if column > start:
+        extra = sum(n for start, n in shifts.get(line, []) if start < column)
+        if extra:
             record = replace(record, position=(line, column + extra))
         moved.append(record)
     return "".join(parts), moved
