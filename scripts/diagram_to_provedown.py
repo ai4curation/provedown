@@ -41,6 +41,9 @@ from xml.etree import ElementTree
 
 CODE_PROPERTY = "provedown-code"
 RESULT_PROPERTY = "provedown-result"
+# Earlier name of RESULT_PROPERTY; only an error next to data-code, since a bare
+# "result" is common in unrelated shape data.
+LEGACY_RESULT_PROPERTY = "result"
 RESULT_ATTRIBUTES = {
     "data-code",
     "data-compare",
@@ -51,6 +54,24 @@ RESULT_ATTRIBUTES = {
     "data-tol",
     "seed",
     "data-seed",
+}
+# HTML elements that never take an end tag. HTMLParser has no notion of them,
+# so an unclosed <br> inside a foreignObject must not be pushed on the stack.
+HTML_VOID_ELEMENTS = {
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr",
 }
 CODE_ATTRIBUTES = {"name", "data-language", "language", "lang"}
 
@@ -111,6 +132,15 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
             )
         elif CODE_PROPERTY in attributes:
             code.append(f"{comment}\n{_code_element(cell)}")
+        elif (
+            "data-code" in attributes
+            and LEGACY_RESULT_PROPERTY in attributes
+            and (RESULT_PROPERTY not in attributes)
+        ):
+            diagnostics.append(
+                f"{where}: has a {LEGACY_RESULT_PROPERTY!r} property; "
+                f"the authored value now goes in {RESULT_PROPERTY!r}"
+            )
         elif "data-code" in attributes:
             claims.append(f"{comment}\n<p>{_result_element(cell)}</p>")
         elif RESULT_PROPERTY in attributes:
@@ -135,7 +165,8 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                 claims.append(f"{comment}\n<div>{label}</div>")
             else:
                 # draw.io stores label line breaks as <br>; the parser rejects
-                # tags nested in <code>, so turn them back into newlines.
+                # tags nested in <code>, so turn them back into newlines. Labels
+                # routed here hold only evidence, so the whole label is safe.
                 code.append(f"{comment}\n<div>{_br_to_newline(label)}</div>")
 
     if not claims:
@@ -294,13 +325,19 @@ class _SvgResultRewriter(HTMLParser):
             self.claims += 1
             self._stack.append((tag, True))
             self._parts.append(_rename_tag(raw, "span"))
+            return
+        if tag == "span" and _is_result(attrs):
+            # The HTML contract written directly inside a foreignObject.
+            self.claims += 1
+        if tag in HTML_VOID_ELEMENTS:
+            self._parts.append(raw)
         else:
             self._stack.append((_tag_name(raw) or tag, False))
             self._parts.append(raw)
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         raw = self.get_starttag_text() or ""
-        if tag in {"text", "tspan"} and _is_result(attrs):
+        if tag in {"text", "tspan", "span"} and _is_result(attrs):
             self.claims += 1
             raw = _rename_tag(raw, "span")
         self._parts.append(raw)
@@ -376,8 +413,14 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, ElementTree.ParseError, zlib.error) as exc:
         # binascii.Error (bad base64) is a ValueError subclass.
         print(f"error: {args.path}: {exc}", file=sys.stderr)
+        # Don't leave output from an earlier run for a later verify to check.
+        output.unlink(missing_ok=True)
         return 1
-    output.write_text(lowering.html, encoding="utf-8")
+    try:
+        output.write_text(lowering.html, encoding="utf-8")
+    except OSError as exc:
+        print(f"error: {output}: {exc}", file=sys.stderr)
+        return 1
     print(f"{output}: {lowering.claims} claim(s)")
     for diagnostic in lowering.diagnostics:
         print(f"error: {diagnostic}", file=sys.stderr)

@@ -133,7 +133,12 @@ paid = [row for row in orders if row["status"] == "paid"]
 The prototype rewrites result `tspan`/`text` elements to `span` and escapes
 CDATA without adding or removing lines, so the parser's line numbers still
 point at the original SVG. Columns can shift on lines where CDATA was
-unwrapped or text was escaped. `examples/diagrams/orders.svg`
+unwrapped or text was escaped. The HTML form `<span class="result">` also works
+inside a `<foreignObject>`.
+
+A `tspan` claim can sit in the middle of a sentence (`Revenue <tspan
+class="result">$461.00</tspan>`), so SVG doesn't need the separate authored
+value that `provedown-result` provides for draw.io labels. `examples/diagrams/orders.svg`
 renders correctly in Chromium with the evidence hidden (checked by hand).
 
 Namespace hygiene is still open. A bare `<code>` in the SVG namespace is
@@ -184,12 +189,15 @@ Or run `just verify-diagram-examples`, which CI runs as part of
 `just check-examples`. The generated HTML is written next to the input so
 relative data paths such as `../data/orders.csv` still resolve.
 
-The converter fails closed. It still writes the HTML, but exits non-zero when
-a diagram has no claims, when the file can't be read or decoded, or when a
-cell looks like a mistake:
+The converter fails closed. If the input can't be read or decoded, it writes
+nothing, removes any output left from an earlier run, and exits non-zero. If
+the input converts but has no claims, or a cell looks like a mistake, it still
+writes the HTML but exits non-zero:
 
 - a `provedown-result` property with no `data-code`, which is a value with
   no evidence;
+- a `data-code` shape that uses the earlier property name `result` instead of
+  `provedown-result`;
 - a shape that has both `provedown-code` and `data-code`;
 - an HTML label that mixes `<code>` and `class="result"`;
 - a label with Provedown markup on a shape whose style lacks `html=1`, which

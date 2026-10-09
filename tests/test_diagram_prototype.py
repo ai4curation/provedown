@@ -248,6 +248,7 @@ def test_html_label_evidence_keeps_line_breaks() -> None:
     lowering = script.drawio_to_html(source)
 
     assert lowering.ok
+    assert "x = 2\ny = 3\nz = x + y" in lowering.html
     assert _statuses(lowering.html) == [Status.PASS]
 
 
@@ -294,3 +295,82 @@ def test_main_reports_unreadable_input(
 
     assert script.main([str(path)]) == 1
     assert capsys.readouterr().err.startswith(f"error: {path}: ")
+
+
+def test_svg_void_elements_do_not_desynchronise_end_tags() -> None:
+    source = (
+        "<svg><foreignObject>"
+        '<div xmlns="http://www.w3.org/1999/xhtml">a<br>b<img src="x"></div>'
+        "</foreignObject>"
+        '<text class="result" data-code="1">1</text></svg>'
+    )
+
+    lowering = script.normalize_svg(source)
+
+    assert lowering.ok
+    assert lowering.html == source.replace("<text", "<span").replace(
+        "</text>", "</span>"
+    )
+
+
+def test_svg_counts_html_span_claims_in_foreign_object() -> None:
+    lowering = script.normalize_svg(
+        "<svg><foreignObject><div>Total "
+        '<span class="result" data-code="2">2</span></div></foreignObject></svg>'
+    )
+
+    assert lowering.ok
+    assert lowering.claims == 1
+    assert _statuses(lowering.html) == [Status.PASS]
+
+
+def test_svg_prefixed_code_element_round_trips() -> None:
+    source = (
+        '<svg xmlns:pd="https://ai4curation.io/provedown">'
+        "<metadata><pd:code>x = 1</pd:code></metadata>"
+        '<text class="result" data-code="1">1</text></svg>'
+    )
+
+    lowering = script.normalize_svg(source)
+
+    assert lowering.ok
+    assert "<pd:code>x = 1</pd:code>" in lowering.html
+
+
+def test_legacy_result_property_next_to_data_code_is_reported() -> None:
+    source = _drawio(
+        _object("c", label="code", provedown_code="x = 4")
+        + _object("r", label="Paid %result%", result="4", data_code="x")
+    )
+
+    lowering = script.drawio_to_html(source)
+
+    assert not lowering.ok
+    assert any("now goes in 'provedown-result'" in d for d in lowering.diagnostics)
+
+
+def test_main_removes_stale_output_when_input_is_unreadable(tmp_path: Path) -> None:
+    broken = tmp_path / "broken.drawio"
+    broken.write_text("<mxfile><diagram>", encoding="utf-8")
+    stale = tmp_path / "broken.drawio.provedown.html"
+    stale.write_text("<p>old</p>", encoding="utf-8")
+
+    assert script.main([str(broken)]) == 1
+    assert not stale.exists()
+
+
+def test_main_reports_unwritable_output(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    good = tmp_path / "good.drawio"
+    good.write_text(
+        _drawio(
+            _object("c", label="code", provedown_code="x = 4")
+            + _object("r", label="4", data_code="x")
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "missing-dir" / "out.html"
+
+    assert script.main([str(good), "-o", str(output)]) == 1
+    assert capsys.readouterr().err.startswith(f"error: {output}: ")
