@@ -920,3 +920,36 @@ def test_svg_claim_on_first_line_is_checked() -> None:
 
     assert lowering.ok
     assert lowering.claims == 1
+
+
+def test_svg_claim_dropped_on_first_line_cites_its_source_column() -> None:
+    lowering = script.normalize_svg(
+        '<svg><g class="provedown-ignore"><br></g>'
+        '<text class="result" data-code="1">1</text></svg>',
+        origin="o.svg",
+    )
+
+    assert lowering.diagnostics == (
+        "o.svg:1:42: verify would skip this claim (0 checked, 1 outside ignored "
+        f"regions); {DROPPED_CAUSE}",
+    )
+
+
+def test_drawio_label_claim_gained_by_stray_end_tag_names_the_cell() -> None:
+    label = (
+        '<span class="result" data-code="x">4</span> '
+        '<span class="provedown-ignore"></br>'
+        '<span class="result" data-code="x">99</span></span>'
+    )
+    source = _drawio(
+        _object("c", label="code", provedown_code="x = 4")
+        + f'<mxCell id="i" style="html=1;" value={quoteattr(label)}/>'
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    assert lowering.diagnostics == (
+        "t.drawio: page 'p' cell 'i' (label column 81): verify would check this "
+        "claim inside an ignored region (2 checked, 1 outside ignored regions); "
+        f"{GAINED_CAUSE}",
+    )

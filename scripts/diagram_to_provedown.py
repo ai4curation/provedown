@@ -327,6 +327,8 @@ def _claim_mismatch(
             "void element such as <br> inside or carrying provedown-ignore, or "
             "an ignored region left open, makes verify skip everything after it"
         )
+    # Only an end tag can make verify stop ignoring before the converter does;
+    # every void-element skew makes verify ignore more, not less.
     gained = checked[first_checked]
     ignored = next((r for r in records if r.ignored and r.code == gained), None)
     where = ignored.where if ignored else "(unknown position)"
