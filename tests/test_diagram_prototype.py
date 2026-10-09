@@ -982,7 +982,7 @@ def test_svg_every_dropped_claim_is_counted() -> None:
     )
 
     assert lowering.diagnostics == (
-        f"o.svg:3:1: verify would skip this claim and 2 later ones; {DROPPED_CAUSE}",
+        f"o.svg:3:1: verify would skip this claim and 2 more; {DROPPED_CAUSE}",
     )
 
 
@@ -1035,3 +1035,74 @@ def test_drawio_multiline_label_claims_match_verify() -> None:
 
     assert lowering.ok
     assert lowering.claims == 2
+
+
+def test_svg_evidence_dropped_by_verify_is_reported() -> None:
+    # The leak unwinds at the outer </g>, so the claim survives but the
+    # assertion is never run.
+    lowering = script.normalize_svg(
+        "<svg>\n"
+        "<metadata><code>x = 4</code></metadata>\n"
+        "<g>\n"
+        '<g class="provedown-ignore"><foreignObject><div>a<br>b</div>'
+        "</foreignObject></g>\n"
+        "<metadata><code>assert x == 99</code></metadata>\n"
+        "</g>\n"
+        '<text class="result" data-code="x">4</text>\n</svg>',
+        origin="o.svg",
+    )
+
+    assert lowering.diagnostics == (
+        f"o.svg:5:11: verify would skip this <code> block; {DROPPED_CAUSE}",
+    )
+
+
+def test_svg_ignored_evidence_run_by_verify_is_reported() -> None:
+    lowering = script.normalize_svg(
+        "<svg>\n"
+        "<metadata><code>x = 4</code></metadata>\n"
+        '<g class="provedown-ignore"></br>'
+        "<metadata><code>x = 5</code></metadata></g>\n"
+        '<text class="result" data-code="x">4</text>\n</svg>',
+        origin="o.svg",
+    )
+
+    assert lowering.diagnostics == (
+        "o.svg:3:44: verify would run this <code> block inside an ignored "
+        f"region; {GAINED_CAUSE}",
+    )
+
+
+def test_svg_one_more_dropped_element_is_counted() -> None:
+    lowering = script.normalize_svg(
+        '<svg>\n<br class="provedown-ignore">\n'
+        '<text class="result" data-code="1">1</text>\n'
+        '<text class="result" data-code="2">2</text>\n</svg>',
+        origin="o.svg",
+    )
+
+    assert lowering.diagnostics == (
+        f"o.svg:3:1: verify would skip this claim and 1 more; {DROPPED_CAUSE}",
+    )
+
+
+def test_drawio_evidence_label_position_is_in_the_authored_label() -> None:
+    # The <br> becomes a newline in the output, but the message cites the
+    # label as written: one line, so a column only.
+    label = (
+        "<pre><code>x = 4</code></pre><br>"
+        '<div class="provedown-ignore"></br>'
+        '<span class="result" data-code="x">4</span></div>'
+    )
+    source = _drawio(
+        f'<mxCell id="ev" style="html=1;" value={quoteattr(label)}/>'
+        + _object("r", label="4", data_code="x")
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    column = label.index('<span class="result"') + 1
+    assert lowering.diagnostics == (
+        f"t.drawio: page 'p' cell 'ev' (label column {column}): verify would "
+        f"check this claim inside an ignored region; {GAINED_CAUSE}",
+    )
