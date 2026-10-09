@@ -801,9 +801,9 @@ def test_svg_void_element_in_ignored_region_is_reported_when_verify_drops_claims
     assert not lowering.ok
     assert lowering.claims == 1
     assert lowering.diagnostics == (
-        "o.svg:4:1: verify would check only 1 of 2 claims; a void element such "
-        "as <br> inside or carrying provedown-ignore makes verify skip "
-        "everything after it",
+        "o.svg:4:1: verify would check only 1 of 2 claims; most likely a void "
+        "element such as <br> inside or carrying provedown-ignore, or an "
+        "ignored region left open, makes verify skip everything after it",
     )
 
 
@@ -823,9 +823,9 @@ def test_svg_every_claim_dropped_by_verify_names_the_cause(ignored: str) -> None
 
     assert lowering.claims == 0
     assert lowering.diagnostics == (
-        "o.svg:3:1: verify would check only 0 of 1 claims; a void element such "
-        "as <br> inside or carrying provedown-ignore makes verify skip "
-        "everything after it",
+        "o.svg:3:1: verify would check only 0 of 1 claims; most likely a void "
+        "element such as <br> inside or carrying provedown-ignore, or an "
+        "ignored region left open, makes verify skip everything after it",
     )
 
 
@@ -843,7 +843,25 @@ def test_drawio_label_ignored_region_dropping_claims_names_the_cause() -> None:
 
     assert lowering.claims == 0
     assert lowering.diagnostics == (
-        "t.drawio: verify would check only 0 of 1 claims; a void element such "
-        "as <br> inside or carrying provedown-ignore makes verify skip "
-        "everything after it",
+        "t.drawio: verify would check only 0 of 1 claims; most likely a void "
+        "element such as <br> inside or carrying provedown-ignore, or an "
+        "ignored region left open, makes verify skip everything after it",
+    )
+
+
+def test_svg_stray_void_end_tag_in_ignored_region_is_reported() -> None:
+    # A stray </br> makes the core parser stop ignoring early, so it would
+    # check a claim the author put inside an ignored region.
+    lowering = script.normalize_svg(
+        '<svg>\n<text class="result" data-code="1">1</text>\n'
+        '<g class="provedown-ignore"></br>'
+        '<text class="result" data-code="2">99</text></g>\n</svg>',
+        origin="o.svg",
+    )
+
+    assert not lowering.ok
+    assert lowering.diagnostics == (
+        "o.svg:3:34: verify would check 2 claims, but only 1 are outside "
+        "ignored regions; most likely a stray end tag such as </br> inside a "
+        "provedown-ignore region makes verify stop ignoring early",
     )

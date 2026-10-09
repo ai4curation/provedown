@@ -183,10 +183,12 @@ In rough priority order:
    `provedown-ignore` region leaves the parser ignoring everything after the
    region, and a void element that itself carries the marker (such as
    `<br class="provedown-ignore">`) starts a region that never ends. Either
-   way, later claims are silently skipped. This affects ordinary
+   way, later claims are silently skipped. Conversely, a stray `</br>` inside
+   a region ends it early, so ignored claims get checked. This affects ordinary
    Markdown and HTML documents, not only diagrams. The fix is to skip
-   `HTML_VOID_ELEMENTS` when counting and treat a void element carrying the
-   marker as ignoring only itself, as the prototype's `_IgnoredRegions` does.
+   `HTML_VOID_ELEMENTS` (start and end tags) when counting and treat a void
+   element carrying the marker as ignoring only itself, as the prototype's
+   `_IgnoredRegions` does, with tests in `tests/test_parser.py`.
 6. **Add rendering later.** Evidence disclosure on a diagram could be a
    draw.io tooltip or link on claim shapes, which draw.io already supports
    through properties.
@@ -229,11 +231,12 @@ writes the HTML but exits non-zero:
   an SVG). Ignored regions are skipped, as `verify` skips them. Labels are
   parsed as HTML, so every spelling `verify` accepts (such as unquoted
   `class=result`) works, and spellings it would ignore are reported;
-- fewer claims seen by `verify` than the converter found outside ignored
-  regions, including none at all. Today this catches the core parser bug in
-  proposal 5 above, where a `<br>` inside or carrying `provedown-ignore`
-  makes `verify` skip later claims. For SVG, the message gives the position
-  of the first claim `verify` would skip;
+- a different number of claims seen by `verify` than the converter found
+  outside ignored regions, including none at all. Today this catches the
+  core parser bug in proposal 5 above: a `<br>` inside or carrying
+  `provedown-ignore` makes `verify` skip later claims, and a stray `</br>`
+  inside a region makes it check claims the author ignored. For SVG, the
+  message gives the position of the first claim the two disagree on;
 - an SVG end tag that doesn't match its start tag, or has no start tag;
 - anything the Provedown parser would reject in the generated HTML, since
   `verify` refuses to run such a document. A tag nested inside `<code>` is

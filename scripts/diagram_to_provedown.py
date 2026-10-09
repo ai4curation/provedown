@@ -283,41 +283,55 @@ def _lowering(
             diagnostic += match["message"]
         if diagnostic not in diagnostics:
             diagnostics.append(diagnostic)
-    # With parser errors, missing claims are a consequence, not the cause.
-    if claims < expected_claims and not parser_diagnostics:
-        # The converter and verify disagree on which claims exist. Today this
-        # happens when a void element such as <br> sits inside, or carries,
-        # provedown-ignore: verify then skips everything after it. Checked
-        # first, so a diagram whose every claim was dropped gets this cause
-        # rather than "no claims found". (Only this direction is checked: the
-        # converter and verify share _is_result, so it cannot undercount.)
+    # With parser errors, a claim-count mismatch is a consequence, not the
+    # cause. Checked before "no claims found", so a diagram whose every claim
+    # was dropped gets this explanation instead.
+    if claims != expected_claims and not parser_diagnostics:
+        # The converter and verify disagree on which claims exist, because
+        # they disagree on where an ignored region ends.
         where = origin
-        missing = _first_missing_claim(parsed.events, expected_positions)
-        if missing is not None:
-            where = f"{origin}:{missing[0]}:{missing[1]}"
-        diagnostics.append(
-            f"{where}: verify would check only {claims} of {expected_claims} "
-            "claims; a void element such as <br> inside or carrying "
-            "provedown-ignore makes verify skip everything after it"
-        )
+        position = _first_unmatched_claim(parsed.events, expected_positions)
+        if position is not None:
+            where = f"{origin}:{position[0]}:{position[1]}"
+        if claims < expected_claims:
+            symptom = f"verify would check only {claims} of {expected_claims} claims"
+            cause = (
+                "a void element such as <br> inside or carrying "
+                "provedown-ignore, or an ignored region left open, makes "
+                "verify skip everything after it"
+            )
+        else:
+            symptom = (
+                f"verify would check {claims} claims, but only {expected_claims} "
+                "are outside ignored regions"
+            )
+            cause = (
+                "a stray end tag such as </br> inside a provedown-ignore region "
+                "makes verify stop ignoring early"
+            )
+        diagnostics.append(f"{where}: {symptom}; most likely {cause}")
     elif claims == 0 and not parser_diagnostics:
         diagnostics.append(f"{origin}: no claims found")
     return Lowering(html=html, claims=claims, diagnostics=tuple(diagnostics))
 
 
-def _first_missing_claim(
+def _first_unmatched_claim(
     events: list[DocumentEvent], expected: list[tuple[int, int]] | None
 ) -> tuple[int, int] | None:
-    """Return the first expected claim position the parser did not report."""
+    """Return the earliest claim position only one side found.
 
-    if not expected:
+    That is a claim the converter expects but the parser skipped, or one the
+    parser checks inside a region the converter treats as ignored.
+    """
+
+    if expected is None:
         return None
     seen = {
         (event.location.line, event.location.column)
         for event in events
         if isinstance(event, ResultAssertion)
     }
-    return next((position for position in expected if position not in seen), None)
+    return min(seen.symmetric_difference(expected), default=None)
 
 
 def _without_unclosed_code_cascade(diagnostics: list[str]) -> list[str]:
