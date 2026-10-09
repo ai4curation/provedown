@@ -643,7 +643,7 @@ class _LabelScanner(HTMLParser):
             self._classify(tag, attrs)
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if self._regions.ignoring or _is_ignored_region(attrs):
+        if self._regions.self_closing(attrs):
             self._record_ignored_claim(tag, attrs)
         else:
             self._classify(tag, attrs)
@@ -704,6 +704,14 @@ class _IgnoredRegions:
             self._ignored_from = self._depth
         self._depth += 1
         return self.ignoring
+
+    def self_closing(self, attrs: list[tuple[str, str | None]]) -> bool:
+        """Note a self-closing element; return whether it is ignored.
+
+        It opens and closes at once, so it never changes the depth.
+        """
+
+        return self.ignoring or _is_ignored_region(attrs)
 
     def leave(self, tag: str) -> None:
         if tag in HTML_VOID_ELEMENTS or self._depth == 0:
@@ -803,7 +811,7 @@ class _SvgResultRewriter(HTMLParser):
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         raw = self.get_starttag_text() or ""
-        if self._regions.ignoring or _is_ignored_region(attrs):
+        if self._regions.self_closing(attrs):
             self._record_claim(tag, attrs, ignored=True)
         else:
             self._check_markup(tag, attrs, raw)

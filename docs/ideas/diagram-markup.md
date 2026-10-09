@@ -241,8 +241,8 @@ writes the HTML but exits non-zero:
   claims, and a stray `</br>` inside a region makes it check claims the
   author ignored. Skipped and wrongly checked claims are reported
   separately, each naming the first such claim by its source line and
-  column in an SVG, or by its page, cell and label position in draw.io,
-  with a count of any later ones;
+  column in an SVG, or in draw.io by its page and cell, plus its label
+  position when the claim is in a label, with a count of any later ones;
 - an SVG end tag that doesn't match its start tag, or has no start tag;
 - anything the Provedown parser would reject in the generated HTML, since
   `verify` refuses to run such a document. A tag nested inside `<code>` is
