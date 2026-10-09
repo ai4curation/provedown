@@ -174,7 +174,9 @@ In rough priority order:
    This also needs parser diagnostics to be structured records (message,
    `SourceLocation`, severity) rendered at report time. Today they are strings
    with the location already formatted in, so the prototype has to parse
-   `<string>:LINE:COL` back out of each message to point it at a cell.
+   `<string>:LINE:COL` back out of each message to point it at a cell. Each
+   record also needs a stable diagnostic code, so an adapter can tell a cause
+   (an unclosed `<code>`) from its cascade without matching message text.
 5. **Add rendering later.** Evidence disclosure on a diagram could be a
    draw.io tooltip or link on claim shapes, which draw.io already supports
    through properties.
@@ -207,9 +209,10 @@ writes the HTML but exits non-zero:
 - a label with Provedown markup on a shape whose style lacks `html=1`, which
   draw.io would display as literal text;
 - an SVG end tag that doesn't match its start tag, or has no start tag;
-- anything the Provedown parser would reject in the generated HTML, such as an
-  unclosed `<code>` or a tag nested inside `<code>`, since `verify` refuses to
-  run such a document.
+- anything the Provedown parser would reject in the generated HTML, since
+  `verify` refuses to run such a document. A tag nested inside `<code>` is
+  reported where it occurs. An unclosed `<code>` is reported in place of the
+  later tags it swallows.
 
 A misspelled property such as `datacode` can't be told apart from unrelated
 shape data, so it's caught only when the whole diagram ends up with no claims.

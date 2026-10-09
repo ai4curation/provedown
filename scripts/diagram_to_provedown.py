@@ -45,7 +45,11 @@ from provedown.parser import parse_document
 
 GENERATED_HEADER = "<!-- generated from"
 # "<string>:LINE:COL: message", as rendered by SourceLocation for path=None.
-PARSER_LOCATION = re.compile(r"<string>:(?P<line>\d+):\d+: (?P<message>.*)", re.DOTALL)
+PARSER_LOCATION = re.compile(
+    r"<string>:(?P<line>\d+):(?P<column>\d+): (?P<message>.*)", re.DOTALL
+)
+# The line number in any rendered parser diagnostic, "<path>:LINE:COL: ...".
+DIAGNOSTIC_LINE = re.compile(r".*?:(?P<line>\d+):\d+: ", re.DOTALL)
 # Parser messages for an unclosed <code> and for each tag it swallowed.
 UNCLOSED_CODE = "unclosed <code> block"
 NESTED_TAG = "nested HTML tag inside <code>"
@@ -227,15 +231,12 @@ def _lowering(
     diagnostics = list(diagnostics)
     parsed = parse_document(html, path=Path(origin) if keeps_source_lines else None)
     claims = sum(isinstance(event, ResultAssertion) for event in parsed.events)
-    parser_diagnostics = parsed.diagnostics
-    if any(UNCLOSED_CODE in d for d in parser_diagnostics):
-        # An unclosed <code> swallows every later tag, one error per tag, in
-        # whichever cells follow. Report the cause, not that cascade.
-        parser_diagnostics = [d for d in parser_diagnostics if NESTED_TAG not in d]
+    parser_diagnostics = _without_unclosed_code_cascade(parsed.diagnostics)
     for diagnostic in parser_diagnostics:
         match = None if keeps_source_lines else PARSER_LOCATION.match(diagnostic)
         if match:
-            diagnostic = f"{_drawio_location(html, int(match['line']), origin)}: "
+            line, column = int(match["line"]), int(match["column"])
+            diagnostic = f"{_drawio_location(html, line, origin, column)}: "
             diagnostic += match["message"]
         if diagnostic not in diagnostics:
             diagnostics.append(diagnostic)
@@ -245,7 +246,33 @@ def _lowering(
     return Lowering(html=html, claims=claims, diagnostics=tuple(diagnostics))
 
 
-def _drawio_location(html: str, line: int, origin: str) -> str:
+def _without_unclosed_code_cascade(diagnostics: list[str]) -> list[str]:
+    """Drop the nested-tag errors an unclosed ``<code>`` caused.
+
+    An unclosed ``<code>`` swallows every later tag, with one error per tag in
+    whichever cells follow. Only nested-tag errors at or after the line where
+    that block opened are part of the cascade; earlier ones come from another,
+    properly closed block and are kept. The parser reports at most one
+    unclosed block, since it tracks a single open ``<code>``.
+    """
+
+    unclosed_lines = [_diagnostic_line(d) for d in diagnostics if UNCLOSED_CODE in d]
+    if not unclosed_lines or unclosed_lines[0] is None:
+        return list(diagnostics)
+    opened = unclosed_lines[0]
+    return [
+        d
+        for d in diagnostics
+        if NESTED_TAG not in d or (_diagnostic_line(d) or 0) < opened
+    ]
+
+
+def _diagnostic_line(diagnostic: str) -> int | None:
+    match = DIAGNOSTIC_LINE.match(diagnostic)
+    return int(match["line"]) if match else None
+
+
+def _drawio_location(html: str, line: int, origin: str, column: int = 1) -> str:
     """Describe ``line`` of generated draw.io HTML by page, cell and offset."""
 
     lines = html.splitlines()[:line]
@@ -253,8 +280,11 @@ def _drawio_location(html: str, line: int, origin: str) -> str:
         match = CELL_COMMENT.fullmatch(lines[index].strip())
         if match:
             offset = line - (index + 1)
-            return f"{unescape(match['where'])} (line {offset} of its block)"
-    return f"{origin} (generated HTML line {line})"
+            return (
+                f"{unescape(match['where'])} "
+                f"(line {offset} of its block, column {column})"
+            )
+    return f"{origin} (generated HTML line {line}, column {column})"
 
 
 def _drawio_cells(source: str) -> Iterator[Cell]:
