@@ -230,17 +230,18 @@ writes the HTML but exits non-zero:
   (anything but `<span>` in a label, or `<text>`, `<tspan>` and `<span>` in
   an SVG). A `<code>` carrying either is still evidence, which an SVG
   passes through for `verify` to run, so that is reported too. Ignored
-  regions are skipped, as `verify` skips them. Labels are
-  parsed as HTML, so every spelling `verify` accepts (such as unquoted
-  `class=result`) works, and spellings it would ignore are reported;
+  regions are skipped, as `verify` skips them. Labels are parsed as HTML,
+  so every spelling `verify` accepts (such as unquoted `class=result`)
+  works, and spellings it would ignore are reported;
 - claims `verify` would check, or evidence it would run, that differ from
   the ones the converter found outside ignored regions, including no claims
   at all. Evidence counts as much as claims: a skipped `<code>` element
   takes its assertions with it, and one run from an ignored region
-  executes code the author excluded. Elements are matched by the position of their start
-  tag in the generated HTML, which is unique per element (a `data-code` is
-  not: a legend often shows the same expression it illustrates), so one
-  gained in one place cannot hide one lost in another. Today this catches
+  executes code the author excluded. Elements are matched by the position
+  of their start tag in the generated HTML, which is unique per element (a
+  `data-code` is not: a legend often shows the same expression it
+  illustrates), so one gained in one place cannot hide one lost in
+  another. Today this catches
   the core parser bug in proposal 5 above: a `<br>` inside or carrying
   `provedown-ignore` makes `verify` skip later markup, and a stray `</br>`
   inside a region makes it read markup the author ignored. Skipped and
@@ -248,9 +249,13 @@ writes the HTML but exits non-zero:
   the first such element by its source line and column in an SVG, or in
   draw.io by its page and cell, plus its position in the label as written
   when it is in a label, with a count of any more;
-- a line of the output starting with ```` ``` ```` or `~~~` (from SVG text
-  or a `provedown-code` value), which `verify` reads as a Markdown code
-  fence and skips up to the matching fence;
+- a line of the output starting with ```` ``` ```` or `~~~` (from SVG
+  text, a `provedown-code` value, or an evidence label once its `<br>`s
+  become line breaks), which `verify` reads as a Markdown code fence,
+  skipping every line up to the matching fence or the end. A fence wholly
+  inside one ignored region, such as a legend showing a fenced example,
+  hides only what `verify` skips anyway, so it is allowed. Markup before
+  the first other fence is still compared;
 - an SVG end tag that doesn't match its start tag, or has no start tag;
 - anything the Provedown parser would reject in the generated HTML, since
   `verify` refuses to run such a document. A tag nested inside `<code>` is

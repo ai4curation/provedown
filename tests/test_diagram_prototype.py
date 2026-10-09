@@ -181,6 +181,10 @@ def test_html_label_evidence_is_emitted_before_claims() -> None:
     assert _statuses(lowering.html) == [Status.PASS, Status.PASS]
 
 
+# How draw.io reports label markup verify would not check.
+LEFT_OUT = ", which verify would not check, so the shape is left out"
+
+
 @pytest.mark.parametrize(
     ("cells", "message"),
     [
@@ -288,7 +292,7 @@ def test_label_data_code_without_result_class_is_reported(span: str) -> None:
 
     assert lowering.diagnostics == (
         "t.drawio: page 'p' cell 'bad': data-code on <span> without "
-        'class="result" at label column 1, which verify would not check',
+        f'class="result" at label column 1{LEFT_OUT}',
     )
 
 
@@ -309,7 +313,7 @@ def test_label_result_class_on_unchecked_tag_is_reported(label: str) -> None:
 
     assert lowering.diagnostics == (
         "t.drawio: page 'p' cell 'bad': class=\"result\" on <b> (only checked on "
-        "<span>) at label column 1, which verify would not check",
+        f"<span>) at label column 1{LEFT_OUT}",
     )
 
 
@@ -780,7 +784,7 @@ def test_label_unchecked_markup_is_reported_per_element() -> None:
     # Two separate elements, so two errors, each with its own position.
     assert lowering.diagnostics == tuple(
         "<diagram>: page 'p' cell 'bad': class=\"result\" on <b> (only checked "
-        f"on <span>) at label column {column}, which verify would not check"
+        f"on <span>) at label column {column}{LEFT_OUT}"
         for column in (1, 29)
     )
 
@@ -1183,7 +1187,7 @@ def test_drawio_claim_markup_on_code_label_is_not_said_to_run() -> None:
 
     assert lowering.diagnostics == (
         "t.drawio: page 'p' cell 'ev': class=\"result\" on <code> (only checked "
-        "on <span>) at label column 1, which verify would not check",
+        f"on <span>) at label column 1{LEFT_OUT}",
     )
 
 
@@ -1206,8 +1210,9 @@ def test_unchecked_label_markup_lists_cleanly_beside_a_property() -> None:
 
 FENCE_CAUSE = (
     "a line starting with ``` or ~~~ reads to verify as a Markdown code "
-    "fence, so it skips everything up to the matching fence; start the line "
-    "with something else"
+    "fence, so it skips every line up to the matching fence, or to the end if "
+    "there is none; start the line with something else, or put the example "
+    "in a provedown-ignore region"
 )
 
 
@@ -1220,7 +1225,7 @@ def test_svg_fence_shaped_line_is_named_as_the_cause() -> None:
     )
 
     # The fence explains the skipped claim, so no void-element guess follows.
-    assert lowering.diagnostics == (f"o.svg:4: {FENCE_CAUSE}",)
+    assert lowering.diagnostics == (f"o.svg:4:1: {FENCE_CAUSE}",)
 
 
 def test_drawio_fence_in_code_property_is_named_as_the_cause() -> None:
@@ -1252,3 +1257,47 @@ def test_markup_records_sharing_a_position_are_a_converter_bug() -> None:
     assert script._markup_mismatches(
         [], [record, record], "o.svg", keeps_source_lines=True
     ) == ["o.svg: two markup elements share a position; this is a bug in the converter"]
+
+
+def test_svg_fence_inside_an_ignored_legend_is_allowed() -> None:
+    lowering = script.normalize_svg(
+        "<svg>\n<metadata><code>paid = 4</code></metadata>\n"
+        '<g class="provedown-ignore">\n<text>Mark the number like this:\n'
+        '```\n<tspan class="result">4</tspan>\n```\n</text>\n</g>\n'
+        '<text class="result" data-code="paid">4</text>\n</svg>',
+        origin="o.svg",
+    )
+
+    assert lowering.ok
+    assert lowering.claims == 1
+
+
+def test_svg_claim_dropped_before_a_fence_is_still_reported() -> None:
+    lowering = script.normalize_svg(
+        "<svg>\n<metadata><code>paid = 4</code></metadata>\n"
+        '<g class="provedown-ignore"><foreignObject><div>a<br>b</div>'
+        "</foreignObject></g>\n"
+        '<text class="result" data-code="paid">4</text>\n'
+        "<text>\n```\n</text>\n</svg>",
+        origin="o.svg",
+    )
+
+    assert lowering.diagnostics == (
+        f"o.svg:6:1: {FENCE_CAUSE}",
+        f"o.svg:4:1: verify would skip this claim; {DROPPED_CAUSE}",
+    )
+
+
+def test_drawio_closed_fence_inside_code_property_is_caught() -> None:
+    # The fence hides "y = 5" from verify with no parser error and no lost
+    # markup, so this check is the only thing that catches it.
+    source = _drawio(
+        _object("c", label="code", provedown_code="x = 4\n```\ny = 5\n```\nz = x")
+        + _object("r", label="4", data_code="z")
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    assert lowering.diagnostics == (
+        f"t.drawio: page 'p' cell 'c' (line 3 of its block, column 1): {FENCE_CAUSE}",
+    )

@@ -46,6 +46,8 @@ from provedown.parser import parse_document
 
 GENERATED_HEADER = "<!-- generated from"
 # "<string>:LINE:COL: message", as rendered by SourceLocation for path=None.
+# A line the core parser treats as a Markdown code fence (see _fences).
+FENCE = re.compile(r"\s*(`{3,}|~{3,})")
 PARSER_LOCATION = re.compile(
     r"<string>:(?P<line>\d+):(?P<column>\d+): (?P<message>.*)", re.DOTALL
 )
@@ -204,7 +206,8 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
             elif markup.unchecked:
                 # The shape is left out, so verify reads none of it.
                 diagnostics.extend(
-                    f"{where}: {problem}, which verify would not check"
+                    f"{where}: {problem}, which verify would not check, so "
+                    "the shape is left out"
                     for problem in markup.unchecked
                 )
             elif markup.code and markup.result:
@@ -226,20 +229,30 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
     parts = [header]
     line = header.count("\n") + 1
     records: list[MarkupRecord] = []
+    spans: list[Span] = []
     for block in [*code, *claims]:
         parts.append(block.text)
         # Each block starts two lines down, after the blank separator line.
         line += 2
+
+        def place(position: Position, start: int = line) -> Position:
+            if position == END:
+                return END
+            return start + position[0] - 1, position[1]
+
         records += [
-            replace(
-                record, position=(line + record.position[0] - 1, record.position[1])
-            )
-            for record in block.records
+            replace(record, position=place(record.position)) for record in block.records
         ]
+        spans += [(place(a), place(b)) for a, b in block.ignored_spans]
         line += block.text.count("\n")
     html = "\n\n".join(parts) + "\n"
     return _lowering(
-        html, origin, diagnostics, keeps_source_lines=False, records=records
+        html,
+        origin,
+        diagnostics,
+        keeps_source_lines=False,
+        records=records,
+        ignored_spans=spans,
     )
 
 
@@ -247,12 +260,13 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
 class _Block:
     """A piece of generated HTML and the markup records for it.
 
-    Record positions are relative to ``text``; ``drawio_to_html`` shifts them
-    to the whole document's.
+    Record and span positions are relative to ``text``; ``drawio_to_html``
+    shifts them to the whole document's.
     """
 
     text: str
     records: list[MarkupRecord]
+    ignored_spans: list[Span]
 
 
 def _property_block(
@@ -267,10 +281,16 @@ def _property_block(
             f"{where}: generated {_join(markup.unchecked)}; {CONVERTER_BUG}"
         )
     records = [
-        MarkupRecord(element.kind, where, element.ignored, _shift(prefix, element))
+        MarkupRecord(
+            element.kind,
+            where,
+            element.ignored,
+            _shift(prefix, (element.line, element.column)),
+        )
         for element in markup.elements
     ]
-    return _Block(prefix + fragment, records)
+    spans = _shift_spans(prefix, markup.ignored_spans)
+    return _Block(prefix + fragment, records, spans)
 
 
 def _label_block(
@@ -290,7 +310,8 @@ def _label_block(
 
     prefix = f"{comment}\n{LABEL_WRAPPER}"
     written = markup.elements
-    placed = _label_markup(emitted).elements if emitted != markup.label else written
+    scan = _label_markup(emitted) if emitted != markup.label else markup
+    placed = scan.elements
     if [(e.kind, e.ignored) for e in written] != [(e.kind, e.ignored) for e in placed]:
         diagnostics.append(
             f"{where}: converting line breaks changed the label's markup; "
@@ -302,11 +323,12 @@ def _label_block(
             element.kind,
             f"{where} ({_label_position(authored)})",
             element.ignored,
-            _shift(prefix, element),
+            _shift(prefix, (element.line, element.column)),
         )
         for authored, element in zip(written, placed, strict=True)
     ]
-    return _Block(f"{prefix}{emitted}</div>", records)
+    spans = _shift_spans(prefix, scan.ignored_spans)
+    return _Block(f"{prefix}{emitted}</div>", records, spans)
 
 
 def _label_position(element: LabelElement) -> str:
@@ -315,13 +337,19 @@ def _label_position(element: LabelElement) -> str:
     return f"label column {element.column}"
 
 
-def _shift(prefix: str, element: LabelElement) -> tuple[int, int]:
-    """Position of an element of a fragment that follows ``prefix``."""
+def _shift(prefix: str, position: Position) -> Position:
+    """Where a position in a fragment lands once ``prefix`` precedes it."""
 
+    if position == END:
+        return END
     line, column = _end_position(prefix)
-    if element.line == 1:
-        return line, column + element.column - 1
-    return line + element.line - 1, element.column
+    if position[0] == 1:
+        return line, column + position[1] - 1
+    return line + position[0] - 1, position[1]
+
+
+def _shift_spans(prefix: str, spans: list[Span]) -> list[Span]:
+    return [(_shift(prefix, start), _shift(prefix, end)) for start, end in spans]
 
 
 def _end_position(text: str) -> tuple[int, int]:
@@ -339,12 +367,14 @@ def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
     rewriter = _SvgResultRewriter(origin, source_column, header)
     rewriter.feed(source)
     rewriter.close()
+    rewriter.regions.close()
     return _lowering(
         rewriter.output(),
         origin,
         rewriter.diagnostics,
         keeps_source_lines=True,
         records=rewriter.records,
+        ignored_spans=rewriter.regions.spans,
     )
 
 
@@ -384,6 +414,7 @@ def _lowering(
     *,
     keeps_source_lines: bool,
     records: list[MarkupRecord],
+    ignored_spans: list[Span],
 ) -> Lowering:
     """Parse the output the way verify will.
 
@@ -395,17 +426,30 @@ def _lowering(
     """
 
     diagnostics = list(diagnostics)
-    fences = _fence_lines(html)
-    for line, column in fences:
+    # A fence wholly inside one ignored region hides only what verify skips
+    # anyway; if the region ends inside it instead, the region leaks and the
+    # mismatch check reports that.
+    fences = [
+        (opener, closer)
+        for opener, closer in _fences(html)
+        if not any(
+            start < opener and (closer < end or end == END)
+            for start, end in ignored_spans
+        )
+    ]
+    for (line, column), _ in fences:
+        # A fence line holds no tags before the fence, so on an SVG's own
+        # lines the output column is the source column.
         where = (
-            f"{origin}:{line}"
+            f"{origin}:{line}:{column}"
             if keeps_source_lines
             else _drawio_location(html, line, origin, column)
         )
         diagnostics.append(
             f"{where}: a line starting with ``` or ~~~ reads to verify as a "
-            "Markdown code fence, so it skips everything up to the matching "
-            "fence; start the line with something else"
+            "Markdown code fence, so it skips every line up to the matching "
+            "fence, or to the end if there is none; start the line with "
+            "something else, or put the example in a provedown-ignore region"
         )
     parsed = parse_document(html, path=Path(origin) if keeps_source_lines else None)
     claims = sum(isinstance(event, ResultAssertion) for event in parsed.events)
@@ -421,38 +465,46 @@ def _lowering(
     # With parser errors, a claim mismatch is a consequence, not the cause.
     # Checked before "no claims found", so a diagram whose every claim was
     # dropped gets this explanation instead.
+    # A fence masks only the lines after it, so markup up to the first one
+    # is still compared; past it, the fence is the explanation.
     mismatches = _markup_mismatches(
-        parsed.events, records, origin, keeps_source_lines=keeps_source_lines
+        parsed.events,
+        records,
+        origin,
+        keeps_source_lines=keeps_source_lines,
+        until_line=fences[0][0][0] if fences else None,
     )
-    # A fence explains any markup verify skips, so it stands alone.
-    if mismatches and not parser_diagnostics and not fences:
+    if mismatches and not parser_diagnostics:
         diagnostics += mismatches
     elif claims == 0 and not parser_diagnostics and not fences:
         diagnostics.append(f"{origin}: no claims found")
     return Lowering(html=html, claims=claims, diagnostics=tuple(diagnostics))
 
 
-def _fence_lines(html: str) -> list[tuple[int, int]]:
-    """Lines that open a Markdown code fence, as the core parser sees them.
+def _fences(html: str) -> list[Span]:
+    """Markdown code fences in ``html``, as the core parser sees them.
 
-    ``parse_document`` blanks fenced lines before parsing HTML, so markup in
-    them is never read. Mirrors its rule: three or more backticks or tildes
-    after leading whitespace, closed by at least as many of the same.
+    ``parse_document`` blanks the lines between a fence and its closer (or
+    the end) before parsing HTML, so markup there is never read. Mirrors its
+    rule: three or more backticks or tildes after leading whitespace, closed
+    by at least as many of the same. Returns each opener and closer.
     """
 
-    openers = []
-    fence: tuple[str, int] | None = None
+    fences: list[Span] = []
+    opener: tuple[Position, str, int] | None = None
     for number, text in enumerate(html.splitlines(), 1):
-        match = re.match(r"\s*(`{3,}|~{3,})", text)
+        match = FENCE.match(text)
         if not match:
             continue
-        marker = match[1]
-        if fence is None:
-            fence = (marker[0], len(marker))
-            openers.append((number, match.start(1) + 1))
-        elif marker[0] == fence[0] and len(marker) >= fence[1]:
-            fence = None
-    return openers
+        marker, position = match[1], (number, match.start(1) + 1)
+        if opener is None:
+            opener = (position, marker[0], len(marker))
+        elif marker[0] == opener[1] and len(marker) >= opener[2]:
+            fences.append((opener[0], position))
+            opener = None
+    if opener is not None:
+        fences.append((opener[0], END))
+    return fences
 
 
 def _markup_mismatches(
@@ -461,6 +513,7 @@ def _markup_mismatches(
     origin: str,
     *,
     keeps_source_lines: bool,
+    until_line: int | None = None,
 ) -> list[str]:
     """Describe where verify and the converter disagree on the markup.
 
@@ -473,6 +526,10 @@ def _markup_mismatches(
     draw.io, first in the generated document), and how many more there are.
     """
 
+    if until_line is not None:
+        # Only lines after a fence are masked; it explains everything there.
+        records = [record for record in records if record.position[0] <= until_line]
+        events = [event for event in events if event.location.line <= until_line]
     known = {record.position for record in records}
     if len(known) != len(records):
         # Each element starts at its own position; matching depends on it.
@@ -497,19 +554,25 @@ def _markup_mismatches(
         for (line, column), _ in sorted(seen - keys)
     ]
     # Each message is placed by its first element, in record order: source
-    # order for SVG, generated order (evidence first) for draw.io.
-    order = {id(record): index for index, record in enumerate(records)}
+    # order for SVG, generated order (evidence first) for draw.io. Converter
+    # bugs, which have no record, come first.
     placed: list[tuple[int, str]] = []
     kinds: tuple[MarkupKind, ...] = ("evidence", "claim")
     for kind in kinds:
-        of_kind = [record for record in records if record.kind == kind]
-        lost = [r for r in of_kind if not r.ignored and (r.position, kind) not in seen]
-        gained = [r for r in of_kind if r.ignored and (r.position, kind) in seen]
+        of_kind = [(i, r) for i, r in enumerate(records) if r.kind == kind]
+        lost = [
+            (i, r)
+            for i, r in of_kind
+            if not r.ignored and (r.position, kind) not in seen
+        ]
+        gained = [
+            (i, r) for i, r in of_kind if r.ignored and (r.position, kind) in seen
+        ]
         if lost:
             placed.append(
                 (
-                    order[id(lost[0])],
-                    f"{lost[0].where}: verify would skip this {_NOUNS[kind]}"
+                    lost[0][0],
+                    f"{lost[0][1].where}: verify would skip this {_NOUNS[kind]}"
                     + _and_more(len(lost) - 1)
                     + "; most likely a void element such as <br> inside or "
                     "carrying provedown-ignore, or an ignored region left open, "
@@ -521,8 +584,8 @@ def _markup_mismatches(
             # converter does; every void-element skew makes it ignore more.
             placed.append(
                 (
-                    order[id(gained[0])],
-                    f"{gained[0].where}: verify would {_VERBS[kind]} this "
+                    gained[0][0],
+                    f"{gained[0][1].where}: verify would {_VERBS[kind]} this "
                     f"{_NOUNS[kind]} inside an ignored region"
                     + _and_more(len(gained) - 1)
                     + "; most likely an end tag with no matching start tag, such "
@@ -718,6 +781,8 @@ class LabelMarkup:
     # <code> and class="result" elements, in order; only those outside
     # ignored regions are checked.
     elements: list[LabelElement] = field(default_factory=list)
+    # Ignored regions, from start tag to closing end tag, in label positions.
+    ignored_spans: list[Span] = field(default_factory=list)
     # Elements verify would not check: data-code without class="result", or
     # class="result" on a tag other than <span>.
     unchecked: list[str] = field(default_factory=list)
@@ -773,16 +838,25 @@ class _LabelScanner(HTMLParser):
     def __init__(self, label: str) -> None:
         super().__init__(convert_charrefs=True)
         self.markup = LabelMarkup(label=label)
-        self._regions = _IgnoredRegions()
+        self.regions = _IgnoredRegions(self._position)
+
+    def _position(self) -> tuple[int, int]:
+        line, column = self.getpos()
+        return line, column + 1
+
+    def close(self) -> None:
+        super().close()
+        self.regions.close()
+        self.markup.ignored_spans = self.regions.spans
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if self._regions.enter(tag, attrs):
+        if self.regions.enter(tag, attrs):
             self._record(tag, attrs, ignored=True)
         else:
             self._classify(tag, attrs)
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if self._regions.self_closing(attrs):
+        if self.regions.self_closing(attrs):
             self._record(tag, attrs, ignored=True)
         else:
             self._classify(tag, attrs)
@@ -798,7 +872,7 @@ class _LabelScanner(HTMLParser):
             self.markup.elements.append(LabelElement(kind, line, column + 1, ignored))
 
     def handle_endtag(self, tag: str) -> None:
-        self._regions.leave(tag)
+        self.regions.leave(tag)
 
     def _classify(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         shown = _tag_name(self.get_starttag_text() or "")
@@ -825,6 +899,12 @@ def _markup_kind(
     return None
 
 
+Position = tuple[int, int]
+Span = tuple[Position, Position]
+# Past any real position: the end of a region left open.
+END: Position = (sys.maxsize, 0)
+
+
 class _IgnoredRegions:
     """Track whether a parser is inside a ``provedown-ignore`` region.
 
@@ -834,13 +914,23 @@ class _IgnoredRegions:
     ``docs/ideas/diagram-markup.md``.)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, position: Callable[[], tuple[int, int]]) -> None:
         self._depth = 0
         self._ignored_from: int | None = None
+        # Where each region starts and where its closing end tag starts, in
+        # the coordinates ``position`` reports; END for one left open.
+        self._position = position
+        self._start: tuple[int, int] | None = None
+        self.spans: list[Span] = []
 
     @property
     def ignoring(self) -> bool:
         return self._ignored_from is not None
+
+    def close(self) -> None:
+        if self._start is not None:
+            self.spans.append((self._start, END))
+            self._start = None
 
     def enter(self, tag: str, attrs: list[tuple[str, str | None]]) -> bool:
         """Open an element; return whether it is ignored."""
@@ -849,6 +939,7 @@ class _IgnoredRegions:
             return self.ignoring or _is_ignored_region(attrs)
         if not self.ignoring and _is_ignored_region(attrs):
             self._ignored_from = self._depth
+            self._start = self._position()
         self._depth += 1
         return self.ignoring
 
@@ -866,6 +957,9 @@ class _IgnoredRegions:
         self._depth -= 1
         if self._ignored_from is not None and self._depth <= self._ignored_from:
             self._ignored_from = None
+            if self._start is not None:
+                self.spans.append((self._start, self._position()))
+                self._start = None
 
 
 def _unchecked_markup(
@@ -943,14 +1037,15 @@ class _SvgResultRewriter(HTMLParser):
         self._column = 1
         # Original (case-preserved) tag name and whether it became a span.
         self._stack: list[tuple[str, bool]] = []
-        self._regions = _IgnoredRegions()
+        # Positions in the output, where the core parser and fences are.
+        self.regions = _IgnoredRegions(lambda: (self._line, self._column))
         # Every claim and evidence element, with whether it is ignored.
         self.records: list[MarkupRecord] = []
         self._emit(header)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         raw = self.get_starttag_text() or ""
-        if self._regions.enter(tag, attrs):
+        if self.regions.enter(tag, attrs):
             self._record(tag, attrs, ignored=True)
         else:
             self._check_markup(tag, attrs, raw)
@@ -966,7 +1061,7 @@ class _SvgResultRewriter(HTMLParser):
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         raw = self.get_starttag_text() or ""
-        if self._regions.self_closing(attrs):
+        if self.regions.self_closing(attrs):
             self._record(tag, attrs, ignored=True)
         else:
             self._check_markup(tag, attrs, raw)
@@ -975,7 +1070,7 @@ class _SvgResultRewriter(HTMLParser):
         self._emit(raw)
 
     def handle_endtag(self, tag: str) -> None:
-        self._regions.leave(tag)
+        self.regions.leave(tag)
         if tag in HTML_VOID_ELEMENTS:
             # Void start tags are never pushed, so an end tag such as the
             # XML-style <br></br> closes nothing on the stack. Only one
