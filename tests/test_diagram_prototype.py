@@ -12,7 +12,8 @@ from xml.sax.saxutils import quoteattr
 import pytest
 
 from provedown import Status, VerificationContext, parse_document, verify_document
-from provedown.model import ResultAssertion, SourceLocation
+from provedown import parser as core_parser
+from provedown.model import CodeBlock, ResultAssertion, SourceLocation
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples/diagrams"
@@ -1208,45 +1209,6 @@ def test_unchecked_label_markup_lists_cleanly_beside_a_property() -> None:
     )
 
 
-def fence_cause(until: str) -> str:
-    return (
-        "a line starting with ``` or ~~~ reads to verify as a Markdown code "
-        f"fence, so it skips every line up to {until}; start the line with "
-        "something else, or put the example in a provedown-ignore region"
-    )
-
-
-UNCLOSED = "the end, since nothing closes it"
-
-
-def test_svg_fence_shaped_line_is_named_as_the_cause() -> None:
-    lowering = script.normalize_svg(
-        "<svg>\n<metadata><code>paid = 4</code></metadata>\n"
-        '<text>\n```\n<tspan class="result" data-code="paid">4</tspan>\n'
-        "```</text>\n</svg>",
-        origin="o.svg",
-    )
-
-    # The fence explains the skipped claim, so no void-element guess follows.
-    assert lowering.diagnostics == (
-        f"o.svg:4:1: {fence_cause('the matching fence 2 lines down')}",
-    )
-
-
-def test_drawio_fence_in_code_property_is_named_as_the_cause() -> None:
-    source = _drawio(
-        _object("c", label="code", provedown_code="x = 4\n```")
-        + _object("r", label="4", data_code="x")
-    )
-
-    lowering = script.drawio_to_html(source, origin="t.drawio")
-
-    assert lowering.diagnostics[0] == (
-        "t.drawio: page 'p' cell 'c' (line 3 of its block, column 1): "
-        + fence_cause(UNCLOSED)
-    )
-
-
 def test_markup_verify_reads_but_the_converter_missed_is_a_converter_bug() -> None:
     event = ResultAssertion(authored="4", code="x", location=SourceLocation(None, 3, 5))
 
@@ -1265,85 +1227,77 @@ def test_markup_records_sharing_a_position_are_a_converter_bug() -> None:
     ) == ["o.svg: two markup elements share a position; this is a bug in the converter"]
 
 
-def test_svg_fence_inside_an_ignored_legend_is_allowed() -> None:
+def _code_blocks(html: str) -> list[str]:
+    return [
+        event.code
+        for event in parse_document(html).events
+        if isinstance(event, CodeBlock)
+    ]
+
+
+def test_svg_fence_shaped_lines_do_not_hide_a_claim() -> None:
+    # Unescaped, verify would read the ``` lines as a Markdown fence and
+    # skip the claim between them.
     lowering = script.normalize_svg(
         "<svg>\n<metadata><code>paid = 4</code></metadata>\n"
-        '<g class="provedown-ignore">\n<text>Mark the number like this:\n'
-        '```\n<tspan class="result">4</tspan>\n```\n</text>\n</g>\n'
-        '<text class="result" data-code="paid">4</text>\n</svg>',
+        '<text>\n```\n<tspan class="result" data-code="paid">4</tspan>\n'
+        "```</text>\n</svg>",
         origin="o.svg",
     )
 
     assert lowering.ok
-    assert lowering.claims == 1
+    assert _statuses(lowering.html) == [Status.PASS]
 
 
-def test_svg_claim_dropped_before_a_fence_is_still_reported() -> None:
-    lowering = script.normalize_svg(
-        "<svg>\n<metadata><code>paid = 4</code></metadata>\n"
-        '<g class="provedown-ignore"><foreignObject><div>a<br>b</div>'
-        "</foreignObject></g>\n"
-        '<text class="result" data-code="paid">4</text>\n'
-        "<text>\n```\n</text>\n</svg>",
-        origin="o.svg",
-    )
-
-    assert lowering.diagnostics == (
-        f"o.svg:6:1: {fence_cause(UNCLOSED)}",
-        f"o.svg:4:1: verify would skip this claim; {DROPPED_CAUSE}",
-    )
-
-
-def test_drawio_closed_fence_inside_code_property_is_caught() -> None:
-    # The fence hides "y = 5" from verify with no parser error and no lost
-    # markup, so this check is the only thing that catches it.
+def test_drawio_fence_inside_code_property_runs_every_line() -> None:
+    # Unescaped, the fence would hide "y = 5" with no parser error, and the
+    # block would run with a line missing.
+    # The fence lines sit in strings, as they would in real evidence.
+    code = 'notes = """\n```\n"""\ny = 5\nmore = """\n```\n"""\nz = 4 + y'
     source = _drawio(
-        _object("c", label="code", provedown_code="x = 4\n```\ny = 5\n```\nz = x")
-        + _object("r", label="4", data_code="z")
+        _object("c", label="code", provedown_code=code)
+        + _object("r", label="9", data_code="z")
     )
 
     lowering = script.drawio_to_html(source, origin="t.drawio")
 
-    assert lowering.diagnostics == (
-        "t.drawio: page 'p' cell 'c' (line 3 of its block, column 1): "
-        + fence_cause("the matching fence 2 lines down"),
+    assert lowering.ok
+    assert _code_blocks(lowering.html) == [code]
+    assert _statuses(lowering.html) == [Status.PASS]
+
+
+def test_drawio_unclosed_fence_inside_code_property_keeps_the_block_closed() -> None:
+    source = _drawio(
+        _object("c", label="code", provedown_code="x = 4\n~~~~")
+        + _object("r", label="4", data_code="x")
     )
 
+    lowering = script.drawio_to_html(source, origin="t.drawio")
 
-def test_svg_fence_hiding_nothing_is_allowed_and_others_still_reported() -> None:
-    # The fence closes at once, so it hides no line; the leaked <br> is
-    # still the reported cause.
+    assert lowering.ok
+    assert _code_blocks(lowering.html) == ["x = 4\n~~~~"]
+
+
+def test_claim_after_a_defused_fence_on_its_line_is_still_matched() -> None:
+    # Escaping the fence lengthens the line, so the claim's recorded column
+    # has to move with it.
     lowering = script.normalize_svg(
         "<svg>\n<metadata><code>paid = 4</code></metadata>\n"
-        '<g class="provedown-ignore"><foreignObject><div>a<br>b</div>'
-        "</foreignObject></g>\n"
-        '<text class="result" data-code="paid">4</text>\n'
-        "<text>\n```\n```\n</text>\n</svg>",
+        '<text>\n``` <tspan class="result" data-code="paid">4</tspan>'
+        "</text>\n</svg>",
         origin="o.svg",
     )
 
-    assert lowering.diagnostics == (
-        f"o.svg:4:1: verify would skip this claim; {DROPPED_CAUSE}",
+    assert lowering.ok
+    assert _statuses(lowering.html) == [Status.PASS]
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["```", "  ~~~~", "\t````python", "``", "~~", " ` ``", "x ```", "\u00a0```"],
+)
+def test_fence_rule_matches_the_core_parser(line: str) -> None:
+    # If core's fence rule changes, the converter's copy of it must too.
+    assert bool(script.FENCE.match(line)) == (
+        core_parser._fence_marker(line + "\n") is not None
     )
-
-
-def test_fence_rule_matches_the_core_parser() -> None:
-    # If core's fence rule changes, the converter's copy of it must too. A
-    # closer needs at least as many of the same character, so ``` can't
-    # close ````.
-    document = (
-        "<p>x</p>\n  ~~~~\n"
-        '<span class="result" data-code="1">1</span>\n~~~~~\n'
-        '<span class="result" data-code="2">2</span>\n````\n'
-        '<span class="result" data-code="3">3</span>\n```\n'
-        '<span class="result" data-code="4">4</span>\n'
-    )
-
-    read = [
-        event.location.line
-        for event in parse_document(document).events
-        if isinstance(event, ResultAssertion)
-    ]
-
-    assert script._fences(document) == [((2, 3), (4, 1)), ((6, 1), script.END)]
-    assert read == [5]
