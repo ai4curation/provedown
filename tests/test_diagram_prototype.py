@@ -308,9 +308,35 @@ def test_svg_void_elements_do_not_desynchronise_end_tags() -> None:
     lowering = script.normalize_svg(source)
 
     assert lowering.ok
-    assert lowering.html == source.replace("<text", "<span").replace(
-        "</text>", "</span>"
+    assert lowering.html.endswith(
+        source.replace("<text", "<span").replace("</text>", "</span>")
     )
+
+
+def test_svg_xml_style_closed_void_element() -> None:
+    source = (
+        "<svg><foreignObject><div>a<br></br>b</div></foreignObject>"
+        '<text class="result" data-code="1">1</text></svg>'
+    )
+
+    lowering = script.normalize_svg(source)
+
+    assert lowering.ok
+    assert lowering.html.endswith(
+        "<svg><foreignObject><div>a<br></br>b</div></foreignObject>"
+        '<span class="result" data-code="1">1</span></svg>'
+    )
+
+
+def test_svg_claims_in_ignored_regions_do_not_count() -> None:
+    lowering = script.normalize_svg(
+        '<svg><g class="provedown-ignore">'
+        '<text class="result" data-code="1">1</text></g></svg>'
+    )
+
+    assert not lowering.ok
+    assert lowering.claims == 0
+    assert lowering.diagnostics == ("<svg>: no claims found",)
 
 
 def test_svg_counts_html_span_claims_in_foreign_object() -> None:
@@ -353,10 +379,32 @@ def test_main_removes_stale_output_when_input_is_unreadable(tmp_path: Path) -> N
     broken = tmp_path / "broken.drawio"
     broken.write_text("<mxfile><diagram>", encoding="utf-8")
     stale = tmp_path / "broken.drawio.provedown.html"
-    stale.write_text("<p>old</p>", encoding="utf-8")
+    stale.write_text(
+        "<!-- generated from broken.drawio by diagram_to_provedown.py -->\n<p>old</p>",
+        encoding="utf-8",
+    )
 
     assert script.main([str(broken)]) == 1
     assert not stale.exists()
+
+
+def test_main_keeps_unrelated_output_when_input_is_unreadable(tmp_path: Path) -> None:
+    unrelated = tmp_path / "report.provedown.html"
+    unrelated.write_text("<p>hand-written</p>", encoding="utf-8")
+
+    assert script.main([str(tmp_path / "typo.drawi"), "-o", str(unrelated)]) == 1
+    assert unrelated.read_text(encoding="utf-8") == "<p>hand-written</p>"
+
+
+def test_main_reports_unreadable_input_with_directory_output(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    assert script.main([str(tmp_path / "missing.drawio"), "-o", str(out_dir)]) == 1
+    assert capsys.readouterr().err.startswith("error: ")
+    assert out_dir.is_dir()
 
 
 def test_main_reports_unwritable_output(

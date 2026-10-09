@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import re
 import sys
 import zlib
@@ -39,6 +40,10 @@ from pathlib import Path
 from urllib.parse import unquote
 from xml.etree import ElementTree
 
+from provedown.model import ResultAssertion
+from provedown.parser import parse_document
+
+GENERATED_HEADER = "<!-- generated from"
 CODE_PROPERTY = "provedown-code"
 RESULT_PROPERTY = "provedown-result"
 # Earlier name of RESULT_PROPERTY; only an error next to data-code, since a bare
@@ -169,11 +174,9 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                 # routed here hold only evidence, so the whole label is safe.
                 code.append(f"{comment}\n<div>{_br_to_newline(label)}</div>")
 
-    if not claims:
-        diagnostics.append(f"{origin}: no claims found")
-    header = f"<!-- generated from {escape(origin)} by diagram_to_provedown.py -->"
+    header = f"{GENERATED_HEADER} {escape(origin)} by diagram_to_provedown.py -->"
     html = "\n\n".join([header, *code, *claims]) + "\n"
-    return Lowering(html=html, claims=len(claims), diagnostics=tuple(diagnostics))
+    return _lowering(html, origin, diagnostics)
 
 
 def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
@@ -188,14 +191,20 @@ def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
     rewriter = _SvgResultRewriter(origin)
     rewriter.feed(source)
     rewriter.close()
-    diagnostics = list(rewriter.diagnostics)
-    if rewriter.claims == 0:
-        diagnostics.append(f"{origin}: no claims found")
-    return Lowering(
-        html=rewriter.output(),
-        claims=rewriter.claims,
-        diagnostics=tuple(diagnostics),
+    # The header shares line 1 so line numbers still match the original SVG.
+    header = f"{GENERATED_HEADER} {escape(origin)} by diagram_to_provedown.py -->"
+    return _lowering(header + rewriter.output(), origin, rewriter.diagnostics)
+
+
+def _lowering(html: str, origin: str, diagnostics: list[str]) -> Lowering:
+    # Count what the Provedown parser will actually check, so claims in
+    # ignored regions or nested spans don't make an empty document look ok.
+    claims = sum(
+        isinstance(event, ResultAssertion) for event in parse_document(html).events
     )
+    if claims == 0:
+        diagnostics = [*diagnostics, f"{origin}: no claims found"]
+    return Lowering(html=html, claims=claims, diagnostics=tuple(diagnostics))
 
 
 def _drawio_cells(source: str) -> Iterator[Cell]:
@@ -313,7 +322,6 @@ class _SvgResultRewriter(HTMLParser):
     def __init__(self, origin: str) -> None:
         super().__init__(convert_charrefs=False)
         self.origin = origin
-        self.claims = 0
         self.diagnostics: list[str] = []
         self._parts: list[str] = []
         # Original (case-preserved) tag name and whether it became a span.
@@ -322,13 +330,9 @@ class _SvgResultRewriter(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         raw = self.get_starttag_text() or ""
         if tag in {"text", "tspan"} and _is_result(attrs):
-            self.claims += 1
             self._stack.append((tag, True))
             self._parts.append(_rename_tag(raw, "span"))
             return
-        if tag == "span" and _is_result(attrs):
-            # The HTML contract written directly inside a foreignObject.
-            self.claims += 1
         if tag in HTML_VOID_ELEMENTS:
             self._parts.append(raw)
         else:
@@ -337,12 +341,15 @@ class _SvgResultRewriter(HTMLParser):
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         raw = self.get_starttag_text() or ""
-        if tag in {"text", "tspan", "span"} and _is_result(attrs):
-            self.claims += 1
+        if tag in {"text", "tspan"} and _is_result(attrs):
             raw = _rename_tag(raw, "span")
         self._parts.append(raw)
 
     def handle_endtag(self, tag: str) -> None:
+        if tag in HTML_VOID_ELEMENTS and (not self._stack or self._stack[-1][0] != tag):
+            # XML-style <br></br>: the start tag was never pushed.
+            self._parts.append(f"</{tag}>")
+            return
         if not self._stack:
             self._error(f"unexpected </{tag}> with no open element")
             self._parts.append(f"</{tag}>")
@@ -396,6 +403,20 @@ def _rename_tag(raw: str, new: str) -> str:
     return re.sub(r"^<\s*[\w:-]+", f"<{new}", raw)
 
 
+def _remove_stale_output(output: Path) -> None:
+    """Remove output from an earlier run so a later verify can't check it.
+
+    Only files this script wrote (identified by the header) are removed, so a
+    mistyped input path never deletes an unrelated --output target.
+    """
+
+    with contextlib.suppress(OSError, UnicodeDecodeError):
+        with output.open(encoding="utf-8") as handle:
+            ours = handle.read(len(GENERATED_HEADER)) == GENERATED_HEADER
+        if ours:
+            output.unlink()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("path", type=Path)
@@ -413,8 +434,7 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, ElementTree.ParseError, zlib.error) as exc:
         # binascii.Error (bad base64) is a ValueError subclass.
         print(f"error: {args.path}: {exc}", file=sys.stderr)
-        # Don't leave output from an earlier run for a later verify to check.
-        output.unlink(missing_ok=True)
+        _remove_stale_output(output)
         return 1
     try:
         output.write_text(lowering.html, encoding="utf-8")

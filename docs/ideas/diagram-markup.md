@@ -202,7 +202,7 @@ writes the HTML but exits non-zero:
 - an HTML label that mixes `<code>` and `class="result"`;
 - a label with Provedown markup on a shape whose style lacks `html=1`, which
   draw.io would display as literal text;
-- an SVG end tag that doesn't match its start tag.
+- an SVG end tag that doesn't match its start tag, or has no start tag.
 
 A misspelled property such as `datacode` can't be told apart from unrelated
 shape data, so it's caught only when the whole diagram ends up with no claims.
