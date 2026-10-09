@@ -288,7 +288,7 @@ def test_label_data_code_without_result_class_is_reported(span: str) -> None:
 
     assert lowering.diagnostics == (
         "t.drawio: page 'p' cell 'bad': data-code on <span> without "
-        'class="result", so it is not checked',
+        'class="result", which verify would not check',
     )
 
 
@@ -308,8 +308,8 @@ def test_label_result_class_on_unchecked_tag_is_reported(label: str) -> None:
     lowering = script.drawio_to_html(source, origin="t.drawio")
 
     assert lowering.diagnostics == (
-        "t.drawio: page 'p' cell 'bad': class=\"result\" on <b>, which is only "
-        "checked on <span>",
+        "t.drawio: page 'p' cell 'bad': class=\"result\" on <b> (only checked on "
+        "<span>), which verify would not check",
     )
 
 
@@ -335,7 +335,7 @@ def test_svg_data_code_without_result_class_is_reported() -> None:
 
     assert not lowering.ok
     assert lowering.diagnostics == (
-        'o.svg:3:7: data-code on <tspan> without class="result", so it is not checked',
+        'o.svg:3:7: data-code on <tspan> without class="result", which verify would not check',
     )
 
 
@@ -347,8 +347,8 @@ def test_svg_result_class_on_unchecked_tag_is_reported() -> None:
     )
 
     assert lowering.diagnostics == (
-        'o.svg:3:1: class="result" on <textpath>, which is only checked on '
-        "<span> or <text> or <tspan>",
+        'o.svg:3:1: class="result" on <textPath> (only checked on <span>, '
+        "<text> or <tspan>), which verify would not check",
     )
 
 
@@ -363,7 +363,7 @@ def test_svg_unchecked_markup_in_ignored_region_is_not_reported() -> None:
 
     # Only the element after the ignored <g> closes is reported.
     assert lowering.diagnostics == (
-        'o.svg:4:7: data-code on <tspan> without class="result", so it is not checked',
+        'o.svg:4:7: data-code on <tspan> without class="result", which verify would not check',
     )
 
 
@@ -743,4 +743,59 @@ def test_svg_unclosed_code_keeps_earlier_error_on_the_same_line() -> None:
     assert lowering.diagnostics == (
         "o.svg:2:14: nested HTML tag inside <code> was ignored",
         "o.svg:2:29: unclosed <code> block",
+    )
+
+
+def test_label_markup_in_ignored_region_is_skipped() -> None:
+    # A label documenting the markup inside an ignored wrapper is not an
+    # authoring mistake: verify skips the whole region.
+    legend = (
+        '<div class="provedown-ignore">mark the number with '
+        '<b class="result">4</b> and use <code>x = 1</code><br>here</div>'
+    )
+    source = _drawio(
+        f'<mxCell id="legend" style="html=1;" value={quoteattr(legend)}/>'
+        + _object("c", label="code", provedown_code="x = 4")
+        + _object("r", label="4", data_code="x")
+    )
+
+    lowering = script.drawio_to_html(source)
+
+    assert lowering.ok
+    assert "legend" not in lowering.html
+
+
+def test_label_duplicate_unchecked_markup_is_reported_once() -> None:
+    label = '<b class="result">1</b> and <b class="result">2</b>'
+    source = _drawio(
+        f'<mxCell id="bad" style="html=1;" value={quoteattr(label)}/>'
+        + _object("c", label="code", provedown_code="x = 4")
+        + _object("r", label="4", data_code="x")
+    )
+
+    lowering = script.drawio_to_html(source)
+
+    assert len(lowering.diagnostics) == 1
+
+
+def test_svg_void_element_in_ignored_region_is_reported_when_verify_drops_claims() -> (
+    None
+):
+    # The core parser counts <br> as opening an element, so it keeps ignoring
+    # past the real end of the region and skips the next claim.
+    lowering = script.normalize_svg(
+        "<svg>\n<g>\n"
+        '<g class="provedown-ignore"><foreignObject><div>legend<br>text</div>'
+        "</foreignObject></g>\n"
+        '<text class="result" data-code="4">4</text>\n</g>\n'
+        '<text class="result" data-code="461.0">461.0</text>\n</svg>',
+        origin="o.svg",
+    )
+
+    assert not lowering.ok
+    assert lowering.claims == 1
+    assert lowering.diagnostics == (
+        "o.svg: verify would check only 1 of 2 claims; a void element such as "
+        "<br> inside a provedown-ignore region makes verify skip the claims "
+        "after it",
     )

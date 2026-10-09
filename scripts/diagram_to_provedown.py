@@ -144,6 +144,7 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
     code: list[str] = []
     claims: list[str] = []
     diagnostics: list[str] = []
+    expected = 0
     for cell in _drawio_cells(source):
         where = f"{origin}: page {cell.page!r} cell {cell.cell_id!r}"
         comment = f"<!-- {escape(where)} -->"
@@ -183,6 +184,7 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                     f"the authored value now goes in {RESULT_PROPERTY!r}"
                 )
             else:
+                expected += 1
                 claims.append(f"{comment}\n<p>{_result_element(cell)}</p>")
         elif RESULT_PROPERTY in attributes:
             diagnostics.append(
@@ -199,7 +201,8 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                 )
             elif markup.unchecked:
                 diagnostics.extend(
-                    f"{where}: {problem}" for problem in markup.unchecked
+                    f"{where}: {problem}, which verify would not check"
+                    for problem in markup.unchecked
                 )
             elif markup.code and markup.result:
                 diagnostics.append(
@@ -207,6 +210,7 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                     "split them into separate shapes"
                 )
             elif markup.result:
+                expected += markup.results
                 claims.append(f"{comment}\n{LABEL_WRAPPER}{label}</div>")
             else:
                 # draw.io stores label line breaks as <br>; the parser rejects
@@ -216,7 +220,9 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
 
     header = f"{GENERATED_HEADER} {escape(origin)} by diagram_to_provedown.py -->"
     html = "\n\n".join([header, *code, *claims]) + "\n"
-    return _lowering(html, origin, diagnostics, keeps_source_lines=False)
+    return _lowering(
+        html, origin, diagnostics, keeps_source_lines=False, expected_claims=expected
+    )
 
 
 def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
@@ -238,6 +244,7 @@ def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
         origin,
         rewriter.diagnostics,
         keeps_source_lines=True,
+        expected_claims=rewriter.expected_claims,
     )
 
 
@@ -247,6 +254,7 @@ def _lowering(
     diagnostics: list[str],
     *,
     keeps_source_lines: bool,
+    expected_claims: int,
 ) -> Lowering:
     """Parse the output the way verify will.
 
@@ -272,6 +280,15 @@ def _lowering(
     # With parser errors, "no claims" is a consequence rather than the cause.
     if claims == 0 and not parser_diagnostics:
         diagnostics.append(f"{origin}: no claims found")
+    elif claims < expected_claims and not parser_diagnostics:
+        # The converter and verify disagree on which claims exist. Today this
+        # happens when a void element such as <br> sits inside a
+        # provedown-ignore region: verify then skips the claims after it.
+        diagnostics.append(
+            f"{origin}: verify would check only {claims} of {expected_claims} "
+            "claims; a void element such as <br> inside a provedown-ignore "
+            "region makes verify skip the claims after it"
+        )
     return Lowering(html=html, claims=claims, diagnostics=tuple(diagnostics))
 
 
@@ -417,10 +434,15 @@ class LabelMarkup:
     """The Provedown markup found in a draw.io label."""
 
     code: bool = False
-    result: bool = False
+    # Number of class="result" elements verify will check.
+    results: int = 0
     # Elements verify would not check: data-code without class="result", or
     # class="result" on a tag other than <span>.
     unchecked: list[str] = field(default_factory=list)
+
+    @property
+    def result(self) -> bool:
+        return self.results > 0
 
     def __bool__(self) -> bool:
         return self.code or self.result or bool(self.unchecked)
@@ -444,7 +466,8 @@ def _label_markup(label: str) -> LabelMarkup:
     parser does (such as an unquoted ``class=result``). It also catches markup
     that verify would silently ignore: a ``data-code`` element whose result
     class is missing or misspelled, and ``class="result"`` on a tag other than
-    ``<span>``.
+    ``<span>``. Markup inside a ``provedown-ignore`` region is skipped, as
+    verify skips it.
     """
 
     scanner = _LabelScanner()
@@ -457,40 +480,90 @@ class _LabelScanner(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.markup = LabelMarkup()
+        self._regions = _IgnoredRegions()
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if not self._regions.enter(tag, attrs):
+            self._classify(tag, attrs)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if not self._regions.ignoring and not _is_ignored_region(attrs):
+            self._classify(tag, attrs)
+
+    def handle_endtag(self, tag: str) -> None:
+        self._regions.leave(tag)
+
+    def _classify(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "code":
             self.markup.code = True
         problem = _unchecked_markup(tag, attrs, LABEL_RESULT_TAGS)
         if problem:
-            self.markup.unchecked.append(problem)
+            if problem not in self.markup.unchecked:
+                self.markup.unchecked.append(problem)
         elif _is_result(attrs):
-            self.markup.result = True
+            self.markup.results += 1
 
-    handle_startendtag = handle_starttag
+
+class _IgnoredRegions:
+    """Track whether a parser is inside a ``provedown-ignore`` region.
+
+    Counts open elements, skipping HTML void elements such as ``<br>``, which
+    never get an end tag. (The core parser counts every start tag, so a
+    ``<br>`` inside an ignored region leaves it ignoring later content; see
+    ``docs/ideas/diagram-markup.md``.)
+    """
+
+    def __init__(self) -> None:
+        self._depth = 0
+        self._ignored_from: int | None = None
+
+    @property
+    def ignoring(self) -> bool:
+        return self._ignored_from is not None
+
+    def enter(self, tag: str, attrs: list[tuple[str, str | None]]) -> bool:
+        """Open an element; return whether it is ignored."""
+
+        if tag in HTML_VOID_ELEMENTS:
+            return self.ignoring or _is_ignored_region(attrs)
+        if not self.ignoring and _is_ignored_region(attrs):
+            self._ignored_from = self._depth
+        self._depth += 1
+        return self.ignoring
+
+    def leave(self, tag: str) -> None:
+        if tag in HTML_VOID_ELEMENTS or self._depth == 0:
+            return
+        self._depth -= 1
+        if self._ignored_from is not None and self._depth <= self._ignored_from:
+            self._ignored_from = None
 
 
 def _unchecked_markup(
-    tag: str, attrs: list[tuple[str, str | None]], result_tags: set[str]
+    tag: str,
+    attrs: list[tuple[str, str | None]],
+    result_tags: set[str],
+    shown_tag: str | None = None,
 ) -> str | None:
-    """Describe markup on this element that verify would silently skip."""
+    """Name markup on this element that verify would silently skip."""
 
+    shown = shown_tag or tag
     if _is_result(attrs) and tag not in result_tags:
-        allowed = " or ".join(f"<{t}>" for t in sorted(result_tags))
-        return f'class="result" on <{tag}>, which is only checked on {allowed}'
+        allowed = _join([f"<{t}>" for t in sorted(result_tags)], "or")
+        return f'class="result" on <{shown}> (only checked on {allowed})'
     if "data-code" in dict(attrs) and not _is_result(attrs):
-        return f'data-code on <{tag}> without class="result", so it is not checked'
+        return f'data-code on <{shown}> without class="result"'
     return None
 
 
-def _join(items: list[str]) -> str:
+def _join(items: list[str], conjunction: str = "and") -> str:
     """Join one or more names as "a", "a and b" or "a, b and c"."""
 
     if not items:
         raise ValueError("_join needs at least one item")
     if len(items) == 1:
         return items[0]
-    return ", ".join(items[:-1]) + f" and {items[-1]}"
+    return ", ".join(items[:-1]) + f" {conjunction} {items[-1]}"
 
 
 def _html_note(cell: Cell, markup: LabelMarkup) -> str:
@@ -525,18 +598,14 @@ class _SvgResultRewriter(HTMLParser):
         self._parts: list[str] = []
         # Original (case-preserved) tag name and whether it became a span.
         self._stack: list[tuple[str, bool]] = []
-        # Stack depth at which a provedown-ignore region opened, if inside one.
-        self._ignored_from: int | None = None
+        self._regions = _IgnoredRegions()
+        # Result elements outside ignored regions, which verify should check.
+        self.expected_claims = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         raw = self.get_starttag_text() or ""
-        self._check_unchecked_markup(tag, attrs)
-        if (
-            self._ignored_from is None
-            and tag not in HTML_VOID_ELEMENTS
-            and _is_ignored_region(attrs)
-        ):
-            self._ignored_from = len(self._stack)
+        if not self._regions.enter(tag, attrs):
+            self._check_markup(tag, attrs, raw)
         if tag in {"text", "tspan"} and _is_result(attrs):
             self._stack.append((tag, True))
             self._parts.append(_rename_tag(raw, "span"))
@@ -549,13 +618,14 @@ class _SvgResultRewriter(HTMLParser):
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         raw = self.get_starttag_text() or ""
-        if not _is_ignored_region(attrs):
-            self._check_unchecked_markup(tag, attrs)
+        if not self._regions.ignoring and not _is_ignored_region(attrs):
+            self._check_markup(tag, attrs, raw)
         if tag in {"text", "tspan"} and _is_result(attrs):
             raw = _rename_tag(raw, "span")
         self._parts.append(raw)
 
     def handle_endtag(self, tag: str) -> None:
+        self._regions.leave(tag)
         if tag in HTML_VOID_ELEMENTS:
             # Void start tags are never pushed, so an end tag such as the
             # XML-style <br></br> closes nothing on the stack. Only one
@@ -569,23 +639,21 @@ class _SvgResultRewriter(HTMLParser):
             self._parts.append(f"</{tag}>")
             return
         original, renamed = self._stack.pop()
-        if self._ignored_from is not None and len(self._stack) <= self._ignored_from:
-            self._ignored_from = None
         if original.lower() != tag:
             self._error(f"unexpected </{tag}>")
         self._parts.append("</span>" if renamed else f"</{original}>")
 
-    def _check_unchecked_markup(
-        self, tag: str, attrs: list[tuple[str, str | None]]
+    def _check_markup(
+        self, tag: str, attrs: list[tuple[str, str | None]], raw: str
     ) -> None:
-        # Markup that neither this rewriter nor the core parser would check
-        # passes unverified, so report it, except inside ignored regions,
-        # which verify skips too.
-        if self._ignored_from is not None or _is_ignored_region(attrs):
-            return
-        problem = _unchecked_markup(tag, attrs, SVG_RESULT_TAGS)
+        # Called only outside ignored regions, which verify skips too. Markup
+        # that neither this rewriter nor the core parser would check passes
+        # unverified, so report it; count the rest as claims verify should see.
+        problem = _unchecked_markup(tag, attrs, SVG_RESULT_TAGS, _tag_name(raw))
         if problem:
-            self._error(problem)
+            self._error(f"{problem}, which verify would not check")
+        elif _is_result(attrs):
+            self.expected_claims += 1
 
     def _error(self, message: str) -> None:
         line, column = self.getpos()
