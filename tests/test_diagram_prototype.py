@@ -187,7 +187,7 @@ def test_html_label_evidence_is_emitted_before_claims() -> None:
         (_object("r", label="4", provedown_result="4"), "no data-code"),
         (
             _object("both", label="4", provedown_code="x = 4", data_code="x"),
-            "both provedown-code and data-code",
+            "has provedown-code and also data-code;",
         ),
         (
             '<mxCell id="m" style="html=1;" value="&lt;code&gt;x = 1&lt;/code&gt;'
@@ -203,14 +203,43 @@ def test_html_label_evidence_is_emitted_before_claims() -> None:
                 provedown_code="x = 4",
             )
             + _object("r", label="4", data_code="x"),
-            "has provedown-code and a claim",
+            'has provedown-code and also a class="result" label; '
+            "put each piece of evidence and each claim in its own shape; its "
+            "style also lacks html=1",
         ),
         (
             _object("note", label="4", provedown_code="x = 4", provedown_result="4")
             + _object("r", label="4", data_code="x"),
-            "has provedown-code and a claim",
+            "has provedown-code and also provedown-result;",
         ),
         ('<mxCell id="plain" value="Just a label"/>', "no claims found"),
+        (
+            # Evidence in the label next to a code property: the label's
+            # assert would otherwise be dropped and never run.
+            _object(
+                "ev",
+                label="<pre><code>assert total == 999</code></pre>",
+                provedown_code="total = 461.0",
+            )
+            + _object("r", label="461.0", data_code="total"),
+            "has provedown-code and also a <code> label;",
+        ),
+        (
+            _object("c", label="code", provedown_code="total = 461.0")
+            + _object(
+                "r",
+                label="<pre><code>assert total == 999</code></pre>",
+                provedown_result="461.0",
+                data_code="total",
+            ),
+            "has data-code and also a <code> label;",
+        ),
+        (
+            _object("c", label="code", provedown_code="x = 4")
+            + _object("r", label='<span class="result">4</span> paid', data_code="x"),
+            'has data-code and also a class="result" label; put the value in '
+            "provedown-result",
+        ),
         (
             '<mxCell id="p" style="rounded=1;" value="&lt;span '
             'class=&quot;result&quot; data-code=&quot;1&quot;&gt;1&lt;/span&gt;"/>'
@@ -566,8 +595,10 @@ def test_cascade_filter_matches_parser_wording() -> None:
     assert any(script.UNCLOSED_CODE in d for d in unclosed)
     assert any(script.NESTED_TAG in d for d in nested)
     # ...and on the location prefix the filter reads positions from.
-    assert script._diagnostic_position(unclosed[0]) == (1, 1)
-    assert script.PARSER_LOCATION.match(nested[0]) is not None
+    unclosed_error = next(d for d in unclosed if script.UNCLOSED_CODE in d)
+    nested_error = next(d for d in nested if script.NESTED_TAG in d)
+    assert script._diagnostic_position(unclosed_error) == (1, 1)
+    assert script.PARSER_LOCATION.match(nested_error) is not None
 
 
 def test_unclosed_code_keeps_earlier_error_on_the_same_line() -> None:

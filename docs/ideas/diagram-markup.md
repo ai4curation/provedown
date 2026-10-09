@@ -205,7 +205,10 @@ writes the HTML but exits non-zero:
 - a `data-code` shape that uses the earlier property name `result` instead of
   `provedown-result`;
 - a shape that has `provedown-code` and also a claim (`data-code`,
-  `provedown-result`, or a `class="result"` label);
+  `provedown-result`, or a `class="result"` label) or a `<code>` label, or
+  that has `data-code` and also Provedown markup in its label. Only the
+  property would be used, so the rest (including any `assert` in a `<code>`
+  label) would be dropped without running;
 - an HTML label that mixes `<code>` and `class="result"`;
 - a label with Provedown markup on a shape whose style lacks `html=1`, which
   draw.io would display as literal text;

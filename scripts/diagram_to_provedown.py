@@ -145,33 +145,36 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
         comment = f"<!-- {escape(where)} -->"
         attributes = cell.attributes
         label = attributes.get("label", "")
-        if CODE_PROPERTY in attributes and "data-code" in attributes:
-            diagnostics.append(
-                f"{where}: has both {CODE_PROPERTY} and data-code; "
-                "split evidence and claim into separate shapes"
-            )
-        elif CODE_PROPERTY in attributes and (
-            RESULT_PROPERTY in attributes or _has_result_class(label)
-        ):
-            # The evidence would be kept and the claim silently dropped.
-            diagnostics.append(
-                f"{where}: has {CODE_PROPERTY} and a claim "
-                f'({RESULT_PROPERTY} or a class="result" label); '
-                "split evidence and claim into separate shapes"
-            )
-        elif CODE_PROPERTY in attributes:
-            code.append(f"{comment}\n{_code_element(cell)}")
-        elif (
-            "data-code" in attributes
-            and LEGACY_RESULT_PROPERTY in attributes
-            and (RESULT_PROPERTY not in attributes)
-        ):
-            diagnostics.append(
-                f"{where}: has a {LEGACY_RESULT_PROPERTY!r} property; "
-                f"the authored value now goes in {RESULT_PROPERTY!r}"
-            )
+        markup = _label_markup(label)
+        if CODE_PROPERTY in attributes:
+            # Only the property becomes output, so anything else on the shape
+            # (a claim, or evidence in the label) would be silently dropped.
+            extras = [n for n in ("data-code", RESULT_PROPERTY) if n in attributes]
+            extras += markup
+            if extras:
+                diagnostics.append(
+                    f"{where}: has {CODE_PROPERTY} and also {_join(extras)}; "
+                    "put each piece of evidence and each claim in its own shape"
+                    + _html_note(cell, markup)
+                )
+            else:
+                code.append(f"{comment}\n{_code_element(cell)}")
         elif "data-code" in attributes:
-            claims.append(f"{comment}\n<p>{_result_element(cell)}</p>")
+            if markup:
+                diagnostics.append(
+                    f"{where}: has data-code and also {_join(markup)}; put the "
+                    f"value in {RESULT_PROPERTY} and evidence in its own shape"
+                    + _html_note(cell, markup)
+                )
+            elif LEGACY_RESULT_PROPERTY in attributes and (
+                RESULT_PROPERTY not in attributes
+            ):
+                diagnostics.append(
+                    f"{where}: has a {LEGACY_RESULT_PROPERTY!r} property; "
+                    f"the authored value now goes in {RESULT_PROPERTY!r}"
+                )
+            else:
+                claims.append(f"{comment}\n<p>{_result_element(cell)}</p>")
         elif RESULT_PROPERTY in attributes:
             diagnostics.append(
                 f"{where}: has a {RESULT_PROPERTY} property but no data-code, "
@@ -394,6 +397,27 @@ def _label_text(cell: Cell) -> str:
     extractor.feed(label)
     extractor.close()
     return extractor.text().strip()
+
+
+def _label_markup(label: str) -> list[str]:
+    """Name the Provedown markup found in a label, for diagnostics."""
+
+    found = []
+    if "<code" in label:
+        found.append("a <code> label")
+    if _has_result_class(label):
+        found.append('a class="result" label')
+    return found
+
+
+def _join(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + f" and {items[-1]}"
+
+
+def _html_note(cell: Cell, markup: list[str]) -> str:
+    if markup and not cell.html_label:
+        return "; its style also lacks html=1, so draw.io shows the label as text"
+    return ""
 
 
 def _br_to_newline(label: str) -> str:
