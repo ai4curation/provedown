@@ -1,8 +1,9 @@
 """Prototype: lower draw.io and SVG diagrams to Provedown HTML.
 
-This is an exploration aid for ``docs/ideas/diagram-markup.md``, not part of
-the ``provedown`` package. It converts a diagram into an ordinary Provedown
-HTML document that the existing ``provedown verify`` command can check:
+This is an exploration aid for ``docs/ideas/diagram-markup.md``. It is not
+shipped in the ``provedown`` package, but imports its parser. It converts a
+diagram into an ordinary Provedown HTML document that the existing
+``provedown verify`` command can check:
 
     python scripts/diagram_to_provedown.py examples/diagrams/orders.drawio
     provedown verify examples/diagrams/orders.drawio.provedown.html
@@ -28,7 +29,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import contextlib
 import re
 import sys
 import zlib
@@ -197,13 +197,14 @@ def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
 
 
 def _lowering(html: str, origin: str, diagnostics: list[str]) -> Lowering:
-    # Count what the Provedown parser will actually check, so claims in
-    # ignored regions or nested spans don't make an empty document look ok.
-    claims = sum(
-        isinstance(event, ResultAssertion) for event in parse_document(html).events
-    )
+    # Parse the output the way verify will: count only claims it will check
+    # (not ones in ignored regions), and surface its errors, since verify
+    # refuses to run a document with any of them.
+    parsed = parse_document(html, path=Path(origin))
+    claims = sum(isinstance(event, ResultAssertion) for event in parsed.events)
+    diagnostics = [*diagnostics, *parsed.diagnostics]
     if claims == 0:
-        diagnostics = [*diagnostics, f"{origin}: no claims found"]
+        diagnostics.append(f"{origin}: no claims found")
     return Lowering(html=html, claims=claims, diagnostics=tuple(diagnostics))
 
 
@@ -410,11 +411,17 @@ def _remove_stale_output(output: Path) -> None:
     mistyped input path never deletes an unrelated --output target.
     """
 
-    with contextlib.suppress(OSError, UnicodeDecodeError):
+    try:
         with output.open(encoding="utf-8") as handle:
             ours = handle.read(len(GENERATED_HEADER)) == GENERATED_HEADER
-        if ours:
-            output.unlink()
+    except (OSError, UnicodeDecodeError):
+        return  # Missing, unreadable or not text: not output we wrote.
+    if not ours:
+        return
+    try:
+        output.unlink()
+    except OSError as exc:
+        print(f"error: could not remove stale {output}: {exc}", file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -440,6 +447,8 @@ def main(argv: list[str] | None = None) -> int:
         output.write_text(lowering.html, encoding="utf-8")
     except OSError as exc:
         print(f"error: {output}: {exc}", file=sys.stderr)
+        # A partial write still starts with the header; don't leave it.
+        _remove_stale_output(output)
         return 1
     print(f"{output}: {lowering.claims} claim(s)")
     for diagnostic in lowering.diagnostics:

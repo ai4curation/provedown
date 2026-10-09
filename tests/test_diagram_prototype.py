@@ -422,3 +422,27 @@ def test_main_reports_unwritable_output(
 
     assert script.main([str(good), "-o", str(output)]) == 1
     assert capsys.readouterr().err.startswith(f"error: {output}: ")
+
+
+@pytest.mark.parametrize(
+    ("evidence", "message"),
+    [
+        ("&lt;pre&gt;&lt;code&gt;x = 2", "unclosed <code> block"),
+        (
+            "&lt;code&gt;x = &lt;b&gt;2&lt;/b&gt;&lt;/code&gt;",
+            "nested HTML tag inside <code>",
+        ),
+    ],
+)
+def test_parser_errors_in_lowered_output_are_reported(
+    evidence: str, message: str
+) -> None:
+    source = _drawio(
+        f'<mxCell id="ev" style="html=1;" value="{evidence}"/>'
+        + _object("r", label="2", data_code="x")
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    assert not lowering.ok
+    assert any(d.startswith("t.drawio:") and message in d for d in lowering.diagnostics)
