@@ -49,10 +49,14 @@ PARSER_LOCATION = re.compile(
     r"<string>:(?P<line>\d+):(?P<column>\d+): (?P<message>.*)", re.DOTALL
 )
 # The line number in any rendered parser diagnostic, "<path>:LINE:COL: ...".
-DIAGNOSTIC_LINE = re.compile(r".*?:(?P<line>\d+):\d+: ", re.DOTALL)
+# Matches the first ":N:M: " in the message, which is the location prefix as
+# long as the origin path itself contains no ":digits:digits: ".
+DIAGNOSTIC_POSITION = re.compile(r".*?:(?P<line>\d+):(?P<column>\d+): ", re.DOTALL)
 # Parser messages for an unclosed <code> and for each tag it swallowed.
 UNCLOSED_CODE = "unclosed <code> block"
 NESTED_TAG = "nested HTML tag inside <code>"
+# drawio_to_html wraps each HTML label in this element.
+LABEL_WRAPPER = "<div>"
 # The comment drawio_to_html writes before each cell's block.
 CELL_COMMENT = re.compile(r"<!-- (?P<where>.*: page .* cell .*) -->")
 CODE_PROPERTY = "provedown-code"
@@ -178,12 +182,12 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                     "split them into separate shapes"
                 )
             elif _has_result_class(label):
-                claims.append(f"{comment}\n<div>{label}</div>")
+                claims.append(f"{comment}\n{LABEL_WRAPPER}{label}</div>")
             else:
                 # draw.io stores label line breaks as <br>; the parser rejects
                 # tags nested in <code>, so turn them back into newlines. Labels
                 # routed here hold only evidence, so the whole label is safe.
-                code.append(f"{comment}\n<div>{_br_to_newline(label)}</div>")
+                code.append(f"{comment}\n{LABEL_WRAPPER}{_br_to_newline(label)}</div>")
 
     header = f"{GENERATED_HEADER} {escape(origin)} by diagram_to_provedown.py -->"
     html = "\n\n".join([header, *code, *claims]) + "\n"
@@ -250,36 +254,44 @@ def _without_unclosed_code_cascade(diagnostics: list[str]) -> list[str]:
     """Drop the nested-tag errors an unclosed ``<code>`` caused.
 
     An unclosed ``<code>`` swallows every later tag, with one error per tag in
-    whichever cells follow. Only nested-tag errors at or after the line where
-    that block opened are part of the cascade; earlier ones come from another,
-    properly closed block and are kept. The parser reports at most one
-    unclosed block, since it tracks a single open ``<code>``.
+    whichever cells follow. Only nested-tag errors at or after the position
+    (line and column) where that block opened are part of the cascade; earlier
+    ones come from another, properly closed block and are kept. Columns matter
+    because an HTML label's whole content sits on one generated line. The
+    parser reports at most one unclosed block, since it tracks a single open
+    ``<code>``.
     """
 
-    unclosed_lines = [_diagnostic_line(d) for d in diagnostics if UNCLOSED_CODE in d]
-    if not unclosed_lines or unclosed_lines[0] is None:
+    unclosed = [_diagnostic_position(d) for d in diagnostics if UNCLOSED_CODE in d]
+    if not unclosed or unclosed[0] is None:
         return list(diagnostics)
-    opened = unclosed_lines[0]
+    opened = unclosed[0]
     return [
         d
         for d in diagnostics
-        if NESTED_TAG not in d or (_diagnostic_line(d) or 0) < opened
+        if NESTED_TAG not in d or (_diagnostic_position(d) or (0, 0)) < opened
     ]
 
 
-def _diagnostic_line(diagnostic: str) -> int | None:
-    match = DIAGNOSTIC_LINE.match(diagnostic)
-    return int(match["line"]) if match else None
+def _diagnostic_position(diagnostic: str) -> tuple[int, int] | None:
+    match = DIAGNOSTIC_POSITION.match(diagnostic)
+    return (int(match["line"]), int(match["column"])) if match else None
 
 
-def _drawio_location(html: str, line: int, origin: str, column: int = 1) -> str:
-    """Describe ``line`` of generated draw.io HTML by page, cell and offset."""
+def _drawio_location(html: str, line: int, origin: str, column: int) -> str:
+    """Describe ``line`` of generated draw.io HTML by page, cell and offset.
+
+    An HTML label is emitted as ``<div>`` followed by the label, so on its
+    first line the column is shifted back to count from the label's start.
+    """
 
     lines = html.splitlines()[:line]
     for index in range(len(lines) - 1, -1, -1):
         match = CELL_COMMENT.fullmatch(lines[index].strip())
         if match:
             offset = line - (index + 1)
+            if offset == 1 and lines[-1].startswith(LABEL_WRAPPER):
+                column = max(1, column - len(LABEL_WRAPPER))
             return (
                 f"{unescape(match['where'])} "
                 f"(line {offset} of its block, column {column})"

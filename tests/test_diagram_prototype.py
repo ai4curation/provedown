@@ -427,10 +427,10 @@ def test_main_reports_unwritable_output(
 @pytest.mark.parametrize(
     ("evidence", "message"),
     [
-        ("&lt;pre&gt;&lt;code&gt;x = 2", "column 11): unclosed <code> block"),
+        ("&lt;pre&gt;&lt;code&gt;x = 2", "column 6): unclosed <code> block"),
         (
             "&lt;code&gt;x = &lt;b&gt;2&lt;/b&gt;&lt;/code&gt;",
-            "column 16): nested HTML tag inside <code> was ignored",
+            "column 11): nested HTML tag inside <code> was ignored",
         ),
     ],
 )
@@ -455,10 +455,10 @@ def test_parser_errors_in_lowered_output_are_reported(
 def test_drawio_location_reports_offset_and_falls_back() -> None:
     html = "<!-- generated -->\n\n<!-- t.drawio: page 'p' cell 'c' -->\na\nb\n"
 
-    assert script._drawio_location(html, 5, "t.drawio") == (
+    assert script._drawio_location(html, 5, "t.drawio", 1) == (
         "t.drawio: page 'p' cell 'c' (line 2 of its block, column 1)"
     )
-    assert script._drawio_location(html, 1, "t.drawio") == (
+    assert script._drawio_location(html, 1, "t.drawio", 1) == (
         "t.drawio (generated HTML line 1, column 1)"
     )
 
@@ -537,9 +537,9 @@ def test_unclosed_code_keeps_unrelated_earlier_errors() -> None:
 
     nested = "nested HTML tag inside <code> was ignored"
     assert lowering.diagnostics == (
-        f"t.drawio: page 'p' cell 'a' (line 1 of its block, column 16): {nested}",
-        f"t.drawio: page 'p' cell 'a' (line 1 of its block, column 27): {nested}",
-        "t.drawio: page 'p' cell 'b' (line 1 of its block, column 11): "
+        f"t.drawio: page 'p' cell 'a' (line 1 of its block, column 11): {nested}",
+        f"t.drawio: page 'p' cell 'a' (line 1 of its block, column 22): {nested}",
+        "t.drawio: page 'p' cell 'b' (line 1 of its block, column 6): "
         "unclosed <code> block",
     )
 
@@ -551,3 +551,22 @@ def test_cascade_filter_matches_parser_wording() -> None:
 
     assert any(script.UNCLOSED_CODE in d for d in unclosed)
     assert any(script.NESTED_TAG in d for d in nested)
+
+
+def test_unclosed_code_keeps_earlier_error_on_the_same_line() -> None:
+    # One label, so one generated line: a closed block with a nested tag, then
+    # an unclosed block. The earlier error is not part of the cascade.
+    source = _drawio(
+        '<mxCell id="ev" style="html=1;" value="&lt;code&gt;x = &lt;b&gt;2'
+        '&lt;/b&gt;&lt;/code&gt;&lt;code&gt;y = 3"/>'
+        + _object("r", label="2", data_code="x")
+    )
+
+    lowering = script.drawio_to_html(source, origin="t.drawio")
+
+    assert lowering.diagnostics == (
+        "t.drawio: page 'p' cell 'ev' (line 1 of its block, column 11): "
+        "nested HTML tag inside <code> was ignored",
+        "t.drawio: page 'p' cell 'ev' (line 1 of its block, column 26): "
+        "unclosed <code> block",
+    )
