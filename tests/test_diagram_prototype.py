@@ -778,10 +778,22 @@ def test_label_unchecked_markup_is_reported_per_element() -> None:
     lowering = script.drawio_to_html(source)
 
     # Two separate elements, so two errors, each with its own position.
-    assert [d.split(" at ")[1] for d in lowering.diagnostics] == [
-        "label column 1, which verify would not check",
-        "label column 29, which verify would not check",
-    ]
+    assert lowering.diagnostics == tuple(
+        "<diagram>: page 'p' cell 'bad': class=\"result\" on <b> (only checked "
+        f"on <span>) at label column {column}, which verify would not check"
+        for column in (1, 29)
+    )
+
+
+DROPPED_CAUSE = (
+    "most likely a void element such as <br> inside or carrying "
+    "provedown-ignore, or an ignored region left open, makes verify skip "
+    "everything after it"
+)
+GAINED_CAUSE = (
+    "most likely an end tag with no matching start tag, such as a stray </br>, "
+    "makes verify stop ignoring early"
+)
 
 
 def test_svg_void_element_in_ignored_region_is_reported_when_verify_drops_claims() -> (
@@ -801,9 +813,8 @@ def test_svg_void_element_in_ignored_region_is_reported_when_verify_drops_claims
     assert not lowering.ok
     assert lowering.claims == 1
     assert lowering.diagnostics == (
-        "o.svg:4:1: verify would check only 1 of 2 claims; most likely a void "
-        "element such as <br> inside or carrying provedown-ignore, or an "
-        "ignored region left open, makes verify skip everything after it",
+        "o.svg:4:1: verify would skip this claim (1 checked, 2 outside ignored "
+        f"regions); {DROPPED_CAUSE}",
     )
 
 
@@ -823,9 +834,8 @@ def test_svg_every_claim_dropped_by_verify_names_the_cause(ignored: str) -> None
 
     assert lowering.claims == 0
     assert lowering.diagnostics == (
-        "o.svg:3:1: verify would check only 0 of 1 claims; most likely a void "
-        "element such as <br> inside or carrying provedown-ignore, or an "
-        "ignored region left open, makes verify skip everything after it",
+        "o.svg:3:1: verify would skip this claim (0 checked, 1 outside ignored "
+        f"regions); {DROPPED_CAUSE}",
     )
 
 
@@ -843,9 +853,8 @@ def test_drawio_label_ignored_region_dropping_claims_names_the_cause() -> None:
 
     assert lowering.claims == 0
     assert lowering.diagnostics == (
-        "t.drawio: verify would check only 0 of 1 claims; most likely a void "
-        "element such as <br> inside or carrying provedown-ignore, or an "
-        "ignored region left open, makes verify skip everything after it",
+        "t.drawio: page 'p' cell 'r' (label column 46): verify would skip this "
+        f"claim (0 checked, 1 outside ignored regions); {DROPPED_CAUSE}",
     )
 
 
@@ -861,7 +870,53 @@ def test_svg_stray_void_end_tag_in_ignored_region_is_reported() -> None:
 
     assert not lowering.ok
     assert lowering.diagnostics == (
-        "o.svg:3:34: verify would check 2 claims, but only 1 are outside "
-        "ignored regions; most likely a stray end tag such as </br> inside a "
-        "provedown-ignore region makes verify stop ignoring early",
+        "o.svg:3:34: verify would check this claim inside an ignored region "
+        f"(2 checked, 1 outside ignored regions); {GAINED_CAUSE}",
     )
+
+
+def test_svg_claim_gained_and_claim_lost_do_not_cancel_out() -> None:
+    # A stray </br> exposes an ignored claim and a later <br> hides a real one;
+    # the counts agree but the claims differ.
+    lowering = script.normalize_svg(
+        "<svg>\n"
+        '<g class="provedown-ignore"></br>'
+        '<text class="result" data-code="1">99</text></g>\n'
+        '<g class="provedown-ignore"><foreignObject><div>a<br>b</div>'
+        "</foreignObject></g>\n"
+        '<text class="result" data-code="2">2</text>\n</svg>',
+        origin="o.svg",
+    )
+
+    assert lowering.diagnostics == (
+        "o.svg:4:1: verify would skip this claim (1 checked, 1 outside ignored "
+        f"regions); {DROPPED_CAUSE}",
+    )
+
+
+def test_svg_dropped_claim_position_is_its_source_position() -> None:
+    # Two claims on one line before the dropped one: the position must be the
+    # dropped claim's own line and column, not one shifted by the rewrite.
+    lowering = script.normalize_svg(
+        "<svg>\n"
+        '<text><tspan class="result" data-code="1">1</tspan> '
+        '<tspan class="result" data-code="2">2</tspan></text>\n'
+        '<g class="provedown-ignore"><foreignObject><div>a<br>b</div>'
+        "</foreignObject></g>\n"
+        '<text class="result" data-code="3">3</text>\n</svg>',
+        origin="o.svg",
+    )
+
+    assert lowering.diagnostics == (
+        "o.svg:4:1: verify would skip this claim (2 checked, 3 outside ignored "
+        f"regions); {DROPPED_CAUSE}",
+    )
+
+
+def test_svg_claim_on_first_line_is_checked() -> None:
+    lowering = script.normalize_svg(
+        '<svg><text class="result" data-code="1">1</text></svg>', origin="o.svg"
+    )
+
+    assert lowering.ok
+    assert lowering.claims == 1

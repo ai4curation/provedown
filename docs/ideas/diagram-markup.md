@@ -231,12 +231,15 @@ writes the HTML but exits non-zero:
   an SVG). Ignored regions are skipped, as `verify` skips them. Labels are
   parsed as HTML, so every spelling `verify` accepts (such as unquoted
   `class=result`) works, and spellings it would ignore are reported;
-- a different number of claims seen by `verify` than the converter found
-  outside ignored regions, including none at all. Today this catches the
+- claims `verify` would check that differ from the ones the converter found
+  outside ignored regions, including none at all. The two lists are matched
+  by `data-code` in document order rather than counted, so a claim gained
+  in one place cannot hide a claim lost in another. Today this catches the
   core parser bug in proposal 5 above: a `<br>` inside or carrying
   `provedown-ignore` makes `verify` skip later claims, and a stray `</br>`
-  inside a region makes it check claims the author ignored. For SVG, the
-  message gives the position of the first claim the two disagree on;
+  inside a region makes it check claims the author ignored. The message
+  names the first claim the two disagree on, by its source line and column
+  in an SVG, or by its page, cell and label column in draw.io;
 - an SVG end tag that doesn't match its start tag, or has no start tag;
 - anything the Provedown parser would reject in the generated HTML, since
   `verify` refuses to run such a document. A tag nested inside `<code>` is
