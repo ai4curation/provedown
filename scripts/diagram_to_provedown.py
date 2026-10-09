@@ -150,6 +150,15 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
                 f"{where}: has both {CODE_PROPERTY} and data-code; "
                 "split evidence and claim into separate shapes"
             )
+        elif CODE_PROPERTY in attributes and (
+            RESULT_PROPERTY in attributes or _has_result_class(label)
+        ):
+            # The evidence would be kept and the claim silently dropped.
+            diagnostics.append(
+                f"{where}: has {CODE_PROPERTY} and a claim "
+                f'({RESULT_PROPERTY} or a class="result" label); '
+                "split evidence and claim into separate shapes"
+            )
         elif CODE_PROPERTY in attributes:
             code.append(f"{comment}\n{_code_element(cell)}")
         elif (

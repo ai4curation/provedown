@@ -196,6 +196,20 @@ def test_html_label_evidence_is_emitted_before_claims() -> None:
             "mixes evidence and claims",
         ),
         (_object("typo", label="4", datacode="x"), "no claims found"),
+        (
+            _object(
+                "note",
+                label='<span class="result">4</span> paid',
+                provedown_code="x = 4",
+            )
+            + _object("r", label="4", data_code="x"),
+            "has provedown-code and a claim",
+        ),
+        (
+            _object("note", label="4", provedown_code="x = 4", provedown_result="4")
+            + _object("r", label="4", data_code="x"),
+            "has provedown-code and a claim",
+        ),
         ('<mxCell id="plain" value="Just a label"/>', "no claims found"),
         (
             '<mxCell id="p" style="rounded=1;" value="&lt;span '
@@ -551,6 +565,9 @@ def test_cascade_filter_matches_parser_wording() -> None:
 
     assert any(script.UNCLOSED_CODE in d for d in unclosed)
     assert any(script.NESTED_TAG in d for d in nested)
+    # ...and on the location prefix the filter reads positions from.
+    assert script._diagnostic_position(unclosed[0]) == (1, 1)
+    assert script.PARSER_LOCATION.match(nested[0]) is not None
 
 
 def test_unclosed_code_keeps_earlier_error_on_the_same_line() -> None:
@@ -569,4 +586,18 @@ def test_unclosed_code_keeps_earlier_error_on_the_same_line() -> None:
         "nested HTML tag inside <code> was ignored",
         "t.drawio: page 'p' cell 'ev' (line 1 of its block, column 26): "
         "unclosed <code> block",
+    )
+
+
+def test_svg_unclosed_code_keeps_earlier_error_on_the_same_line() -> None:
+    # Line 2 has a closed block with a nested tag, then an unclosed block.
+    lowering = script.normalize_svg(
+        '<svg><text class="result" data-code="1">1</text>\n'
+        "<p><code>z = <i>4</i></code><code>w = 5",
+        origin="o.svg",
+    )
+
+    assert lowering.diagnostics == (
+        "o.svg:2:14: nested HTML tag inside <code> was ignored",
+        "o.svg:2:29: unclosed <code> block",
     )
