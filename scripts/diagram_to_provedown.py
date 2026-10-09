@@ -423,11 +423,16 @@ def _markup_mismatches(
     if len(known) != len(records):
         # Each element starts at its own position; matching depends on it.
         return [f"{origin}: two markup elements share a position; {CONVERTER_BUG}"]
-    seen = {
-        (event.location.line, event.location.column)
-        for event in events
-        if isinstance(event, ResultAssertion | CodeBlock | CodeUse)
-    }
+    # Keyed by kind too, so the converter's classification is checked
+    # rather than trusted: a mismatch shows up as one lost and one unrecorded.
+    seen: set[tuple[tuple[int, int], MarkupKind]] = set()
+    for event in events:
+        if isinstance(event, ResultAssertion | CodeBlock | CodeUse):
+            kind: MarkupKind = (
+                "claim" if isinstance(event, ResultAssertion) else "evidence"
+            )
+            seen.add(((event.location.line, event.location.column), kind))
+    keys = {(record.position, record.kind) for record in records}
     # Markup verify reads where the converter recorded none. Unreachable
     # today, since both scanners record every element the core parser
     # honours, ignored or not; reported rather than trusted.
@@ -435,12 +440,12 @@ def _markup_mismatches(
     messages = [
         f"{origin}: verify would read markup the converter did not record, at "
         f"line {line} of {lines} (column {column} of the output); {CONVERTER_BUG}"
-        for line, column in sorted(seen - known)
+        for (line, column), _ in sorted(seen - keys)
     ]
     for kind in ("evidence", "claim"):
         of_kind = [record for record in records if record.kind == kind]
-        lost = [r for r in of_kind if not r.ignored and r.position not in seen]
-        gained = [r for r in of_kind if r.ignored and r.position in seen]
+        lost = [r for r in of_kind if not r.ignored and (r.position, kind) not in seen]
+        gained = [r for r in of_kind if r.ignored and (r.position, kind) in seen]
         if lost:
             messages.append(
                 f"{lost[0].where}: verify would skip this {_NOUNS[kind]}"
@@ -463,7 +468,8 @@ def _markup_mismatches(
 
 
 CONVERTER_BUG = "this is a bug in the converter"
-_NOUNS: dict[MarkupKind, str] = {"claim": "claim", "evidence": "<code> block"}
+# "<code> element" rather than "block": <code use=...> references a block.
+_NOUNS: dict[MarkupKind, str] = {"claim": "claim", "evidence": "<code> element"}
 _VERBS: dict[MarkupKind, str] = {"claim": "check", "evidence": "run"}
 
 
@@ -643,7 +649,7 @@ class LabelMarkup:
     """The Provedown markup found in a draw.io label."""
 
     # The label text that was scanned.
-    label: str = ""
+    label: str
     # <code> and class="result" elements, in order; only those outside
     # ignored regions are checked.
     elements: list[LabelElement] = field(default_factory=list)
@@ -692,17 +698,16 @@ def _label_markup(label: str) -> LabelMarkup:
     verify skips it.
     """
 
-    scanner = _LabelScanner()
-    scanner.markup.label = label
+    scanner = _LabelScanner(label)
     scanner.feed(label)
     scanner.close()
     return scanner.markup
 
 
 class _LabelScanner(HTMLParser):
-    def __init__(self) -> None:
+    def __init__(self, label: str) -> None:
         super().__init__(convert_charrefs=True)
-        self.markup = LabelMarkup()
+        self.markup = LabelMarkup(label=label)
         self._regions = _IgnoredRegions()
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:

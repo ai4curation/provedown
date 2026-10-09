@@ -1053,7 +1053,7 @@ def test_svg_evidence_dropped_by_verify_is_reported() -> None:
     )
 
     assert lowering.diagnostics == (
-        f"o.svg:5:11: verify would skip this <code> block; {DROPPED_CAUSE}",
+        f"o.svg:5:11: verify would skip this <code> element; {DROPPED_CAUSE}",
     )
 
 
@@ -1068,7 +1068,7 @@ def test_svg_ignored_evidence_run_by_verify_is_reported() -> None:
     )
 
     assert lowering.diagnostics == (
-        "o.svg:3:44: verify would run this <code> block inside an ignored "
+        "o.svg:3:44: verify would run this <code> element inside an ignored "
         f"region; {GAINED_CAUSE}",
     )
 
@@ -1165,7 +1165,7 @@ def test_drawio_leak_dropping_property_evidence_and_claims_reports_both() -> Non
     lowering = script.drawio_to_html(source, origin="t.drawio")
 
     assert lowering.diagnostics == (
-        f"t.drawio: page 'p' cell 'c': verify would skip this <code> block; "
+        f"t.drawio: page 'p' cell 'c': verify would skip this <code> element; "
         f"{DROPPED_CAUSE}",
         f"t.drawio: page 'p' cell 'r': verify would skip this claim; {DROPPED_CAUSE}",
     )
