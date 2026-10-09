@@ -335,7 +335,8 @@ def test_svg_data_code_without_result_class_is_reported() -> None:
 
     assert not lowering.ok
     assert lowering.diagnostics == (
-        'o.svg:3:7: data-code on <tspan> without class="result", which verify would not check',
+        'o.svg:3:7: data-code on <tspan> without class="result", which verify '
+        "would not check",
     )
 
 
@@ -363,7 +364,8 @@ def test_svg_unchecked_markup_in_ignored_region_is_not_reported() -> None:
 
     # Only the element after the ignored <g> closes is reported.
     assert lowering.diagnostics == (
-        'o.svg:4:7: data-code on <tspan> without class="result", which verify would not check',
+        'o.svg:4:7: data-code on <tspan> without class="result", which verify '
+        "would not check",
     )
 
 
