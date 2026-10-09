@@ -171,6 +171,10 @@ In rough priority order:
    going through generated HTML. `SourceLocation` would need an optional
    element id (the cell id and page name) because line numbers mean nothing
    for compressed pages.
+   This also needs parser diagnostics to be structured records (message,
+   `SourceLocation`, severity) rendered at report time. Today they are strings
+   with the location already formatted in, so the prototype has to parse
+   `<string>:LINE:COL` back out of each message to point it at a cell.
 5. **Add rendering later.** Evidence disclosure on a diagram could be a
    draw.io tooltip or link on claim shapes, which draw.io already supports
    through properties.

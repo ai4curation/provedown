@@ -430,7 +430,7 @@ def test_main_reports_unwritable_output(
         ("&lt;pre&gt;&lt;code&gt;x = 2", "unclosed <code> block"),
         (
             "&lt;code&gt;x = &lt;b&gt;2&lt;/b&gt;&lt;/code&gt;",
-            "nested HTML tag inside <code>",
+            "nested HTML tag inside <code> was ignored",
         ),
     ],
 )
@@ -440,16 +440,27 @@ def test_parser_errors_in_lowered_output_are_reported(
     source = _drawio(
         f'<mxCell id="ev" style="html=1;" value="{evidence}"/>'
         + _object("r", label="2", data_code="x")
+        + _object("r2", label="2", data_code="x")
     )
 
     lowering = script.drawio_to_html(source, origin="t.drawio")
 
-    assert not lowering.ok
-    # Errors name the draw.io cell, not a line of the generated HTML.
-    prefix = f"t.drawio: page 'p' cell 'ev': {message}"
-    assert any(d.startswith(prefix) for d in lowering.diagnostics)
-    # "No claims" would be a consequence of the parser error, not a cause.
-    assert not any("no claims found" in d for d in lowering.diagnostics)
+    # One error naming the evidence cell: no cascade blamed on the claim cells
+    # after an unclosed <code>, no repeats, and no "no claims found" follow-on.
+    assert lowering.diagnostics == (
+        f"t.drawio: page 'p' cell 'ev' (line 1 of its block): {message}",
+    )
+
+
+def test_drawio_location_reports_offset_and_falls_back() -> None:
+    html = "<!-- generated -->\n\n<!-- t.drawio: page 'p' cell 'c' -->\na\nb\n"
+
+    assert script._drawio_location(html, 5, "t.drawio") == (
+        "t.drawio: page 'p' cell 'c' (line 2 of its block)"
+    )
+    assert script._drawio_location(html, 1, "t.drawio") == (
+        "t.drawio (generated HTML line 1)"
+    )
 
 
 def test_svg_stray_void_end_tag_is_reported() -> None:

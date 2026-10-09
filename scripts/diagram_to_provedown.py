@@ -32,7 +32,7 @@ import base64
 import re
 import sys
 import zlib
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
 from html import escape, unescape
 from html.parser import HTMLParser
@@ -46,6 +46,9 @@ from provedown.parser import parse_document
 GENERATED_HEADER = "<!-- generated from"
 # "<string>:LINE:COL: message", as rendered by SourceLocation for path=None.
 PARSER_LOCATION = re.compile(r"<string>:(?P<line>\d+):\d+: (?P<message>.*)", re.DOTALL)
+# Parser messages for an unclosed <code> and for each tag it swallowed.
+UNCLOSED_CODE = "unclosed <code> block"
+NESTED_TAG = "nested HTML tag inside <code>"
 # The comment drawio_to_html writes before each cell's block.
 CELL_COMMENT = re.compile(r"<!-- (?P<where>.*: page .* cell .*) -->")
 CODE_PROPERTY = "provedown-code"
@@ -180,7 +183,7 @@ def drawio_to_html(source: str, origin: str = "<diagram>") -> Lowering:
 
     header = f"{GENERATED_HEADER} {escape(origin)} by diagram_to_provedown.py -->"
     html = "\n\n".join([header, *code, *claims]) + "\n"
-    return _lowering(html, origin, diagnostics, locate=_drawio_cell_for_line)
+    return _lowering(html, origin, diagnostics, keeps_source_lines=False)
 
 
 def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
@@ -197,48 +200,61 @@ def normalize_svg(source: str, origin: str = "<svg>") -> Lowering:
     rewriter.close()
     # The header shares line 1 so line numbers still match the original SVG.
     header = f"{GENERATED_HEADER} {escape(origin)} by diagram_to_provedown.py -->"
-    return _lowering(header + rewriter.output(), origin, rewriter.diagnostics)
+    return _lowering(
+        header + rewriter.output(),
+        origin,
+        rewriter.diagnostics,
+        keeps_source_lines=True,
+    )
 
 
 def _lowering(
     html: str,
     origin: str,
     diagnostics: list[str],
-    locate: Callable[[str, int], str | None] | None = None,
+    *,
+    keeps_source_lines: bool,
 ) -> Lowering:
     """Parse the output the way verify will.
 
     Counts only claims verify will check (not ones in ignored regions) and
     surfaces the parser's errors, since verify refuses to run a document with
-    any of them. SVG output keeps the source's line numbers, so its errors cite
-    the SVG directly. draw.io output has its own numbering, so ``locate`` maps
-    each error back to the draw.io cell that produced that line.
+    any of them. When the output keeps the source's line numbers (SVG), errors
+    cite the source file directly. Otherwise (draw.io) each error is mapped
+    back to the cell that produced that line of the generated HTML.
     """
 
-    parsed = parse_document(html, path=None if locate else Path(origin))
+    diagnostics = list(diagnostics)
+    parsed = parse_document(html, path=Path(origin) if keeps_source_lines else None)
     claims = sum(isinstance(event, ResultAssertion) for event in parsed.events)
-    for diagnostic in parsed.diagnostics:
-        match = PARSER_LOCATION.match(diagnostic) if locate else None
-        if locate and match:
-            where = locate(html, int(match["line"])) or origin
-            diagnostics.append(f"{where}: {match['message']}")
-        else:
+    parser_diagnostics = parsed.diagnostics
+    if any(UNCLOSED_CODE in d for d in parser_diagnostics):
+        # An unclosed <code> swallows every later tag, one error per tag, in
+        # whichever cells follow. Report the cause, not that cascade.
+        parser_diagnostics = [d for d in parser_diagnostics if NESTED_TAG not in d]
+    for diagnostic in parser_diagnostics:
+        match = None if keeps_source_lines else PARSER_LOCATION.match(diagnostic)
+        if match:
+            diagnostic = f"{_drawio_location(html, int(match['line']), origin)}: "
+            diagnostic += match["message"]
+        if diagnostic not in diagnostics:
             diagnostics.append(diagnostic)
     # With parser errors, "no claims" is a consequence rather than the cause.
-    if claims == 0 and not parsed.diagnostics:
+    if claims == 0 and not parser_diagnostics:
         diagnostics.append(f"{origin}: no claims found")
     return Lowering(html=html, claims=claims, diagnostics=tuple(diagnostics))
 
 
-def _drawio_cell_for_line(html: str, line: int) -> str | None:
-    """Return the page/cell description of the block containing ``line``."""
+def _drawio_location(html: str, line: int, origin: str) -> str:
+    """Describe ``line`` of generated draw.io HTML by page, cell and offset."""
 
     lines = html.splitlines()[:line]
-    for text in reversed(lines):
-        match = CELL_COMMENT.fullmatch(text.strip())
+    for index in range(len(lines) - 1, -1, -1):
+        match = CELL_COMMENT.fullmatch(lines[index].strip())
         if match:
-            return unescape(match["where"])
-    return None
+            offset = line - (index + 1)
+            return f"{unescape(match['where'])} (line {offset} of its block)"
+    return f"{origin} (generated HTML line {line})"
 
 
 def _drawio_cells(source: str) -> Iterator[Cell]:
