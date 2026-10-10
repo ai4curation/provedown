@@ -82,5 +82,33 @@ The optional `provedown` mapping is reserved for Provedown-aware tooling.
 `pyproject_toml`
 : Accepted as a synonym for `pyproject`.
 
+`okf`
+: Optional mapping read by the
+  [OKF integration](../how-to-guides/verify-an-okf-bundle.md). Provedown core
+  preserves it without interpreting it.
+
 The built-in parser also accepts `data_aliases` as a synonym for `aliases`.
 Element-level language attributes still override `default_language`.
+
+## `provedown.okf` Block
+
+The OKF integration reads these keys when a document is verified with `--okf`.
+They are ignored otherwise.
+
+`bindings`
+: Optional mapping of binding name to declared parameter values. Each binding
+  becomes a named code block holding the computation with its `@parameter`
+  placeholders replaced.
+
+`runtime_language`
+: Optional verifier language to use instead of the one implied by the OKF
+  `runtime` key. Set this when a computation declares a runtime Provedown
+  cannot run but is portable enough to check with another.
+
+`bundle_root`
+: Optional path, relative to the document, bounding where the OKF `computation`
+  key may point. Defaults to `.`, the document's own directory. A reference
+  resolving outside the root is a blocking diagnostic rather than a file read.
+
+`computation_name`
+: Optional name for the lifted computation block. Defaults to `computation`.
