@@ -402,6 +402,8 @@
       
         
       
+        
+      
     
     
     
@@ -630,6 +632,34 @@
     
   
     Use SQL And CSV Files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to-guides/verify-an-okf-bundle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Verify an OKF Bundle
   
 
     
@@ -1241,6 +1271,8 @@
       
         
       
+        
+      
     
     
     
@@ -1385,6 +1417,34 @@
     
   
     Pure HTML Report
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/okf-acme-retail/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OKF Acme Retail Bundle
   
 
     
@@ -1624,7 +1684,7 @@
 <h2 id="provedown-verify"><code>provedown verify</code><a class="headerlink" href="#provedown-verify" title="Permanent link">&para;</a></h2>
 <p>Verify one or more documents.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>provedown<span class="w"> </span>verify<span class="w"> </span><span class="o">[</span>--verifier<span class="w"> </span>VERIFIER_ID<span class="o">]</span><span class="w"> </span><span class="o">[</span>--format<span class="w"> </span>text<span class="p">|</span>json<span class="o">]</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="o">[</span>--sandbox<span class="w"> </span>uv<span class="o">]</span><span class="w"> </span>PATH<span class="w"> </span><span class="o">[</span>PATH<span class="w"> </span>...<span class="o">]</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="o">[</span>--sandbox<span class="w"> </span>uv<span class="o">]</span><span class="w"> </span><span class="o">[</span>--okf<span class="o">]</span><span class="w"> </span>PATH<span class="w"> </span><span class="o">[</span>PATH<span class="w"> </span>...<span class="o">]</span>
 </span></code></pre></div>
 <p>Parser diagnostics become <code>error</code> findings. If a document has any parser error,
 the command adds a <code>skip</code> finding, does not load or invoke verifiers for that
@@ -1647,6 +1707,11 @@ document, and exits with status <code>1</code>.</p>
   supports only sandboxed <code>python-results</code>; documents containing SQL claims
   return an unsupported-sandbox error. The mode uses document environment
   metadata and does not provide network or filesystem security isolation.</dd>
+<dt><code>--okf</code></dt>
+<dd>Treat each document as <a href="../../how-to-guides/verify-an-okf-bundle/">Open Knowledge Format</a>
+  and lift an <code>Attested Computation</code>'s fenced computation into an executable
+  named code block. Without this flag the fenced computation stays a literal
+  example, as fenced code does everywhere else.</dd>
 </dl>
 <p>Exit codes:</p>
 <dl>
@@ -1667,7 +1732,7 @@ document, and exits with status <code>1</code>.</p>
 </span></code></pre></div>
 <h2 id="provedown-inspect"><code>provedown inspect</code><a class="headerlink" href="#provedown-inspect" title="Permanent link">&para;</a></h2>
 <p>Inspect code and result relationships without executing document code.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>provedown<span class="w"> </span>inspect<span class="w"> </span><span class="o">[</span>--format<span class="w"> </span>text<span class="p">|</span>json<span class="o">]</span><span class="w"> </span>PATH<span class="w"> </span><span class="o">[</span>PATH<span class="w"> </span>...<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>provedown<span class="w"> </span>inspect<span class="w"> </span><span class="o">[</span>--format<span class="w"> </span>text<span class="p">|</span>json<span class="o">]</span><span class="w"> </span><span class="o">[</span>--okf<span class="o">]</span><span class="w"> </span>PATH<span class="w"> </span><span class="o">[</span>PATH<span class="w"> </span>...<span class="o">]</span>
 </span></code></pre></div>
 <p>Arguments:</p>
 <dl>
@@ -1680,6 +1745,10 @@ document, and exits with status <code>1</code>.</p>
 <dd>Print human-readable inspection output. This is the default.</dd>
 <dt><code>--format json</code></dt>
 <dd>Print structured JSON output.</dd>
+<dt><code>--okf</code></dt>
+<dd>Lift an OKF <code>Attested Computation</code> before inspecting, so claims that
+  reference the lifted block resolve. Useful for seeing what <code>--okf</code> verify
+  would execute.</dd>
 </dl>
 <p>Exit codes:</p>
 <dl>
@@ -1693,7 +1762,7 @@ document, and exits with status <code>1</code>.</p>
 </dl>
 <h2 id="provedown-lint"><code>provedown lint</code><a class="headerlink" href="#provedown-lint" title="Permanent link">&para;</a></h2>
 <p>Lint Provedown documents without executing document code.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>provedown<span class="w"> </span>lint<span class="w"> </span><span class="o">[</span>--format<span class="w"> </span>text<span class="p">|</span>json<span class="o">]</span><span class="w"> </span>PATH<span class="w"> </span><span class="o">[</span>PATH<span class="w"> </span>...<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>provedown<span class="w"> </span>lint<span class="w"> </span><span class="o">[</span>--format<span class="w"> </span>text<span class="p">|</span>json<span class="o">]</span><span class="w"> </span><span class="o">[</span>--okf<span class="o">]</span><span class="w"> </span>PATH<span class="w"> </span><span class="o">[</span>PATH<span class="w"> </span>...<span class="o">]</span>
 </span></code></pre></div>
 <p>Arguments:</p>
 <dl>
@@ -1706,6 +1775,9 @@ document, and exits with status <code>1</code>.</p>
 <dd>Print human-readable lint output. This is the default.</dd>
 <dt><code>--format json</code></dt>
 <dd>Print structured JSON output.</dd>
+<dt><code>--okf</code></dt>
+<dd>Lift an OKF <code>Attested Computation</code> before linting, so claims that reference
+  the lifted block are not reported as unresolved.</dd>
 </dl>
 <p>Exit codes:</p>
 <dl>

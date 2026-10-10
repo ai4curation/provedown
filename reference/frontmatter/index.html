@@ -402,6 +402,8 @@
       
         
       
+        
+      
     
     
     
@@ -630,6 +632,34 @@
     
   
     Use SQL And CSV Files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to-guides/verify-an-okf-bundle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Verify an OKF Bundle
   
 
     
@@ -882,6 +912,17 @@
     <span class="md-ellipsis">
       
         provedown Block
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#provedownokf-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        provedown.okf Block
       
     </span>
   </a>
@@ -1186,6 +1227,8 @@
       
         
       
+        
+      
     
     
     
@@ -1330,6 +1373,34 @@
     
   
     Pure HTML Report
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/okf-acme-retail/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OKF Acme Retail Bundle
   
 
     
@@ -1489,6 +1560,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#provedownokf-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        provedown.okf Block
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1578,9 +1660,32 @@ static analysis.</p>
   dependencies from <code>environments.python.dependencies</code>.</dd>
 <dt><code>pyproject_toml</code></dt>
 <dd>Accepted as a synonym for <code>pyproject</code>.</dd>
+<dt><code>okf</code></dt>
+<dd>Optional mapping read by the
+  <a href="../../how-to-guides/verify-an-okf-bundle/">OKF integration</a>. Provedown core
+  preserves it without interpreting it.</dd>
 </dl>
 <p>The built-in parser also accepts <code>data_aliases</code> as a synonym for <code>aliases</code>.
 Element-level language attributes still override <code>default_language</code>.</p>
+<h2 id="provedownokf-block"><code>provedown.okf</code> Block<a class="headerlink" href="#provedownokf-block" title="Permanent link">&para;</a></h2>
+<p>The OKF integration reads these keys when a document is verified with <code>--okf</code>.
+They are ignored otherwise.</p>
+<dl>
+<dt><code>bindings</code></dt>
+<dd>Optional mapping of binding name to declared parameter values. Each binding
+  becomes a named code block holding the computation with its <code>@parameter</code>
+  placeholders replaced.</dd>
+<dt><code>runtime_language</code></dt>
+<dd>Optional verifier language to use instead of the one implied by the OKF
+  <code>runtime</code> key. Set this when a computation declares a runtime Provedown
+  cannot run but is portable enough to check with another.</dd>
+<dt><code>bundle_root</code></dt>
+<dd>Optional path, relative to the document, bounding where the OKF <code>computation</code>
+  key may point. Defaults to <code>.</code>, the document's own directory. A reference
+  resolving outside the root is a blocking diagnostic rather than a file read.</dd>
+<dt><code>computation_name</code></dt>
+<dd>Optional name for the lifted computation block. Defaults to <code>computation</code>.</dd>
+</dl>
 
 
 

@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://ai4curation.io/provedown/how-to-guides/verify-python-with-uv/">
+        <link rel="canonical" href="https://ai4curation.io/provedown/how-to-guides/verify-an-okf-bundle/">
       
       
-        <link rel="prev" href="../use-python-modules-and-data-files/">
+        <link rel="prev" href="../use-sql-and-csv-files/">
       
       
-        <link rel="next" href="../use-sql-and-csv-files/">
+        <link rel="next" href="../inspect-claim-dependencies/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Verify Python With uv - Provedown</title>
+        <title>Verify an OKF Bundle - Provedown</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#verify-python-with-uv" class="md-skip">
+        <a href="#verify-an-okf-bundle" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Verify Python With uv
+              Verify an OKF Bundle
             
           </span>
         </div>
@@ -595,37 +595,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Verify Python With uv
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../verify-python-with-uv/" class="md-nav__link">
         
   
   
@@ -641,59 +614,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#declare-python-requirements" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Declare Python Requirements
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#run-sandboxed-verification" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Run Sandboxed Verification
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#understand-the-boundary" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Understand The Boundary
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -731,10 +651,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../verify-an-okf-bundle/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Verify an OKF Bundle
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -750,6 +697,114 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#okf-documents-are-already-provedown-documents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OKF documents Are Already Provedown documents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#attested-computations-need-the-shim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attested Computations Need The Shim
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bind-declared-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bind Declared Parameters
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-the-computation-comes-from" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the Computation Comes From
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#runtimes-provedown-cannot-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runtimes Provedown Cannot Run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#attestation-and-verification-are-different-jobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attestation And Verification Are Different Jobs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#read-the-trust-signals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Read The Trust Signals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-worked-bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A Worked Bundle
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1539,10 +1594,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#declare-python-requirements" class="md-nav__link">
+  <a href="#okf-documents-are-already-provedown-documents" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Declare Python Requirements
+        OKF documents Are Already Provedown documents
       
     </span>
   </a>
@@ -1550,10 +1605,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#run-sandboxed-verification" class="md-nav__link">
+  <a href="#attested-computations-need-the-shim" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Run Sandboxed Verification
+        Attested Computations Need The Shim
       
     </span>
   </a>
@@ -1561,10 +1616,65 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#understand-the-boundary" class="md-nav__link">
+  <a href="#bind-declared-parameters" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Understand The Boundary
+        Bind Declared Parameters
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-the-computation-comes-from" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the Computation Comes From
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#runtimes-provedown-cannot-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runtimes Provedown Cannot Run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#attestation-and-verification-are-different-jobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attestation And Verification Are Different Jobs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#read-the-trust-signals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Read The Trust Signals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-worked-bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A Worked Bundle
       
     </span>
   </a>
@@ -1591,62 +1701,247 @@
   
 
 
-<h1 id="verify-python-with-uv">Verify Python With uv<a class="headerlink" href="#verify-python-with-uv" title="Permanent link">&para;</a></h1>
-<p>Use the uv sandbox prototype to verify Python claims in a fresh dependency
-environment instead of the environment that launched Provedown.</p>
-<h2 id="declare-python-requirements">Declare Python Requirements<a class="headerlink" href="#declare-python-requirements" title="Permanent link">&para;</a></h2>
-<p>Add a <code>python</code> environment to the document frontmatter:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nn">---</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">provedown</span><span class="p">:</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">python</span><span class="p">:</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">      </span><span class="nt">requires-python</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&gt;=3.11&quot;</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">      </span><span class="nt">dependencies</span><span class="p">:</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pandas&gt;=2</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pyarrow&gt;=15</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="nn">---</span>
+<h1 id="verify-an-okf-bundle">Verify an OKF Bundle<a class="headerlink" href="#verify-an-okf-bundle" title="Permanent link">&para;</a></h1>
+<p><a href="https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf">Open Knowledge Format</a> (OKF) describes structured knowledge — table
+definitions, metrics, runbooks, computations — as Markdown with YAML
+frontmatter. OKF v0.2 added trust signals so consumers can decide how much to
+believe a document that an agent wrote.</p>
+<p>Provedown answers a question those signals leave open. <code>verified</code> records that
+somebody blessed the document, and <code>stale_after</code> records a date by which it
+might have drifted; neither checks that the numbers in the document's prose
+still reproduce. Provedown does, deterministically.</p>
+<h2 id="okf-documents-are-already-provedown-documents">OKF documents Are Already Provedown documents<a class="headerlink" href="#okf-documents-are-already-provedown-documents" title="Permanent link">&para;</a></h2>
+<p>Provedown parses YAML frontmatter, ignores it when it scans for executable
+markup, preserves unknown keys on <code>Document.frontmatter</code>, and never rewrites the
+file. An OKF concept document with Provedown claims in its body needs no
+special handling:</p>
+<div class="language-markdown highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>---
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>type: BigQuery Table
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>title: Customer Orders
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>generated: { by: reference_agent/example, at: 2026-06-30T14:00:00Z }
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>verified:
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span><span class="k">-</span><span class="w"> </span>{ by: human:kliu@acme, at: 2026-07-01T16:00:00Z }
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>status: stable
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>stale_after: 2026-12-31
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>provedown:
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="gu">  default_language: duckdb</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="gu">---</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="gh"># Examples</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>&lt;pre&gt;&lt;code name=&quot;orders&quot;&gt;
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>CREATE OR REPLACE VIEW orders AS
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>SELECT * FROM read_csv_auto(&#39;../data/orders.csv&#39;);
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>&lt;/code&gt;&lt;/pre&gt;
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>&lt;code use=&quot;orders&quot;/&gt;
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>The table holds
+</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>&lt;span class=&quot;result&quot; data-code=&quot;SELECT COUNT(*) FROM orders&quot;&gt;10&lt;span class=&quot;method&quot;&gt;&lt;/span&gt;&lt;/span&gt;
+</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>orders.
 </span></code></pre></div>
-<p>Dependency entries use PEP 508 requirement syntax. <code>requires-python</code> uses a
-Python version specifier.</p>
-<p>If the document belongs to an existing project, point at its <code>pyproject.toml</code>:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nn">---</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">provedown</span><span class="p">:</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">pyproject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../pyproject.toml</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="nt">python</span><span class="p">:</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">      </span><span class="nt">dependencies</span><span class="p">:</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">matplotlib&gt;=3.9</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="nn">---</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>provedown<span class="w"> </span>verify<span class="w"> </span>tables/orders.md
 </span></code></pre></div>
-<p>The project supplies the base environment and inline dependencies are layered
-on top. The path resolves from the document directory.</p>
-<h2 id="run-sandboxed-verification">Run Sandboxed Verification<a class="headerlink" href="#run-sandboxed-verification" title="Permanent link">&para;</a></h2>
-<p>Run:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>provedown<span class="w"> </span>verify<span class="w"> </span>--sandbox<span class="w"> </span>uv<span class="w"> </span>report.md
+<p><code>provedown</code> is a legal OKF extension key, and OKF's own keys mean nothing to
+Provedown, so the two vocabularies do not collide.</p>
+<h2 id="attested-computations-need-the-shim">Attested Computations Need The Shim<a class="headerlink" href="#attested-computations-need-the-shim" title="Permanent link">&para;</a></h2>
+<p>One OKF convention does not line up. An <code>Attested Computation</code> carries its
+computation as a Markdown fenced code block under a <code># Computation</code> heading, or
+in a separate file named by the <code>computation</code> key. Provedown treats fenced code
+as a literal example and <a href="../../reference/markup/">never executes it</a>, so a
+bundle authored the ordinary OKF way gets no coverage at all.</p>
+<p>Pass <code>--okf</code> to close that gap:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>provedown<span class="w"> </span>verify<span class="w"> </span>--okf<span class="w"> </span>computations/revenue-by-year.md
 </span></code></pre></div>
-<p>Sandbox mode currently supports only the built-in <code>python-results</code> verifier.
-Requesting another verifier, or verifying a document that contains SQL claims,
-produces an error. Provedown never silently runs a verifier outside the
-requested environment.</p>
-<p>The worker preserves normal Provedown execution order and the document-relative
-working directory. Result comparison and report formatting remain in the
-parent Provedown process. The complete uv setup and worker invocation has a
-five-minute timeout so dependency resolution or document code cannot hang the
-verifier indefinitely.</p>
-<h2 id="understand-the-boundary">Understand The Boundary<a class="headerlink" href="#understand-the-boundary" title="Permanent link">&para;</a></h2>
-<p>This mode provides a fresh Python environment and dependency isolation. It is
-not a security sandbox:</p>
+<p>The shim parses the document normally, then <em>lifts</em> the OKF computation into a
+named code block that the ordinary verifiers can execute. Nothing on disk
+changes, and fenced code keeps its usual meaning for every other document.</p>
+<p>The lifted block is a definition named <code>computation</code>, so reference it by name:</p>
+<div class="language-markdown highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>---
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>type: Attested Computation
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="gu">runtime: duckdb</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="gu">---</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="gh"># Computation</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="sb">```sql</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="k">SELECT</span><span class="w"> </span><span class="n">printf</span><span class="p">(</span><span class="s1">&#39;%.2f&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">SUM</span><span class="p">(</span><span class="n">net_amount</span><span class="p">))</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="k">FROM</span><span class="w"> </span><span class="n">read_csv_auto</span><span class="p">(</span><span class="s1">&#39;../data/orders.csv&#39;</span><span class="p">)</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="k">WHERE</span><span class="w"> </span><span class="n">order_status</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;delivered&#39;</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="sb">```</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>Delivered revenue is
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>&lt;span class=&quot;result&quot; data-code=&quot;#computation&quot;&gt;500.50&lt;span class=&quot;method&quot;&gt;&lt;/span&gt;&lt;/span&gt;.
+</span></code></pre></div>
+<p><code>runtime</code> also sets the document's default language, so claims do not have to
+repeat it. An explicit <code>provedown.default_language</code>, or a <code>data-language</code>
+attribute on one element, still wins.</p>
+<h2 id="bind-declared-parameters">Bind Declared Parameters<a class="headerlink" href="#bind-declared-parameters" title="Permanent link">&para;</a></h2>
+<p>OKF computations take typed parameters, and the producer "MAY only supply values
+for the declared parameters; it MUST NOT author or edit the computation."
+Declare each set of values as a binding, and the shim generates one named block
+per binding with the <code>@parameter</code> placeholders replaced by literals:</p>
+<div class="language-markdown highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>---
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>type: Attested Computation
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>runtime: duckdb
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>parameters:
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="k">-</span><span class="w"> </span>{ name: year, type: integer, required: true }
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>provedown:
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>  okf:
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    bindings:
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>      fy2025: { year: 2025 }
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="gu">      fy2026: { year: 2026 }</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="gu">---</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="gh"># Computation</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="sb">```sql</span>
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="k">SELECT</span><span class="w"> </span><span class="n">printf</span><span class="p">(</span><span class="s1">&#39;%.2f&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">SUM</span><span class="p">(</span><span class="n">net_amount</span><span class="p">))</span>
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="k">FROM</span><span class="w"> </span><span class="n">read_csv_auto</span><span class="p">(</span><span class="s1">&#39;../data/orders.csv&#39;</span><span class="p">)</span>
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="k">WHERE</span><span class="w"> </span><span class="n">order_status</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;delivered&#39;</span>
+</span><span id="__span-4-19"><a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="k">EXTRACT</span><span class="p">(</span><span class="k">YEAR</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">order_ts</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">@</span><span class="k">year</span>
+</span><span id="__span-4-20"><a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a><span class="sb">```</span>
+</span><span id="__span-4-21"><a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>
+</span><span id="__span-4-22"><a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="gh"># Examples</span>
+</span><span id="__span-4-23"><a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>
+</span><span id="__span-4-24"><a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>Revenue was
+</span><span id="__span-4-25"><a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a>&lt;span class=&quot;result&quot; data-code=&quot;#fy2025&quot;&gt;225.50&lt;span class=&quot;method&quot;&gt;&lt;/span&gt;&lt;/span&gt;
+</span><span id="__span-4-26"><a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a>in FY2025 and
+</span><span id="__span-4-27"><a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a>&lt;span class=&quot;result&quot; data-code=&quot;#fy2026&quot;&gt;275.00&lt;span class=&quot;method&quot;&gt;&lt;/span&gt;&lt;/span&gt;
+</span><span id="__span-4-28"><a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a>in FY2026.
+</span></code></pre></div>
+<p>Bindings are checked against the declared <code>parameters</code>, and the checks are
+blocking:</p>
 <ul>
-<li>document code can read and write files available to the current user;</li>
-<li>document code inherits environment variables and credentials;</li>
-<li>dependency resolution and document code may access the network;</li>
-<li>native packages and subprocesses retain normal operating-system access.</li>
+<li>a binding that supplies a parameter the document does not declare is an error;</li>
+<li>a binding that omits a required parameter, or one the computation references,
+  is an error;</li>
+<li>a value that does not match its declared type is an error.</li>
 </ul>
-<p>Review an untrusted document and its dependency declarations before running it.
-Use a container or operating-system sandbox when hostile-code isolation is
-required.</p>
-<p>If uv cannot create the environment, Provedown reports an environment setup
-error separately from code exceptions and authored-value mismatches.</p>
+<p>Literals are rendered for the target language: quoted and escaped for SQL,
+<code>repr</code> for Python. A declared type is enforced rather than coerced, so <code>boolean</code>
+takes a boolean and <code>integer</code> takes a whole number; an undeclared type follows
+the value's own type, so an untyped <code>2026</code> stays a number instead of becoming a
+quoted string.</p>
+<p>Substitution is deliberately narrow. Only declared names are substituted, only
+at a name boundary, and — for SQL — only outside string literals. So with a
+declared <code>year</code>, none of <code>@yearly</code>, <code>@year_end</code>, <code>'ops@yearly.example'</code>, or
+<code>WHERE note = 'filed @year'</code> is touched. A warehouse does not bind a placeholder
+inside a quoted literal, and neither does the shim.</p>
+<h2 id="where-the-computation-comes-from">Where the Computation Comes From<a class="headerlink" href="#where-the-computation-comes-from" title="Permanent link">&para;</a></h2>
+<p><code>computation</code> in frontmatter is authoritative when present: the named file is
+used, and a <code># Computation</code> fence never quietly stands in for it. If the file
+cannot be read, that is the error. With no <code>computation</code> key, the fence under
+<code># Computation</code> is used — the one tagged for the runtime's language if the
+section holds several, so a <code>text</code> note or a <code>yaml</code> receipt sample before the
+SQL does not get lifted by mistake.</p>
+<p>A <code>computation</code> reference is confined to the bundle root, which defaults to the
+document's own directory:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>revenue.md:1:1: okf: computation &#39;../shared/revenue.sql&#39; resolves outside the
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>bundle root &#39;.&#39;; set provedown.okf.bundle_root if the computation genuinely
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>lives further up the tree
+</span></code></pre></div>
+<p>Lifting turns a path into executed code, and an OKF bundle may have been written
+by an agent rather than by whoever runs <code>verify</code>, so escaping the root is a
+blocking diagnostic rather than a read. When a bundle genuinely shares
+computations across directories, widen the root explicitly:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">provedown</span><span class="p">:</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">okf</span><span class="p">:</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="nt">bundle_root</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">..</span>
+</span></code></pre></div>
+<h2 id="runtimes-provedown-cannot-run">Runtimes Provedown Cannot Run<a class="headerlink" href="#runtimes-provedown-cannot-run" title="Permanent link">&para;</a></h2>
+<p><code>runtime</code> names an execution context — <code>bigquery</code>, <code>postgres</code>, <code>dbt</code>, <code>python</code>,
+<code>duckdb</code>. The built-in verifiers cover <code>python</code> and DuckDB SQL.</p>
+<p>One runtime value is treated loosely: a bare <code>runtime: sql</code> is taken as DuckDB,
+matching how the core <code>sql-results</code> verifier already claims the <code>sql</code> language.
+If a bundle's SQL is Postgres or BigQuery, name that dialect in <code>runtime</code> rather
+than <code>sql</code>, so the check below applies to it.</p>
+<p>A computation declaring any other runtime is <strong>reported, not guessed at</strong>:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>revenue.md:1:1: okf: no built-in verifier runs the &#39;bigquery&#39; runtime; set
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>provedown.okf.runtime_language to check the computation with another language,
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>or register a verifier plugin for it
+</span></code></pre></div>
+<p>Failing here is deliberate. Running BigQuery SQL through DuckDB could pass or
+fail for reasons that have nothing to do with the claim, and a document that
+silently checks nothing is worse than one that says so.</p>
+<p>Two ways forward. If the computation is portable enough to check locally, say so
+explicitly:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nt">provedown</span><span class="p">:</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nt">okf</span><span class="p">:</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="nt">runtime_language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">duckdb</span>
+</span></code></pre></div>
+<p>Otherwise write a <a href="../../reference/verifier-plugins/">verifier plugin</a> for the
+real runtime. The shim hands it an ordinary <code>Document</code>, so a plugin needs to
+know nothing about OKF.</p>
+<h2 id="attestation-and-verification-are-different-jobs">Attestation And Verification Are Different Jobs<a class="headerlink" href="#attestation-and-verification-are-different-jobs" title="Permanent link">&para;</a></h2>
+<p>OKF attestation asks whether the sanctioned computation is what actually ran,
+using an executor receipt and a deterministic attester. Provedown asks whether
+the values a reader sees still reproduce. Neither subsumes the other:</p>
+<table>
+<thead>
+<tr>
+<th>Signal</th>
+<th>Scope</th>
+<th>Answers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>verified</code></td>
+<td>document, stored</td>
+<td>Did somebody bless this document?</td>
+</tr>
+<tr>
+<td>Attestation</td>
+<td>per call, runtime</td>
+<td>Was the sanctioned computation what ran?</td>
+</tr>
+<tr>
+<td><code>stale_after</code></td>
+<td>document, calendar</td>
+<td>Is it probably still true?</td>
+</tr>
+<tr>
+<td>Provedown</td>
+<td>per claim, deterministic</td>
+<td>Do the numbers still reproduce?</td>
+</tr>
+</tbody>
+</table>
+<p>Use them together. A document can be human-<code>verified</code>, <code>status: stable</code>, and
+inside its <code>stale_after</code> window while its prose reports last quarter's number.</p>
+<h2 id="read-the-trust-signals">Read The Trust Signals<a class="headerlink" href="#read-the-trust-signals" title="Permanent link">&para;</a></h2>
+<p>The Python API exposes OKF metadata alongside the parsed document, including the
+trust tier OKF derives from its <code>verified</code> actors:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">provedown.integrations.okf</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_okf_file</span><span class="p">,</span> <span class="n">verify_okf_file</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="n">okf</span> <span class="o">=</span> <span class="n">parse_okf_file</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;computations/revenue-by-year.md&quot;</span><span class="p">))</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="n">okf</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">trust_tier</span><span class="p">()</span>   <span class="c1"># &#39;unverified&#39; | &#39;machine-confirmed&#39; | &#39;human-reviewed&#39;</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="n">okf</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">is_stale</span><span class="p">()</span>     <span class="c1"># compares stale_after against today</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="n">okf</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">sources</span>        <span class="c1"># provenance entries, preserved verbatim</span>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="n">okf</span><span class="o">.</span><span class="n">computation</span>             <span class="c1"># the lifted CodeBlock, or None</span>
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="n">okf</span><span class="o">.</span><span class="n">bindings</span>                <span class="c1"># one CodeBlock per declared binding</span>
+</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>
+</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="n">report</span> <span class="o">=</span> <span class="n">verify_okf_file</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;computations/revenue-by-year.md&quot;</span><span class="p">))</span>
+</span></code></pre></div>
+<p><code>okf.document</code> is an ordinary <code>Document</code>, so it also works with
+<code>inspect_document()</code> and <code>lint_document()</code>. <code>provedown inspect --okf</code> shows what
+the shim lifted and which claims resolve to it.</p>
+<p>Provedown does not write results back into OKF frontmatter. A <code>verify</code> run is
+evidence a bundle's own tooling can turn into a <code>verified</code> entry, but appending
+one is that tooling's decision, not Provedown's.</p>
+<h2 id="a-worked-bundle">A Worked Bundle<a class="headerlink" href="#a-worked-bundle" title="Permanent link">&para;</a></h2>
+<p><code>examples/okf/</code> holds a small bundle mirroring the layout of OKF's reference
+<code>acme_retail</code> bundle, covering both cases:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>provedown<span class="w"> </span>verify<span class="w"> </span>examples/okf/tables/orders.md
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>provedown<span class="w"> </span>verify<span class="w"> </span>--okf<span class="w"> </span>examples/okf/computations/revenue-ytd.md
+</span></code></pre></div>
+<p><a href="../../examples/okf-acme-retail/">OKF Bundle: Revenue at Acme Retail</a> walks
+through it with a policy change that leaves every OKF trust signal green and the
+document's figures wrong.</p>
 
 
 
@@ -1682,7 +1977,7 @@ error separately from code exceptions and authored-value mismatches.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../use-python-modules-and-data-files/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Use Python Modules And Data Files">
+          <a href="../use-sql-and-csv-files/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Use SQL And CSV Files">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1692,20 +1987,20 @@ error separately from code exceptions and authored-value mismatches.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Use Python Modules And Data Files
+                Use SQL And CSV Files
               </div>
             </div>
           </a>
         
         
           
-          <a href="../use-sql-and-csv-files/" class="md-footer__link md-footer__link--next" aria-label="Next: Use SQL And CSV Files">
+          <a href="../inspect-claim-dependencies/" class="md-footer__link md-footer__link--next" aria-label="Next: Inspect Claim Dependencies">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Use SQL And CSV Files
+                Inspect Claim Dependencies
               </div>
             </div>
             <div class="md-footer__button md-icon">
