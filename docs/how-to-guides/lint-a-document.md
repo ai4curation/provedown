@@ -64,6 +64,22 @@ JSON output is intended for CI, editor integrations, and scripts.
 `python-syntax-error`
 : A Python code block or inline expression cannot be parsed. This is an error.
 
+`uncited-quote`
+: A `<q>` or `<blockquote>` is not inside a citation, so no verifier can check
+  it against a source. This is a warning. See
+  [Quotations](../reference/markup.md#quotations).
+
+`quote-citation-without-source`
+: A quote is inside a `<cite>` whose text names no reference id such as
+  `PMID:123`. This is an error.
+
+`quote-citation-with-several-sources`
+: A quote is inside a `<cite>` that names more than one reference id. Give each
+  source its own `<cite>`. This is an error.
+
+`empty-quote`
+: A `<q>` or `<blockquote>` has no text. This is an error.
+
 ## Justify Explicitly Unverified Claims
 
 When a claim is intentionally outside the verifier's scope, mark it with

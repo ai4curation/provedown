@@ -111,6 +111,7 @@ def lint_document(document: Document) -> LintReport:
     _add_result_policy_lints(document, findings)
     _add_python_fragility_lints(document, findings)
     _add_mutation_lints(document, findings)
+    _add_quote_lints(document, findings)
     return LintReport(path=document.path, findings=findings)
 
 
@@ -147,6 +148,67 @@ def _add_relationship_lints(
                     location=issue.location,
                     message=issue.message,
                     target=issue.target,
+                )
+            )
+
+
+def _add_quote_lints(
+    document: Document,
+    findings: list[LintFinding],
+) -> None:
+    """Flag quotations that a quote verifier could not check.
+
+    A quote outside any citation is ordinary HTML, so it is only a warning. A
+    quote inside a citation claims to be verbatim, so a citation that does not
+    name exactly one source, or a quote with no text, is an error.
+    """
+
+    for quote in document.quotes:
+        if not quote.text:
+            findings.append(
+                LintFinding(
+                    level="error",
+                    code="empty-quote",
+                    location=quote.location,
+                    message=f"<{quote.element}> has no quoted text",
+                )
+            )
+        elif quote.citation is None:
+            findings.append(
+                LintFinding(
+                    level="warning",
+                    code="uncited-quote",
+                    location=quote.location,
+                    message=(
+                        f"<{quote.element}> is not inside a citation, so it "
+                        "cannot be checked against a source"
+                    ),
+                )
+            )
+        elif not quote.sources:
+            findings.append(
+                LintFinding(
+                    level="error",
+                    code="quote-citation-without-source",
+                    location=quote.location,
+                    message=(
+                        "the citation around this quote names no reference id "
+                        "such as PMID:123"
+                    ),
+                    target=quote.citation,
+                )
+            )
+        elif len(quote.sources) > 1:
+            findings.append(
+                LintFinding(
+                    level="error",
+                    code="quote-citation-with-several-sources",
+                    location=quote.location,
+                    message=(
+                        "the citation around this quote names several reference "
+                        "ids; give each source its own <cite>"
+                    ),
+                    target=" ".join(quote.sources),
                 )
             )
 

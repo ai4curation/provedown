@@ -64,6 +64,36 @@ DocumentEvent = CodeBlock | CodeUse | ResultAssertion
 
 
 @dataclass(frozen=True)
+class QuoteClaim:
+    """A quotation that claims to reproduce text from a cited source verbatim.
+
+    Parsed from a ``<q>`` inside a ``<cite>``, or from a ``<blockquote>`` inside
+    a ``<figure>`` whose ``<figcaption>`` holds a ``<cite>``. Quotes are not
+    executable, so they are kept apart from ``Document.events``; a verifier
+    plugin that can fetch sources checks them.
+
+    ``citation`` is the citation's own text, without its quotes, or ``None``
+    when the quote is not inside a citation. ``sources`` are the reference ids
+    found in that text, in order.
+    """
+
+    text: str
+    location: SourceLocation
+    element: str = "q"
+    citation: str | None = None
+    citation_location: SourceLocation | None = None
+    sources: tuple[str, ...] = ()
+
+    @property
+    def source(self) -> str | None:
+        """The reference id to check against, when the citation names exactly one."""
+
+        if len(self.sources) == 1:
+            return self.sources[0]
+        return None
+
+
+@dataclass(frozen=True)
 class ProvedownConfig:
     """Optional configuration parsed from a document's ``provedown`` frontmatter."""
 
@@ -89,6 +119,7 @@ class Document:
     frontmatter: Mapping[str, Any] = field(default_factory=dict)
     provedown: ProvedownConfig = field(default_factory=ProvedownConfig)
     diagnostics: list[str] = field(default_factory=list)
+    quotes: list[QuoteClaim] = field(default_factory=list)
 
     def referenced_code_names(self) -> list[str]:
         names: list[str] = []

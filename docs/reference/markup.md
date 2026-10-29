@@ -3,7 +3,8 @@
 Provedown looks for a small HTML contract in Markdown or HTML documents.
 
 The parser currently recognizes `<code>` elements, `<code use="..."/>` elements,
-and `<span class="result">` elements.
+`<span class="result">` elements, and quotations: `<q>` inside `<cite>`, and
+`<blockquote>` inside `<figure>`.
 
 ## Rendering In Markdown
 
@@ -179,6 +180,56 @@ Result spans may contain an empty method slot:
 The parser ignores text inside the method slot when collecting the authored
 value. Future renderers can use this slot for method markers or disclosure UI.
 
+## Quotations
+
+A quotation that claims to reproduce its source verbatim is a `<q>` nested in a
+`<cite>` that names the source:
+
+````markdown
+IL-34 signals through CSF1R <cite>PMID:18467591, <q>IL-34 binds the CSF-1 receptor</q></cite>.
+````
+
+The `<cite>` scopes the claim. Its own text, outside its `<q>` elements, must
+name exactly one reference id: a `prefix:local` token such as `PMID:18467591`,
+`DOI:10.1016/...`, `Reactome:R-HSA-75899` or `file:genes/x.txt`. Commas and
+semicolons separate an id from the text around it; trailing sentence
+punctuation and unbalanced closing brackets are dropped. Each `<q>` in the
+citation is a separate claim against that source, and the id may be link text:
+
+````markdown
+<cite><a href="https://pubmed.ncbi.nlm.nih.gov/18467591/">PMID:18467591</a>, <q>first excerpt</q> and <q>second excerpt</q></cite>
+````
+
+A `<blockquote>` cannot go inside `<cite>`, which holds only inline content.
+Use a `<figure>` and put the citation in its `<figcaption>`:
+
+````markdown
+<figure>
+<blockquote>
+At the endoplasmic reticulum (ER) membrane, phosphatidic acid ...
+</blockquote>
+<figcaption><cite>Reactome:R-HSA-1483203</cite></figcaption>
+</figure>
+````
+
+All of the information is visible text: browsers italicize the citation and
+add quotation marks around `<q>`, and a renderer that drops the tags still shows
+the reference and the quoted words. Do not type quotation marks inside `<q>`.
+Text without `<q>` makes no verbatim claim, so cite a paraphrase without
+quotation marks.
+
+The quoted text is collected with HTML entities decoded and whitespace,
+including line wraps, collapsed to single spaces. Markup inside a quote, such as
+a nested `<q>`, is part of the quoted text. Markdown inside a quote is not
+rendered first, so avoid Markdown emphasis there.
+
+Quotations are parsed into `Document.quotes` as `QuoteClaim` objects, not into
+`Document.events`, because they are not executable. Provedown itself does not
+fetch sources: a verifier plugin that can, such as one built on
+linkml-reference-validator, checks each claim's `text` against its `source`.
+`provedown lint` reports quotes that such a verifier could not check; see
+[Lint A Document](../how-to-guides/lint-a-document.md#current-lints).
+
 ## Diagnostics
 
 The `provedown verify` CLI and the high-level `verify_file()` and
@@ -201,6 +252,8 @@ Markup diagnostics include:
 - empty code uses;
 - unclosed `<code>` blocks;
 - unclosed result spans;
+- unclosed `<q>` or `<blockquote>` elements, and unclosed `<cite>` or
+  `<figure>` elements that contain a quote;
 - result spans missing `data-code`.
 
 See [Frontmatter](frontmatter.md) for document-level metadata and defaults.

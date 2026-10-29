@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
@@ -16,8 +17,21 @@ from provedown.model import (
     Document,
     DocumentEvent,
     ProvedownConfig,
+    QuoteClaim,
     ResultAssertion,
     SourceLocation,
+)
+
+# A reference id in citation text: a CURIE-like ``prefix:local`` token such as
+# ``PMID:18467591``, ``DOI:10.1016/...``, ``Reactome:R-HSA-75899`` or
+# ``file:genes/x.txt``. Commas and semicolons separate ids from each other and
+# from the quote, so they never belong to one.
+_SOURCE_ID_PATTERN = re.compile(r"(?<![\w/:.-])[A-Za-z][\w.-]*:[^\s,;]+")
+_SOURCE_ID_TRAILING = ".:"
+_CLOSING_BRACKETS = {")": "(", "]": "[", "}": "{"}
+# Elements whose boundaries separate words in quoted text.
+_QUOTE_WORD_BREAK_TAGS = frozenset(
+    {"br", "p", "div", "li", "tr", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6"}
 )
 
 
@@ -65,6 +79,48 @@ class _ResultBuilder:
         )
 
 
+@dataclass
+class _QuoteBuilder:
+    location: SourceLocation
+    element: str
+    owner: _CiteBuilder | _FigureBuilder | None
+    depth: int = 1
+    parts: list[str] = field(default_factory=list)
+
+    def build(
+        self,
+        citation: str | None = None,
+        citation_location: SourceLocation | None = None,
+    ) -> QuoteClaim:
+        return QuoteClaim(
+            text=_collapse_whitespace("".join(self.parts)),
+            location=self.location,
+            element=self.element,
+            citation=citation,
+            citation_location=citation_location,
+            sources=source_ids(citation) if citation is not None else (),
+        )
+
+
+@dataclass
+class _CiteBuilder:
+    location: SourceLocation
+    parts: list[str] = field(default_factory=list)
+    quotes: list[_QuoteBuilder] = field(default_factory=list)
+
+    @property
+    def text(self) -> str:
+        return _collapse_whitespace("".join(self.parts))
+
+
+@dataclass
+class _FigureBuilder:
+    location: SourceLocation
+    caption_depth: int = 0
+    quotes: list[_QuoteBuilder] = field(default_factory=list)
+    captions: list[_CiteBuilder] = field(default_factory=list)
+
+
 @dataclass(frozen=True)
 class _Frontmatter:
     data: Mapping[str, Any] = field(default_factory=dict)
@@ -90,6 +146,9 @@ class _ProvedownHTMLParser(HTMLParser):
         self._code: _CodeBuilder | None = None
         self._results: list[_ResultBuilder] = []
         self._ignore_depth = 0
+        self.quotes: list[QuoteClaim] = []
+        self._quote: _QuoteBuilder | None = None
+        self._quote_containers: list[_CiteBuilder | _FigureBuilder] = []
 
     def handle_starttag(
         self,
@@ -117,6 +176,8 @@ class _ProvedownHTMLParser(HTMLParser):
             self._start_code(attr_map, location)
             return
 
+        self._start_quote_markup(tag, location)
+
         if tag == "span" and self._results:
             self._results[-1].span_depth += 1
             if _has_class(attr_map, "method"):
@@ -135,6 +196,9 @@ class _ProvedownHTMLParser(HTMLParser):
 
         if self._ignore_depth > 0 or _is_ignored_region(attr_map):
             return
+
+        if self._quote is not None and tag in _QUOTE_WORD_BREAK_TAGS:
+            self._quote.parts.append(" ")
 
         if tag == "code":
             if "use" in attr_map:
@@ -163,6 +227,13 @@ class _ProvedownHTMLParser(HTMLParser):
             self._code.parts.append(data)
             return
 
+        if self._quote is not None:
+            self._quote.parts.append(data)
+        elif self._quote_containers and isinstance(
+            self._quote_containers[-1], _CiteBuilder
+        ):
+            self._quote_containers[-1].parts.append(data)
+
         if self._results and self._results[-1].method_depth == 0:
             self._results[-1].parts.append(data)
 
@@ -182,6 +253,8 @@ class _ProvedownHTMLParser(HTMLParser):
             self._code = None
             self._append_code_block(code)
             return
+
+        self._end_quote_markup(tag)
 
         if tag == "span" and self._results:
             current = self._results[-1]
@@ -206,6 +279,110 @@ class _ProvedownHTMLParser(HTMLParser):
                 f"{result.location.display()}: unclosed result span"
             )
             self._finish_result()
+        if self._quote is not None:
+            self._close_unclosed_quote()
+        while self._quote_containers:
+            container = self._quote_containers[-1]
+            if container.quotes:
+                tag = "cite" if isinstance(container, _CiteBuilder) else "figure"
+                self.diagnostics.append(
+                    f"{container.location.display()}: unclosed <{tag}>"
+                )
+            self._finish_quote_container()
+
+    def _start_quote_markup(self, tag: str, location: SourceLocation) -> None:
+        """Track the elements that make up a cited quotation.
+
+        Markup inside an open quote is part of the quoted text, so only a
+        nested quote of the same element is tracked there, to find its end.
+        """
+
+        if self._quote is not None:
+            if tag == self._quote.element:
+                self._quote.depth += 1
+            elif tag in _QUOTE_WORD_BREAK_TAGS:
+                self._quote.parts.append(" ")
+            return
+
+        if tag in {"q", "blockquote"}:
+            owner = self._quote_containers[-1] if self._quote_containers else None
+            self._quote = _QuoteBuilder(location=location, element=tag, owner=owner)
+        elif tag == "cite":
+            self._quote_containers.append(_CiteBuilder(location=location))
+        elif tag == "figure":
+            self._quote_containers.append(_FigureBuilder(location=location))
+        elif tag == "figcaption" and self._quote_containers:
+            container = self._quote_containers[-1]
+            if isinstance(container, _FigureBuilder):
+                container.caption_depth += 1
+
+    def _end_quote_markup(self, tag: str) -> None:
+        if self._quote is not None:
+            if tag in _QUOTE_WORD_BREAK_TAGS:
+                self._quote.parts.append(" ")
+            if tag == self._quote.element:
+                self._quote.depth -= 1
+                if self._quote.depth == 0:
+                    self._finish_quote()
+                return
+            container = self._quote_containers[-1] if self._quote_containers else None
+            if (
+                container is None
+                or self._quote.owner is not container
+                or not _closes_container(tag, container)
+            ):
+                return
+            # The quote's own citation is closing around it.
+            self._close_unclosed_quote()
+
+        if not self._quote_containers:
+            return
+        container = self._quote_containers[-1]
+        if _closes_container(tag, container):
+            self._finish_quote_container()
+        elif (
+            tag == "figcaption"
+            and isinstance(container, _FigureBuilder)
+            and container.caption_depth > 0
+        ):
+            container.caption_depth -= 1
+
+    def _close_unclosed_quote(self) -> None:
+        assert self._quote is not None
+        self.diagnostics.append(
+            f"{self._quote.location.display()}: unclosed <{self._quote.element}>"
+        )
+        self._finish_quote()
+
+    def _finish_quote(self) -> None:
+        assert self._quote is not None
+        quote = self._quote
+        self._quote = None
+        if quote.owner is None:
+            self.quotes.append(quote.build())
+        else:
+            quote.owner.quotes.append(quote)
+
+    def _finish_quote_container(self) -> None:
+        container = self._quote_containers.pop()
+        if isinstance(container, _CiteBuilder):
+            for quote in container.quotes:
+                self.quotes.append(quote.build(container.text, container.location))
+            parent = self._quote_containers[-1] if self._quote_containers else None
+            if isinstance(parent, _FigureBuilder) and parent.caption_depth > 0:
+                parent.captions.append(container)
+            return
+
+        citation = (
+            " ".join(caption.text for caption in container.captions)
+            if container.captions
+            else None
+        )
+        citation_location = (
+            container.captions[0].location if container.captions else None
+        )
+        for quote in container.quotes:
+            self.quotes.append(quote.build(citation, citation_location))
 
     def _start_code(
         self,
@@ -308,11 +485,58 @@ def parse_document(source: str, path: Path | None = None) -> Document:
         frontmatter=frontmatter.data,
         provedown=frontmatter.provedown,
         diagnostics=parser.diagnostics,
+        quotes=sorted(
+            parser.quotes,
+            key=lambda quote: (quote.location.line, quote.location.column),
+        ),
     )
 
 
 def parse_file(path: Path) -> Document:
     return parse_document(path.read_text(encoding="utf-8"), path=path)
+
+
+def source_ids(citation: str) -> tuple[str, ...]:
+    """Return the reference ids named in a citation's text, in order.
+
+    >>> source_ids("PMID:18467591,")
+    ('PMID:18467591',)
+    >>> source_ids("Smith et al. (DOI:10.1016/S0092-8674(00)81141-4).")
+    ('DOI:10.1016/S0092-8674(00)81141-4',)
+    >>> source_ids("PMID:1; Reactome:R-HSA-75899 and file:genes/x.txt")
+    ('PMID:1', 'Reactome:R-HSA-75899', 'file:genes/x.txt')
+    >>> source_ids("Smith 2020, 10:30")
+    ()
+    """
+
+    return tuple(
+        _trim_source_id(match.group(0))
+        for match in _SOURCE_ID_PATTERN.finditer(citation)
+    )
+
+
+def _trim_source_id(token: str) -> str:
+    """Drop sentence punctuation and unbalanced closing brackets from an id."""
+
+    while token:
+        last = token[-1]
+        unbalanced = last in _CLOSING_BRACKETS and token.count(last) > token.count(
+            _CLOSING_BRACKETS[last]
+        )
+        if last not in _SOURCE_ID_TRAILING and not unbalanced:
+            break
+        token = token[:-1]
+    return token
+
+
+def _closes_container(tag: str, container: _CiteBuilder | _FigureBuilder) -> bool:
+    if isinstance(container, _CiteBuilder):
+        return tag == "cite"
+    return tag == "figure"
+
+
+def _collapse_whitespace(text: str) -> str:
+    return " ".join(text.split())
 
 
 def _extract_frontmatter(source: str, path: Path | None) -> _Frontmatter:
