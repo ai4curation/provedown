@@ -908,24 +908,59 @@ def test_void_element_in_an_ignore_marked_figure_inside_a_figure_fails_closed() 
 
 
 def test_unclosed_ignore_marked_container_inside_its_own_kind_is_reported() -> None:
-    for source, kind in (
+    for source, outer, kind in (
         (
             '<cite>PMID:1 <cite class="provedown-ignore">draft, <q>a claim</q></cite>',
             "cite",
+            "cite",
         ),
         (
-            '<figure><blockquote>A</blockquote><figure class="provedown-ignore">'
-            "<figcaption><cite>PMID:1</cite></figcaption></figure>",
+            '<figure><figure class="provedown-ignore"><blockquote>A</blockquote>'
+            "</figure>",
+            "figure",
             "figure",
         ),
     ):
         document = parse_document(source)
 
-        assert any(
-            f"unclosed <{kind}>; most likely an ignore-marked <{kind}>" in diagnostic
-            for diagnostic in document.diagnostics
-        ), (source, document.diagnostics)
+        assert document.quotes == [], source
+        [diagnostic] = document.diagnostics
+        assert (
+            f"unclosed <{outer}> holding no quotation; most likely an "
+            f"ignore-marked <{kind}> inside it has no end tag"
+        ) in diagnostic
         assert not verify_document(document).ok
+
+
+def test_plain_missing_end_tag_after_a_closed_ignored_own_kind_is_lint_only() -> None:
+    for source in (
+        '<cite>PMID:1 <cite class="provedown-ignore">draft</cite>, <q>the claim</q>'
+        "\n<pre><code>total = 42</code></pre>",
+        '<figure><blockquote>A</blockquote><figure class="provedown-ignore">'
+        "<figcaption><cite>PMID:1</cite></figcaption></figure>"
+        "\n<pre><code>total = 42</code></pre>",
+    ):
+        document = parse_document(source)
+
+        # A quotation carries the unclosed-citation lint, so the code still runs.
+        assert document.diagnostics == [], source
+        assert "unclosed-citation" in {
+            finding.code for finding in lint_document(document).findings
+        }, source
+        assert verify_document(document).ok, source
+
+
+def test_figcaption_leak_with_the_caption_end_tag_missing_is_reported() -> None:
+    document = parse_document(
+        "<figure><blockquote>A</blockquote><figcaption>"
+        '<span class="provedown-ignore">draft<br>note</span>'
+        "<pre><code>total = 42</code></pre><cite>PMID:1</cite></figure>"
+        '<p><span class="result" data-code="total">42</span></p>'
+    )
+
+    [diagnostic] = document.diagnostics
+    assert "unclosed ignored region" in diagnostic
+    assert not verify_document(document).ok
 
 
 def test_void_element_leak_in_a_figcaption_is_reported_for_any_count() -> None:

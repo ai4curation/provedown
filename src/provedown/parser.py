@@ -134,8 +134,8 @@ class _CiteBuilder:
     parts: list[str] = field(default_factory=list)
     quotes: list[_QuoteBuilder] = field(default_factory=list)
     contains_executable_markup: bool = False
-    # An ignore-marked element of its own kind was opened inside it.
-    holds_ignored_own_kind: bool = False
+    # The tag of an ignore-marked element of its own kind opened inside it.
+    ignored_own_kind: str = ""
 
     @property
     def text(self) -> str:
@@ -148,8 +148,8 @@ class _FigureBuilder:
     caption_depth: int = 0
     quotes: list[_QuoteBuilder] = field(default_factory=list)
     captions: list[_CiteBuilder] = field(default_factory=list)
-    # An ignore-marked element of its own kind was opened inside it.
-    holds_ignored_own_kind: bool = False
+    # The tag of an ignore-marked element of its own kind opened inside it.
+    ignored_own_kind: str = ""
 
 
 @dataclass(frozen=True)
@@ -181,12 +181,12 @@ class _ProvedownHTMLParser(HTMLParser):
         # a nested parse_* call (end tag -> bogus comment) does not copy twice.
         self._keeping_in_code = False
         self._ignore_location: SourceLocation | None = None
-        # The quote or citation markup the current ignored region began in, its
-        # closing tag name, and how many of that tag were opened inside the
+        # The quote or citation markup the current ignored region began in, the
+        # end tags that can end it, and how many of those were opened inside the
         # region, so the owner's own end tag still closes it if the region was
         # left open; that region is then reported as unclosed.
         self._ignore_owner: _QuoteBuilder | _CiteBuilder | _FigureBuilder | None = None
-        self._ignore_owner_tag = ""
+        self._ignore_owner_ends: frozenset[str] = frozenset()
         self._ignored_owner_tags = 0
         self.quotes: list[QuoteClaim] = []
         self._quote: _QuoteBuilder | None = None
@@ -204,7 +204,7 @@ class _ProvedownHTMLParser(HTMLParser):
             self._ignore_depth += 1
             if tag in _QUOTE_WORD_BREAK_TAGS:
                 self._append_quotation_text(" ")
-            if self._ignore_owner is not None and tag == self._ignore_owner_tag:
+            if self._ignore_owner is not None and tag in self._ignore_owner_ends:
                 self._ignored_owner_tags += 1
             return
 
@@ -355,7 +355,7 @@ class _ProvedownHTMLParser(HTMLParser):
             else:
                 if (
                     self._ignore_owner is not None
-                    and tag == self._ignore_owner_tag
+                    and tag in self._ignore_owner_ends
                     and self._ignored_owner_tags > 0
                 ):
                     # It closes the same tag opened inside the region.
@@ -412,13 +412,16 @@ class _ProvedownHTMLParser(HTMLParser):
             self._finish_quote()
         while self._quote_containers:
             container = self._quote_containers[-1]
-            if container.holds_ignored_own_kind:
-                # Its end tag most likely closed an ignore-marked element of the
-                # same kind that lacked one, so what lay inside was skipped.
-                kind = "cite" if isinstance(container, _CiteBuilder) else "figure"
+            kind = container.ignored_own_kind
+            if kind and not container.quotes:
+                # No quotation can carry the unclosed-citation lint: its end tag
+                # most likely closed an ignore-marked element of the same kind
+                # that lacked one, so what lay inside was skipped.
+                outer = "cite" if isinstance(container, _CiteBuilder) else "figure"
                 self.diagnostics.append(
-                    f"{container.location.display()}: unclosed <{kind}>; most "
-                    f"likely an ignore-marked <{kind}> inside it has no end tag"
+                    f"{container.location.display()}: unclosed <{outer}> holding "
+                    f"no quotation; most likely an ignore-marked <{kind}> inside "
+                    "it has no end tag"
                 )
             for quote in container.quotes:
                 # An unclosed quote already says its text is untrustworthy.
@@ -546,41 +549,42 @@ class _ProvedownHTMLParser(HTMLParser):
         self._ignore_location = location
         if self._quote is not None:
             self._ignore_owner = self._quote
-            self._ignore_owner_tag = self._quote.element
+            self._ignore_owner_ends = frozenset({self._quote.element})
         elif self._quote_containers:
             container = self._quote_containers[-1]
             self._ignore_owner = container
             if isinstance(container, _CiteBuilder):
-                self._ignore_owner_tag = "cite"
+                self._ignore_owner_ends = frozenset({"cite"})
             elif container.caption_depth > 0:
-                # Inside a caption, the caption's end tag comes first.
-                self._ignore_owner_tag = "figcaption"
+                # Inside a caption, its end tag comes first, but the figure's
+                # still ends the region if the caption's is missing.
+                self._ignore_owner_ends = frozenset({"figcaption", "figure"})
             else:
-                self._ignore_owner_tag = "figure"
+                self._ignore_owner_ends = frozenset({"figure"})
         else:
             self._ignore_owner = None
-            self._ignore_owner_tag = ""
+            self._ignore_owner_ends = frozenset()
         # The opening element counts too when it is of the owner's own kind, so
         # its end tag is not taken for the owner's.
-        self._ignored_owner_tags = 1 if tag == self._ignore_owner_tag else 0
+        self._ignored_owner_tags = 1 if tag in self._ignore_owner_ends else 0
         if self._ignored_owner_tags and not isinstance(
             self._ignore_owner, _QuoteBuilder
         ):
             assert self._ignore_owner is not None
-            self._ignore_owner.holds_ignored_own_kind = True
+            self._ignore_owner.ignored_own_kind = tag
 
     def _end_ignored_region(self) -> None:
         self._ignore_depth = 0
         self._ignore_location = None
         self._ignore_owner = None
-        self._ignore_owner_tag = ""
+        self._ignore_owner_ends = frozenset()
         self._ignored_owner_tags = 0
 
     def _is_owner_end_tag(self, tag: str) -> bool:
         """Whether ``tag`` ends the markup the current ignored region began in."""
 
         owner = self._ignore_owner
-        if owner is None or tag != self._ignore_owner_tag:
+        if owner is None or tag not in self._ignore_owner_ends:
             return False
         if self._ignored_owner_tags > 0:
             return False

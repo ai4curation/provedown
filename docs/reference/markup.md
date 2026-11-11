@@ -200,10 +200,9 @@ token holding any other character an id cannot contain, such as `~~PMID:1~~`,
 is rejected, and `provedown lint` reports it as an error, even when a valid id
 is also present; the quote then has no single `source`. Any `prefix:local`
 shaped token in citation text is held to these rules, so keep prose such as
-`Chapter:3–5` out of the citation. The prefix is not checked against a list: any `prefix:local`
-token counts as a reference id, so a verifier should reject prefixes it does
-not know. A bare link such as
-`https://...` or `mailto:...` is not a reference id; write a URL source as
+`Chapter:3–5` out of the citation. The prefix is not checked against a list:
+any `prefix:local` token counts as a reference id, so a verifier should reject
+prefixes it does not know. A bare link such as `https://...` or `mailto:...` is not a reference id; write a URL source as
 `url:https://...`. Do not wrap an id in an HTML `<code>` element, which would be
 executed; Markdown backticks are fine.
 Each `<q>` in the citation is a separate claim against that source, and the id
@@ -306,11 +305,12 @@ Markup diagnostics include:
   is there. What it swallowed was skipped, so the whole document is not
   verified. Documents that verified before this diagnostic existed may now
   report it.
-- a `<cite>` or `<figure>` still open at the end of the document after an
-  ignore-marked element of the same kind was opened inside it. The ignored
-  element most likely has no end tag, so it took the outer element's end tag
-  and skipped what lay between. A plain unclosed `<cite>` or `<figure>` is
-  reported by lint instead, through its quotations.
+- a `<cite>` or `<figure>` still open at the end of the document, holding no
+  quotation, after an ignore-marked element of the same kind was opened inside
+  it. That element most likely has no end tag, so it took the outer element's
+  end tag and skipped what lay between, and no quotation is left to carry a
+  lint. An unclosed `<cite>` or `<figure>` that holds a quotation is reported
+  by lint instead, as `unclosed-citation`, and does not block verification.
 
 A void element inside an ignored region also extends the region past its own
 end tag. If the region began inside a quote, a `<cite>`, a `<figure>` or a
