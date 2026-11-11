@@ -284,6 +284,9 @@ class _ProvedownHTMLParser(HTMLParser):
 def parse_document(source: str, path: Path | None = None) -> Document:
     """Parse a Markdown or HTML document containing Provedown HTML contracts."""
 
+    if isinstance(path, str):
+        # An untyped caller may pass a string; verifiers rely on Path methods.
+        path = Path(path)
     frontmatter = _extract_frontmatter(source, path)
     parser = _ProvedownHTMLParser(
         source=source,

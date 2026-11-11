@@ -30,12 +30,14 @@ class MyVerifier:
             )
 ```
 
-Provedown constructs each plugin verifier once per run and calls `verify()`
-once per document, so keep per-document state inside `verify()`, not on the
-instance.
+`provedown verify` constructs each plugin verifier once per run and calls
+`verify()` once per document; `verify_document()` and `verify_file()` without a
+`registry` build new instances on every call. Either way, keep per-document
+state inside `verify()`, not on the instance.
 
 Treat `document` and `context` as read-only. Every selected verifier receives
-the same objects, in `verifier_id` order, so a verifier that changes
+the same objects, in `verifier_id` order, or in the order requested with
+`--verifier`, so a verifier that changes
 `document.events`, `document.named_code` or `context.comparators` changes what
 the verifiers after it check, and their findings would not show it.
 
@@ -56,9 +58,9 @@ Each finding has:
 
 `location`
 : A `SourceLocation` for the relevant document item, such as an event's or
-  quote's `location`. Its `path` must be a `Path`, a string or `None`, and it
-  must render as text; its `line`
-  and `column` must be `int`s. Anything else raises `TypeError`.
+  quote's `location`. Its `path` must be a `Path` or `None` and render as
+  text, and its `line` and `column` must be `int`s. Anything else raises
+  `TypeError`.
 
 `message`
 : Human-readable explanation, as a `str`.
@@ -172,7 +174,8 @@ The id that `--verifier` and `list-verifiers` use is the verifier's
 `verifier_id`, not the entry point name. In the example above the entry point
 is called `quotes`, but `--verifier` takes whatever `QuoteVerifier.verifier_id`
 is. The entry point name only sets the load order and appears in error
-messages. It does not set the run order: verifiers run in `verifier_id` order.
+messages. It does not set the run order: verifiers run in `verifier_id` order,
+or in the order `--verifier` names them.
 
 Entry points load in name order. A plugin may not reuse the `verifier_id` of a
 built-in verifier or of a plugin loaded before it. A plugin that cannot be

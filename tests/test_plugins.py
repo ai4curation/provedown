@@ -1030,7 +1030,7 @@ def test_finding_location_contents_are_checked_when_the_finding_is_built() -> No
             raise RuntimeError("no")
 
     for location, match in (
-        (SourceLocation(path=b"notes.md", line=1, column=1), "path must be a Path"),  # type: ignore[arg-type]
+        (SourceLocation(path="notes.md", line=1, column=1), "path must be a Path"),  # type: ignore[arg-type]
         (SourceLocation(path=None, line=None, column=1), "line must be an int"),  # type: ignore[arg-type]
         (SourceLocation(path=None, line=1, column=2.5), "column must be an int"),  # type: ignore[arg-type]
         (SourceLocation(path=None, line=True, column=1), "line must be an int"),
@@ -1058,13 +1058,16 @@ def test_finding_to_dict_evidence_is_a_fresh_copy() -> None:
     assert finding.evidence == {"rows": ["a"]}
 
 
-def test_a_string_location_path_from_a_library_caller_still_reports() -> None:
+def test_a_string_document_path_from_a_library_caller_still_verifies() -> None:
     document = parse_document(
-        '<pre><code name="x">1</code></pre><pre><code name="x">2</code></pre>',
+        "<pre><code>x = 2</code></pre>"
+        '<p><span class="result" data-code="x">2</span></p>',
         path="notes.md",  # type: ignore[arg-type]
     )
 
+    assert document.path == Path("notes.md")
     report = verify_document(document)
-
-    locations = {finding.to_dict()["location"] for finding in report.findings}
-    assert locations == {"notes.md:1:1"}
+    assert report.ok, [finding.message for finding in report.findings]
+    assert {
+        finding.to_dict()["location"].split(":")[0] for finding in report.findings
+    } == {"notes.md"}
