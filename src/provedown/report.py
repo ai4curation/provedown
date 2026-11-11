@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import PurePath
 from typing import Any
 
 from provedown.model import SourceLocation
@@ -89,9 +89,9 @@ class Finding:
 def _check_location(location: SourceLocation) -> None:
     """Check a plugin's location now, since it is only rendered in reporting."""
 
-    if location.path is not None and not isinstance(location.path, PurePath):
+    if location.path is not None and not isinstance(location.path, str | os.PathLike):
         raise TypeError(
-            "Finding location path must be a Path or None, not "
+            "Finding location path must be a Path, a str or None, not "
             f"{type(location.path).__name__}"
         )
     for name in ("line", "column"):
