@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
@@ -42,6 +43,16 @@ class Finding:
                 "Finding location must be a SourceLocation, not "
                 f"{type(self.location).__name__}"
             )
+        # Evidence goes into JSON reports, so check it here rather than fail
+        # while printing a report after every document has been verified.
+        try:
+            evidence = dict(self.evidence)
+            json.dumps(evidence, sort_keys=True)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                f"Finding evidence must be a JSON-serializable mapping: {exc}"
+            ) from exc
+        object.__setattr__(self, "evidence", evidence)
 
     def to_dict(self) -> dict[str, Any]:
         return {

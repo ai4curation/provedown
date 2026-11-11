@@ -29,8 +29,9 @@ def verify_document(
     parser errors.
     """
 
-    # Build the registry before the parser-error gate, so a broken plugin or an
-    # unknown id is reported the same way for every document.
+    # Build the registry and check the ids before the parser-error gate, so a
+    # broken plugin or an unknown id is reported the same way for every
+    # document; VerifierRegistry.verify() checks again for direct callers.
     active_registry = registry or default_registry()
     if verifier_ids is not None:
         active_registry.check_ids(verifier_ids)

@@ -120,6 +120,59 @@ class HugeYieldVerifier:
         yield {"rows": list(range(10000))}
 
 
+class PathEvidenceVerifier:
+    verifier_id = "path-evidence"
+
+    def verify(self, document, context):
+        from pathlib import Path
+
+        yield Finding(
+            verifier_id=self.verifier_id,
+            status="pass",
+            location=SourceLocation(path=document.path, line=1, column=1),
+            message="evidence holds a Path",
+            evidence={"source": Path("refs/paper.md")},
+        )
+
+
+class ListEvidenceVerifier:
+    verifier_id = "list-evidence"
+
+    def verify(self, document, context):
+        yield Finding(
+            verifier_id=self.verifier_id,
+            status="pass",
+            location=SourceLocation(path=document.path, line=1, column=1),
+            message="evidence is a list",
+            evidence=[1, 2],
+        )
+
+
+CLOSED = []
+
+
+class CleanupVerifier:
+    verifier_id = "cleanup"
+
+    def verify(self, document, context):
+        try:
+            yield "not a finding"
+            yield "never reached"
+        finally:
+            CLOSED.append(True)
+
+
+class BadReprVerifier:
+    verifier_id = "bad-repr"
+
+    def verify(self, document, context):
+        class Unprintable:
+            def __repr__(self):
+                raise RuntimeError("repr exploded")
+
+        yield Unprintable()
+
+
 class DictVerifier:
     verifier_id = "dicts"
 
@@ -531,3 +584,51 @@ def test_findings_with_bad_fields_become_attributed_errors(
     report_path.write_text("text\n", encoding="utf-8")
     assert main(["verify", str(report_path), "--format", "json"]) == 1
     assert '"verifier_id": "bad-status"' in capsys.readouterr().out
+
+
+def test_evidence_must_be_a_json_serializable_mapping(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    install_plugin(
+        tmp_path,
+        monkeypatch,
+        {
+            "list-evidence": "countplugin:ListEvidenceVerifier",
+            "path-evidence": "countplugin:PathEvidenceVerifier",
+        },
+    )
+
+    report = verify_document(parse_document("text"), registry=default_registry())
+    by_id = {finding.verifier_id: finding for finding in report.findings}
+
+    for verifier_id in ("list-evidence", "path-evidence"):
+        assert by_id[verifier_id].status is Status.ERROR
+        assert "evidence must be" in by_id[verifier_id].message
+
+    report_path = tmp_path / "report.md"
+    report_path.write_text("text\n", encoding="utf-8")
+    assert main(["verify", str(report_path), "--format", "json"]) == 1
+    assert '"verifier_id": "path-evidence"' in capsys.readouterr().out
+
+
+def test_wrong_type_yield_closes_the_verifier_generator(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    install_plugin(tmp_path, monkeypatch, {"cleanup": "countplugin:CleanupVerifier"})
+
+    report = verify_document(parse_document("text"), registry=default_registry())
+
+    assert [f.verifier_id for f in report.findings] == ["cleanup"]
+    assert sys.modules["countplugin"].CLOSED == [True]
+
+
+def test_wrong_type_yield_with_a_broken_repr_is_still_reported(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    install_plugin(tmp_path, monkeypatch, {"bad-repr": "countplugin:BadReprVerifier"})
+
+    report = verify_document(parse_document("text"), registry=default_registry())
+
+    [finding] = report.findings
+    assert finding.status is Status.ERROR
+    assert finding.message.startswith("verifier yielded <Unprintable")

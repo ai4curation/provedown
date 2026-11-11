@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import reprlib
 import traceback
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -118,20 +119,29 @@ def _run_verifier(
     findings: list[Finding] = []
     location = SourceLocation(path=document.path, line=1, column=1)
     try:
-        for finding in verifier.verify(document, context):
-            if not isinstance(finding, Finding):
-                yielded = _short_repr(finding)
-                findings.append(
-                    Finding(
-                        verifier_id=verifier.verifier_id,
-                        status=Status.ERROR,
-                        location=location,
-                        message=f"verifier yielded {yielded}, which is not a Finding",
-                        evidence={"yielded": yielded},
+        results = verifier.verify(document, context)
+        try:
+            for finding in results:
+                if not isinstance(finding, Finding):
+                    yielded = _short_repr(finding)
+                    findings.append(
+                        Finding(
+                            verifier_id=verifier.verifier_id,
+                            status=Status.ERROR,
+                            location=location,
+                            message=(
+                                f"verifier yielded {yielded}, which is not a Finding"
+                            ),
+                            evidence={"yielded": yielded},
+                        )
                     )
-                )
-                return findings
-            findings.append(finding)
+                    break
+                findings.append(finding)
+        finally:
+            # Let a generator run its own cleanup now, not whenever it is freed.
+            close = getattr(results, "close", None)
+            if callable(close):
+                close()
     except Exception as exc:  # Verifier code may be a third-party plugin.
         findings.append(
             Finding(
@@ -145,12 +155,22 @@ def _run_verifier(
     return findings
 
 
+_SHORT_REPR = reprlib.Repr()
+_SHORT_REPR.maxstring = _SHORT_REPR.maxother = 200
+
+
 def _short_repr(value: object, limit: int = 200) -> str:
-    """Return ``repr(value)`` cut to ``limit`` characters for a report."""
+    """Return a bounded ``repr(value)``, at most ``limit`` characters, for a report.
 
-    text = repr(value)
+    ``reprlib`` stops early on large containers, and a third-party ``__repr__``
+    that raises is replaced by the type name.
+    """
+
+    try:
+        text = _SHORT_REPR.repr(value)
+    except Exception:  # A plugin's __repr__ is outside Provedown's control.
+        text = f"<{type(value).__name__} object>"
     return text if len(text) <= limit else text[: limit - 3] + "..."
-
 
 
 def default_registry(*, plugins: bool = True) -> VerifierRegistry:

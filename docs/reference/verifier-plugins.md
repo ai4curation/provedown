@@ -35,7 +35,10 @@ class MyVerifier:
 Each finding has:
 
 `verifier_id`
-: The verifier that produced the finding.
+: The verifier that produced the finding. Provedown does not check it against
+  the verifier that yielded the finding, so a composite verifier may report
+  under sub-ids; treat it as the plugin's claim, not as proof of which code
+  ran.
 
 `status`
 : A `Status`: `Status.PASS`, `Status.FAIL`, `Status.SKIP` or `Status.ERROR`.
@@ -56,7 +59,9 @@ Each finding has:
 : Optional computed value.
 
 `evidence`
-: Optional structured metadata.
+: Optional structured metadata: a mapping that `json.dumps` can serialize,
+  because it appears in `--format json` output. Convert values such as `Path`
+  to strings. Anything else raises `TypeError`.
 
 ## Status Semantics
 
