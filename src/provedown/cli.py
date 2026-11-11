@@ -130,7 +130,7 @@ def _verify(args: argparse.Namespace) -> int:
     # Load plugins once for all paths, not once per file.
     registry = default_registry(plugins=not args.no_plugins)
     try:
-        registry.check_ids(verifier_ids or ())
+        registry.check_requested_ids(verifier_ids)
     except UnknownVerifierError as exc:
         print(f"provedown verify: {exc}", file=sys.stderr)
         return 2

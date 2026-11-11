@@ -122,11 +122,10 @@ is not registered, through `verify_document()`, `registry.verify()` or
 message lists the registered ids. An empty list of ids raises `ValueError`,
 so that running nothing never looks like a passing report; pass `None` to run
 every verifier. A repeated id runs its verifier once. Call
-`registry.check_requested_ids(ids)` to validate a request up front, with
-`None` meaning every verifier, or `registry.check_ids(ids)` to check only that
-each id is registered. `registry.register()`
-raises `TypeError` for an object without a string `verifier_id` and a
-`verify()` method.
+`registry.check_requested_ids(ids)` to validate a request up front, with `None`
+meaning every verifier, or `registry.check_ids(ids)` to check only that each
+id is registered. `registry.register()` raises `TypeError` for an object
+without a string `verifier_id` and a `verify()` method.
 
 Do not call `registry.verify()` directly for parsed or untrusted document input.
 That low-level dispatch method does not inspect `Document.diagnostics` before

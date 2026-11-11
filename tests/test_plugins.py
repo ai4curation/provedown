@@ -58,6 +58,15 @@ def huge_broken():
     raise ValueError("schema " * 20000)
 
 
+class RaisingIdVerifier:
+    @property
+    def verifier_id(self):
+        raise RuntimeError("lazy import failed")
+
+    def verify(self, document, context):
+        return []
+
+
 def not_a_verifier():
     return {"verifier_id": "dict"}
 
@@ -858,3 +867,20 @@ def test_load_error_for_a_huge_message_keeps_the_hint_visible(
     assert err.rstrip().endswith(
         "(use --no-plugins to run only the built-in verifiers)"
     )
+
+
+def test_verifier_id_that_raises_is_a_load_error_and_a_register_error(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    from provedown import VerifierRegistry
+
+    install_plugin(
+        tmp_path, monkeypatch, {"raising-id": "countplugin:RaisingIdVerifier"}
+    )
+
+    with pytest.raises(PluginLoadError, match="'raising-id' from countplugin"):
+        load_plugin_verifiers()
+
+    verifier = sys.modules["countplugin"].RaisingIdVerifier()
+    with pytest.raises(TypeError, match="reading its verifier_id raised RuntimeError"):
+        VerifierRegistry().register(verifier)

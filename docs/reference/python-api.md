@@ -79,7 +79,9 @@ Pass `sandbox="uv"` and select `python-results` to use the uv sandbox adapter.
 
 `verify_document()` and `verify_file()` fail closed when the parsed document has
 an error diagnostic: their report contains every parser error plus a `skip`
-finding, and they do not construct the default registry or invoke a verifier.
+finding, and they do not invoke a verifier. Without a `registry` argument they
+still build the default registry first, which imports and constructs installed
+verifier plugins, so a broken plugin is reported for every document.
 `VerifierRegistry.verify()` is a lower-level dispatch API that does not inspect
 `Document.diagnostics` before invoking registered verifiers.
 

@@ -70,10 +70,10 @@ class VerifierRegistry:
         and a ``verify()`` method, the shape the rest of the registry relies on.
         """
 
-        problem = _verifier_shape_problem(verifier)
-        if problem is not None:
+        verifier_id, problem = _verifier_shape(verifier)
+        if verifier_id is None:
             raise TypeError(f"cannot register {_short_repr(verifier)}: {problem}")
-        self._verifiers[verifier.verifier_id] = verifier
+        self._verifiers[verifier_id] = verifier
 
     def get(self, verifier_id: str) -> Verifier:
         self.check_ids([verifier_id])
@@ -247,15 +247,22 @@ def _short_traceback(exc: BaseException) -> str:
     return text[:head] + "\n...\n" + text[-(_TRACEBACK_LIMIT - 5 - head) :]
 
 
-def _verifier_shape_problem(verifier: object) -> str | None:
-    """Say what keeps ``verifier`` from being a usable verifier, if anything."""
+def _verifier_shape(verifier: object) -> tuple[str, None] | tuple[None, str]:
+    """Return ``(verifier_id, None)`` for a usable verifier, else ``(None, why)``.
 
-    verifier_id = getattr(verifier, "verifier_id", None)
+    The id is read once, here, so the id that was checked is the one used.
+    """
+
+    try:
+        verifier_id = getattr(verifier, "verifier_id", None)
+        verify = getattr(verifier, "verify", None)
+    except Exception as exc:  # A plugin's attributes are outside our control.
+        return None, f"reading its verifier_id raised {type(exc).__name__}"
     if not isinstance(verifier_id, str) or not verifier_id:
-        return "it has no verifier_id"
-    if not callable(getattr(verifier, "verify", None)):
-        return "it has no verify() method"
-    return None
+        return None, "it has no verifier_id"
+    if not callable(verify):
+        return None, "it has no verify() method"
+    return verifier_id, None
 
 
 def default_registry(*, plugins: bool = True) -> VerifierRegistry:
@@ -326,8 +333,9 @@ def _load_plugin(entry_point: EntryPoint) -> Verifier:
             f"{type(exc).__name__}: {_safe_str(exc)}"
         ) from exc
     # Verifier is a Protocol, so nothing checked what the factory returned.
-    problem = _verifier_shape_problem(verifier)
-    if problem is not None:
+    verifier_id, problem = _verifier_shape(verifier)
+    if verifier_id is None:
+        assert problem is not None
         which = problem.removeprefix("it ")
         raise PluginLoadError(f"{_returned(entry_point, verifier)}, which {which}")
     loaded: Verifier = verifier
