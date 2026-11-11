@@ -1020,3 +1020,39 @@ def test_finding_evidence_is_a_deep_copy_with_string_keys() -> None:
             message="m",
             evidence={1: "a"},  # type: ignore[dict-item]
         )
+
+
+def test_finding_location_contents_are_checked_when_the_finding_is_built() -> None:
+    from provedown import Finding, SourceLocation
+
+    class BrokenPath(type(Path())):  # type: ignore[misc]
+        def __str__(self) -> str:
+            raise RuntimeError("no")
+
+    for location, match in (
+        (SourceLocation(path="notes.md", line=1, column=1), "path must be a Path"),  # type: ignore[arg-type]
+        (SourceLocation(path=None, line=None, column=1), "line must be an int"),  # type: ignore[arg-type]
+        (SourceLocation(path=None, line=1, column=2.5), "column must be an int"),  # type: ignore[arg-type]
+        (SourceLocation(path=None, line=True, column=1), "line must be an int"),
+        (
+            SourceLocation(path=BrokenPath("x"), line=1, column=1),
+            "could not be rendered",
+        ),
+    ):
+        with pytest.raises(TypeError, match=match):
+            Finding(verifier_id="x", status=Status.PASS, location=location, message="m")
+
+
+def test_finding_to_dict_evidence_is_a_fresh_copy() -> None:
+    from provedown import Finding, SourceLocation
+
+    finding = Finding(
+        verifier_id="x",
+        status=Status.PASS,
+        location=SourceLocation(path=None, line=1, column=1),
+        message="m",
+        evidence={"rows": ["a"]},
+    )
+    finding.to_dict()["evidence"]["rows"].append("b")
+
+    assert finding.evidence == {"rows": ["a"]}

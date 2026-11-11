@@ -6,6 +6,7 @@ import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import PurePath
 from typing import Any
 
 from provedown.model import SourceLocation
@@ -43,6 +44,7 @@ class Finding:
                 "Finding location must be a SourceLocation, not "
                 f"{type(self.location).__name__}"
             )
+        _check_location(self.location)
         # Every field goes into JSON reports, so check them here rather than
         # fail while printing a report after every document has been verified.
         for name in ("verifier_id", "message"):
@@ -79,8 +81,31 @@ class Finding:
             "message": self.message,
             "expected": self.expected,
             "actual": self.actual,
-            "evidence": dict(self.evidence),
+            # A fresh copy, so a caller changing it cannot reach the finding.
+            "evidence": json.loads(json.dumps(self.evidence)),
         }
+
+
+def _check_location(location: SourceLocation) -> None:
+    """Check a plugin's location now, since it is only rendered in reporting."""
+
+    if location.path is not None and not isinstance(location.path, PurePath):
+        raise TypeError(
+            "Finding location path must be a Path or None, not "
+            f"{type(location.path).__name__}"
+        )
+    for name in ("line", "column"):
+        value = getattr(location, name)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(
+                f"Finding location {name} must be an int, not {type(value).__name__}"
+            )
+    try:
+        location.display()
+    except Exception as exc:  # A Path subclass from a plugin may break str().
+        raise TypeError(
+            f"Finding location could not be rendered: {type(exc).__name__}"
+        ) from exc
 
 
 def _require_str(name: str, value: object, *, optional: bool) -> None:
