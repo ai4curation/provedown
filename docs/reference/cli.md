@@ -58,12 +58,15 @@ Exit codes:
 : At least one report has a `fail` or `error` finding.
 
 `2`
-: Argument parsing failed.
+: Argument parsing failed, a `--verifier` id is not registered, `--sandbox` was
+  combined with an unsupported verifier, or an installed verifier plugin could
+  not be loaded.
 
 ## `provedown list-verifiers`
 
 List verifier ids registered in the default registry, including installed
 verifier plugins. Pass `--no-plugins` to list only the built-in verifiers.
+It exits with status `2` if an installed verifier plugin cannot be loaded.
 
 ```bash
 provedown list-verifiers [--no-plugins]

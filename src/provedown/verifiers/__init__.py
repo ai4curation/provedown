@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import traceback
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from importlib.metadata import EntryPoint, entry_points
@@ -29,6 +30,7 @@ class UnknownVerifierError(KeyError):
     """Raised when a requested verifier id is not registered."""
 
     def __str__(self) -> str:
+        # KeyError's own __str__ shows the message in quotes, as a repr.
         return str(self.args[0]) if self.args else super().__str__()
 
 
@@ -64,6 +66,7 @@ class VerifierRegistry:
         self._verifiers[verifier.verifier_id] = verifier
 
     def get(self, verifier_id: str) -> Verifier:
+        self.check_ids([verifier_id])
         return self._verifiers[verifier_id]
 
     def names(self) -> list[str]:
@@ -103,24 +106,32 @@ def _run_verifier(
     document: Document,
     context: VerificationContext,
 ) -> list[Finding]:
-    """Run one verifier, turning an exception it raises into an error finding.
+    """Run one verifier, turning a raise or a non-``Finding`` into an error.
 
     Verifiers should return ``error`` findings rather than raise. Plugins are
-    third-party code, so one that raises anyway is reported against its own id
-    instead of discarding the findings of every other verifier and document.
+    third-party code, so one that raises anyway, or yields something that is
+    not a ``Finding``, is reported against its own id, with the traceback in the
+    finding's evidence, instead of discarding the findings of every other
+    verifier and document. Findings yielded before the problem are kept.
     """
 
+    findings: list[Finding] = []
     try:
-        return list(verifier.verify(document, context))
+        for finding in verifier.verify(document, context):
+            if not isinstance(finding, Finding):
+                raise TypeError(f"verifier yielded {finding!r}, which is not a Finding")
+            findings.append(finding)
     except Exception as exc:  # Verifier code may be a third-party plugin.
-        return [
+        findings.append(
             Finding(
                 verifier_id=verifier.verifier_id,
                 status=Status.ERROR,
                 location=SourceLocation(path=document.path, line=1, column=1),
                 message=f"verifier raised {type(exc).__name__}: {exc}",
+                evidence={"traceback": traceback.format_exc()},
             )
-        ]
+        )
+    return findings
 
 
 def default_registry(*, plugins: bool = True) -> VerifierRegistry:

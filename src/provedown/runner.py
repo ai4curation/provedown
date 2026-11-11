@@ -24,7 +24,14 @@ def verify_document(
 
     Without ``registry``, the default registry is built, which loads installed
     verifier plugins; a plugin that cannot be loaded raises ``PluginLoadError``.
+    A ``verifier_ids`` entry that is not registered raises
+    ``UnknownVerifierError``, whether or not the document has parser errors.
     """
+
+    active_registry = registry
+    if verifier_ids is not None:
+        active_registry = active_registry or default_registry()
+        active_registry.check_ids(verifier_ids)
 
     findings = list(_diagnostic_findings(document))
     # Parser diagnostics are currently all errors. Keep the status-based gate so
@@ -40,7 +47,7 @@ def verify_document(
         )
         return Report.from_findings(findings)
 
-    active_registry = registry or default_registry()
+    active_registry = active_registry or default_registry()
     findings.extend(
         active_registry.verify(
             document,

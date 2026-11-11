@@ -59,9 +59,11 @@ Use `skip` when the verifier intentionally did not check the item.
 
 Use `error` when the verifier could not complete the check.
 
-Return an `error` finding rather than raising. If a verifier raises anyway,
-the registry reports the exception as an `error` finding attributed to that
-verifier's id, and the other verifiers' findings are kept.
+Return an `error` finding rather than raising, and yield only `Finding`
+objects. If a verifier raises anyway, or yields something else, the registry
+reports it as an `error` finding attributed to that verifier's id, with the
+traceback under `evidence["traceback"]`. Findings the verifier yielded before
+that, and the other verifiers' findings, are kept.
 
 Only `fail` and `error` make a report not ok.
 
@@ -94,8 +96,10 @@ registry.register(MyVerifier())
 ```
 
 Then pass the registry to `verify_document()`. Requesting a verifier id that
-is not registered raises `UnknownVerifierError`, a `KeyError` subclass whose
-message lists the registered ids.
+is not registered, through `verify_document()`, `registry.verify()` or
+`registry.get()`, raises `UnknownVerifierError`, a `KeyError` subclass whose
+message lists the registered ids. Call `registry.check_ids(ids)` to validate
+ids up front.
 
 Do not call `registry.verify()` directly for parsed or untrusted document input.
 That low-level dispatch method does not inspect `Document.diagnostics` before

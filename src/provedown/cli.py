@@ -127,6 +127,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _verify(args: argparse.Namespace) -> int:
     verifier_ids = args.verifiers
+    # Load plugins once for all paths, not once per file.
+    registry = default_registry(plugins=not args.no_plugins)
+    try:
+        registry.check_ids(verifier_ids or ())
+    except UnknownVerifierError as exc:
+        print(f"provedown verify: {exc}", file=sys.stderr)
+        return 2
     if (
         args.sandbox is not None
         and verifier_ids is not None
@@ -140,13 +147,6 @@ def _verify(args: argparse.Namespace) -> int:
         return 2
 
     verify = verify_okf_file if args.okf else verify_file
-    # Load plugins once for all paths, not once per file.
-    registry = default_registry(plugins=not args.no_plugins)
-    try:
-        registry.check_ids(verifier_ids or ())
-    except UnknownVerifierError as exc:
-        print(f"provedown verify: {exc}", file=sys.stderr)
-        return 2
     reports: list[Report] = []
     for path in args.paths:
         reports.append(

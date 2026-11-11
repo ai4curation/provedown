@@ -75,6 +75,19 @@ class CrashingVerifier:
 
     def verify(self, document, context):
         raise RuntimeError("source cache is corrupt")
+
+
+class DictVerifier:
+    verifier_id = "dicts"
+
+    def verify(self, document, context):
+        yield Finding(
+            verifier_id=self.verifier_id,
+            status=Status.PASS,
+            location=SourceLocation(path=document.path, line=1, column=1),
+            message="first is fine",
+        )
+        yield {"status": "pass"}
 """
 
 
@@ -100,6 +113,8 @@ def install_plugin(
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     # Each test writes its own module; never reuse one an earlier test imported.
+    # This clears a module left by an earlier test (delitem records nothing when
+    # the key is absent), so every test that imports the plugin must call this.
     monkeypatch.delitem(sys.modules, "countplugin", raising=False)
 
 
@@ -353,3 +368,64 @@ def test_verifier_that_raises_becomes_an_error_finding(
     out = capsys.readouterr().out
     assert out.count("[pass] python-results") == 2
     assert out.count("[error] crashing") == 2
+
+
+def test_verifier_that_yields_a_non_finding_keeps_earlier_findings(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    install_plugin(tmp_path, monkeypatch, {"dicts": "countplugin:DictVerifier"})
+    report_path = tmp_path / "report.md"
+    report_path.write_text("<code>x = 1</code>\n", encoding="utf-8")
+
+    report = verify_document(
+        parse_document("<code>x = 1</code>"),
+        registry=default_registry(),
+        verifier_ids=["dicts"],
+    )
+
+    first = report.findings[0]
+    assert (first.status, first.message) == (Status.PASS, "first is fine")
+    error = report.findings[1]
+    assert error.status == Status.ERROR
+    assert error.verifier_id == "dicts"
+    assert "which is not a Finding" in error.message
+    assert error.evidence is not None
+    assert "Traceback" in error.evidence["traceback"]
+
+    assert main(["verify", str(report_path), "--verifier", "dicts"]) == 1
+    assert "[error] dicts" in capsys.readouterr().out
+
+
+def test_unknown_verifier_id_raises_even_for_a_document_with_parser_errors() -> None:
+    document = parse_document('<code use=""/>')
+    assert document.diagnostics
+
+    with pytest.raises(UnknownVerifierError):
+        verify_document(document, verifier_ids=["nope"])
+
+
+def test_registry_get_raises_the_typed_error() -> None:
+    with pytest.raises(UnknownVerifierError, match="available: python-results"):
+        default_registry(plugins=False).get("nope")
+
+
+def test_cli_reports_an_unknown_id_before_the_sandbox_guard(
+    tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    report_path = tmp_path / "report.md"
+    report_path.write_text("<code>x = 1</code>\n", encoding="utf-8")
+
+    code = main(
+        [
+            "verify",
+            "--no-plugins",
+            "--sandbox",
+            "uv",
+            "--verifier",
+            "pyton-results",
+            str(report_path),
+        ]
+    )
+
+    assert code == 2
+    assert "unknown verifier 'pyton-results'" in capsys.readouterr().err
