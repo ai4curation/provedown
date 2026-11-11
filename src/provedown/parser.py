@@ -226,7 +226,10 @@ class _ProvedownHTMLParser(HTMLParser):
             return
 
         if self._code is not None:
-            # A self-closing tag inside code is code text, adding nothing.
+            # Like any other tag inside code: no event, and a blocking diagnostic.
+            self.diagnostics.append(
+                f"{location.display()}: nested HTML tag inside <code> was ignored"
+            )
             return
 
         if tag in _QUOTE_WORD_BREAK_TAGS:

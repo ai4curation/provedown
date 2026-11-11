@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -238,6 +239,21 @@ def _add_quote_lints(
                     target=" ".join(quote.sources),
                 )
             )
+        if quote.rejected_sources and quote.sources:
+            findings.append(
+                LintFinding(
+                    level="error",
+                    code="rejected-reference-id",
+                    location=quote.location,
+                    message=(
+                        "the citation around this quote names "
+                        f"{_quoted(quote.rejected_sources)}, which "
+                        f"{_is_or_are(quote.rejected_sources)} not a valid "
+                        "reference id; fix it or remove it"
+                    ),
+                    target=quote.citation,
+                )
+            )
         if quote.contains_executable_markup:
             findings.append(
                 LintFinding(
@@ -257,15 +273,21 @@ def _add_quote_lints(
 def _without_source_message(rejected: tuple[str, ...]) -> str:
     if not rejected:
         return "the citation around this quote names no reference id such as PMID:123"
-    found = ", ".join(rejected)
-    if len(rejected) == 1:
-        which = "is not a valid reference id"
-    else:
-        which = "are not valid reference ids"
     return (
         "the citation around this quote names no valid reference id; "
-        f"found {found}, which {which}"
+        f"found {_quoted(rejected)}, which {_is_or_are(rejected)} not a valid "
+        "reference id"
     )
+
+
+def _quoted(tokens: tuple[str, ...]) -> str:
+    """Quote each token so its boundaries show, even when it holds a quote."""
+
+    return ", ".join(json.dumps(token) for token in tokens)
+
+
+def _is_or_are(tokens: tuple[str, ...]) -> str:
+    return "is" if len(tokens) == 1 else "are each"
 
 
 def _add_result_policy_lints(

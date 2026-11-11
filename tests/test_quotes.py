@@ -479,14 +479,13 @@ def test_markup_inside_quoted_code_is_code_text() -> None:
         )
     )
 
-    # Inside <code>, tags are code text, as everywhere else: a self-closing tag
-    # adds nothing and any other tag is a blocking parser diagnostic.
+    # Inside <code>, any tag is a blocking parser diagnostic, as everywhere else.
     assert [quote.text for quote in document.quotes] == ["a xy", "b pq"]
     assert [
         event.code for event in document.events if isinstance(event, CodeBlock)
     ] == ["xy", "pq"]
-    assert len(document.diagnostics) == 1
-    assert "nested HTML tag inside <code>" in document.diagnostics[0]
+    assert len(document.diagnostics) == 2
+    assert all("nested HTML tag inside <code>" in d for d in document.diagnostics)
 
 
 def test_markdown_inline_markup_around_a_reference_id_is_not_part_of_it() -> None:
@@ -568,7 +567,7 @@ def test_rejected_reference_ids_are_named_by_lint() -> None:
         ("DOI:10.1002/(SICI)1097-0258(19980430)17:8<857::AID>3.0",),
     ]
     messages = [f.message for f in lint_document(document).findings]
-    assert "found PMID:37~~, which is not a valid reference id" in messages[0]
+    assert 'found "PMID:37~~", which is not a valid reference id' in messages[0]
 
 
 def test_block_boundaries_in_citation_text_separate_words() -> None:
@@ -593,9 +592,37 @@ def test_end_tag_inside_executable_code_is_code_text() -> None:
     ]
 
 
-def test_self_closing_tags_inside_code_add_no_events() -> None:
+def test_self_closing_tags_inside_code_are_parser_diagnostics() -> None:
     document = parse_document(
         '<code>x = 1 <code use="other"/> <span class="result" data-code="x"/></code>'
     )
 
+    # Like any other tag inside <code>, they add no event and block
+    # verification, so a code use or result there is never silently dropped.
     assert [type(event).__name__ for event in document.events] == ["CodeBlock"]
+    assert len(document.diagnostics) == 2
+    assert all("nested HTML tag inside <code>" in d for d in document.diagnostics)
+
+
+def test_rejected_id_next_to_a_valid_one_is_an_error() -> None:
+    document = parse_document("<cite>~~PMID:37~~ and PMID:38, <q>x</q></cite>")
+
+    assert document.quotes[0].sources == ("PMID:38",)
+    [finding] = lint_document(document).findings
+    assert (finding.level, finding.code) == ("error", "rejected-reference-id")
+    assert '"PMID:37~~"' in finding.message
+
+
+def test_realistic_id_in_code_in_a_citation_is_an_executable_cell() -> None:
+    document = parse_document("<cite><code>Reactome:R-HSA-1</code>, <q>x</q></cite>")
+
+    # The id is still the source, but it is also a Python cell. Whether running
+    # it fails depends on the id and the Python version (here it is a valid
+    # annotation), which is why lint flags it rather than relying on verify.
+    assert document.quotes[0].source == "Reactome:R-HSA-1"
+    assert [
+        event.code for event in document.events if isinstance(event, CodeBlock)
+    ] == ["Reactome:R-HSA-1"]
+    assert [f.code for f in lint_document(document).findings] == [
+        "executable-markup-in-quote"
+    ]

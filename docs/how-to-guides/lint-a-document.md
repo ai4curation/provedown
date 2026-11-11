@@ -74,6 +74,11 @@ JSON output is intended for CI, editor integrations, and scripts.
   `PMID:123`. The message names any id-shaped token that was rejected, such as
   `PMID:1~~`. This is an error.
 
+`rejected-reference-id`
+: The citation around a quote names a valid reference id and also an id-shaped
+  token that is not valid, such as `PMID:1~~`. The quote is not attributed to
+  the valid id alone. This is an error.
+
 `quote-citation-with-several-sources`
 : The citation around a quote names more than one reference id: a `<cite>`
   with several ids, or a `<figcaption>` with several `<cite>` elements. A quote
