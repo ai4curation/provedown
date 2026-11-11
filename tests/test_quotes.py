@@ -668,3 +668,46 @@ def test_repeated_reference_id_counts_once() -> None:
 
     assert document.quotes[0].sources == ("PMID:1",)
     assert lint_document(document).findings == []
+
+
+def test_comments_and_declarations_inside_code_are_parser_diagnostics() -> None:
+    for markup in ("<!-- x -->", "</ p>", "<!DOCTYPE x>", "<?pi x?>"):
+        document = parse_document(f'<pre><code>assert "{markup}" in page</code></pre>')
+
+        assert len(document.diagnostics) == 1, markup
+        assert "inside <code> was ignored" in document.diagnostics[0], markup
+
+
+def test_every_end_tag_spelling_inside_code_is_kept_exactly() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<pre><code>a = '</>'</code></pre>",
+                "<pre><code>b = '</p a=\">\">'</code></pre>",
+            ]
+        )
+    )
+
+    assert document.diagnostics == []
+    assert [
+        event.code for event in document.events if isinstance(event, CodeBlock)
+    ] == ["a = '</>'", "b = '</p a=\">\">'"]
+
+
+def test_ignore_marker_inside_code_does_not_hide_code_text() -> None:
+    document = parse_document(
+        '<pre><code>assert "<b data-provedown-ignore="true">x</b>" in page</code></pre>'
+    )
+
+    assert len(document.diagnostics) == 1
+    assert "nested HTML tag inside <code>" in document.diagnostics[0]
+    assert [
+        event.code for event in document.events if isinstance(event, CodeBlock)
+    ] == ['assert "x</b>" in page']
+
+
+def test_comments_outside_code_are_still_ignored() -> None:
+    document = parse_document("<!-- a note --> <cite>PMID:42, <q>x</q></cite>")
+
+    assert document.diagnostics == []
+    assert document.quotes[0].source == "PMID:42"

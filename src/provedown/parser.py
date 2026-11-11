@@ -59,6 +59,9 @@ class _CodeBuilder:
     language: str
     attributes: Mapping[str, str]
     parts: list[str] = field(default_factory=list)
+    # Comments or declarations seen inside; reported only if the block closes,
+    # since an unclosed block is already a diagnostic that covers the rest.
+    pending_diagnostics: list[str] = field(default_factory=list)
 
     def build(self) -> CodeBlock:
         return CodeBlock(
@@ -173,7 +176,8 @@ class _ProvedownHTMLParser(HTMLParser):
         self._code: _CodeBuilder | None = None
         self._results: list[_ResultBuilder] = []
         self._ignore_depth = 0
-        self._endtag_text: str | None = None
+        self._endtag_into_code = False
+        self._markup_handled = False
         self.quotes: list[QuoteClaim] = []
         self._quote: _QuoteBuilder | None = None
         self._quote_containers: list[_CiteBuilder | _FigureBuilder] = []
@@ -190,14 +194,15 @@ class _ProvedownHTMLParser(HTMLParser):
             self._ignore_depth += 1
             return
 
-        if _is_ignored_region(attr_map):
-            self._ignore_depth = 1
-            return
-
         if self._code is not None:
+            # Checked before the ignore marker: nothing inside code is markup.
             self.diagnostics.append(
                 f"{location.display()}: nested HTML tag inside <code> was ignored"
             )
+            return
+
+        if _is_ignored_region(attr_map):
+            self._ignore_depth = 1
             return
 
         if tag == "code":
@@ -275,14 +280,49 @@ class _ProvedownHTMLParser(HTMLParser):
             self._results[-1].parts.append(data)
 
     def parse_endtag(self, i: int) -> int:
-        # Keep the end tag's source text, which handle_endtag only gets as a
-        # lowercased name, so one inside <code> can be kept exactly as written.
-        end = self.rawdata.find(">", i)
-        self._endtag_text = self.rawdata[i : end + 1] if end != -1 else None
-        try:
-            return super().parse_endtag(i)
-        finally:
-            self._endtag_text = None
+        # An end tag inside <code> is code text, exactly as written: dropping it
+        # would turn a check on "</p>" into a check on "". handle_endtag only
+        # gets a lowercased name, and "</>" reaches no handler at all, so the
+        # source span the base parser consumed is copied here instead. This
+        # overrides an internal HTMLParser hook; tests pin "</P >" and "</>".
+        self._endtag_into_code = False
+        self._markup_handled = False
+        code_before = self._code
+        end = super().parse_endtag(i)
+        if end > i and (
+            self._endtag_into_code
+            or (code_before is not None and self._code is code_before
+                and not self._markup_handled)
+        ):
+            assert self._code is not None
+            self._code.parts.append(self.rawdata[i:end])
+        return end
+
+    def handle_comment(self, data: str) -> None:
+        self._markup_inside_code("comment")
+
+    def handle_decl(self, decl: str) -> None:
+        self._markup_inside_code("declaration")
+
+    def unknown_decl(self, data: str) -> None:
+        self._markup_inside_code("declaration")
+
+    def handle_pi(self, data: str) -> None:
+        self._markup_inside_code("processing instruction")
+
+    def _markup_inside_code(self, kind: str) -> None:
+        """Report a comment or declaration inside code, which would vanish.
+
+        Outside code these carry nothing for Provedown and are ignored. Inside
+        code they would silently drop from the executed text, so they block
+        verification, as a start tag there does.
+        """
+
+        self._markup_handled = True
+        if self._code is not None and self._ignore_depth == 0:
+            self._code.pending_diagnostics.append(
+                f"{self._location().display()}: {kind} inside <code> was ignored"
+            )
 
     def handle_entityref(self, name: str) -> None:
         self.handle_data(f"&{name};")
@@ -296,15 +336,15 @@ class _ProvedownHTMLParser(HTMLParser):
             return
 
         if tag == "code" and self._code is not None:
+            self.diagnostics.extend(self._code.pending_diagnostics)
             code = self._code.build()
             self._code = None
             self._append_code_block(code)
             return
 
         if self._code is not None:
-            # An end tag inside code is code text, exactly as written: dropping
-            # it would turn a check on "</p>" into a check on "".
-            self._code.parts.append(self._endtag_text or f"</{tag}>")
+            # Code text; parse_endtag copies its exact source span.
+            self._endtag_into_code = True
             return
 
         self._end_quote_markup(tag)

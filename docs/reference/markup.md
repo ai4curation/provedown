@@ -198,7 +198,9 @@ punctuation, unbalanced closing brackets, and Markdown backtick, `*` and `_`
 markers around an id (`` `PMID:1` ``, `**PMID:1**`, `_PMID:1_`) are dropped. A
 token holding any other character an id cannot contain, such as `~~PMID:1~~`,
 is rejected, and `provedown lint` reports it as an error, even when a valid id
-is also present. The prefix is not checked against a list: any `prefix:local`
+is also present; the quote then has no single `source`. Any `prefix:local`
+shaped token in citation text is held to these rules, so keep prose such as
+`Chapter:3–5` out of the citation. The prefix is not checked against a list: any `prefix:local`
 token counts as a reference id, so a verifier should reject prefixes it does
 not know. A bare link such as
 `https://...` or `mailto:...` is not a reference id; write a URL source as
@@ -234,9 +236,10 @@ The quoted text is collected with HTML entities decoded and whitespace,
 including line wraps, collapsed to single spaces. Markup inside a quote, such as
 a nested `<q>`, is part of the quoted text, and paragraph or `<br>` boundaries
 separate words, in quotes and in citation text. Inside a `<code>` element,
-a start or self-closing tag is a parser diagnostic that blocks verification, as
-anywhere else, and an end tag is kept in the code exactly as written, so it
-never closes markup outside the code. Even a `</cite>` or
+a start or self-closing tag, a comment or a declaration is a parser diagnostic
+that blocks verification, as anywhere else, and an end tag is kept in the code
+exactly as written, so it never closes markup outside the code. An ignore
+marker has no effect inside `<code>`. Even a `</cite>` or
 `</figure>`
 end tag inside an open quote is treated as quoted text, so a stray end tag never
 cuts a quote short. Markdown inside a quote is not rendered first, so avoid
