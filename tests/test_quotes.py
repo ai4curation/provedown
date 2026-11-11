@@ -670,12 +670,14 @@ def test_repeated_reference_id_counts_once() -> None:
     assert lint_document(document).findings == []
 
 
-def test_comments_and_declarations_inside_code_are_parser_diagnostics() -> None:
-    for markup in ("<!-- x -->", "</ p>", "<!DOCTYPE x>", "<?pi x?>"):
+def test_comments_and_declarations_inside_code_are_kept_exactly() -> None:
+    for markup in ("<!-- x -->", "</ p>", "<!DOCTYPE x>", "<?pi x?>", "<!x>"):
         document = parse_document(f'<pre><code>assert "{markup}" in page</code></pre>')
 
-        assert len(document.diagnostics) == 1, markup
-        assert "inside <code> was ignored" in document.diagnostics[0], markup
+        assert document.diagnostics == [], markup
+        assert [
+            event.code for event in document.events if isinstance(event, CodeBlock)
+        ] == [f'assert "{markup}" in page'], markup
 
 
 def test_every_end_tag_spelling_inside_code_is_kept_exactly() -> None:
@@ -711,3 +713,35 @@ def test_comments_outside_code_are_still_ignored() -> None:
 
     assert document.diagnostics == []
     assert document.quotes[0].source == "PMID:42"
+
+
+def test_ignored_region_inside_a_quote_keeps_its_visible_text() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                '<cite>PMID:43, <q>the gene is <span data-provedown-ignore="true">'
+                "not </span>required</q></cite>",
+                '<cite>PMID:44, <q>a<p class="provedown-ignore">x</p>b</q></cite>',
+                '<cite>PMID:45 <span class="provedown-ignore">PMID:46</span>, '
+                "<q>y</q></cite>",
+            ]
+        )
+    )
+
+    # The marker keeps markup out of the executable contract; it never hides
+    # visible text from a quote or citation.
+    assert [quote.text for quote in document.quotes] == [
+        "the gene is not required",
+        "a x b",
+        "y",
+    ]
+    assert document.quotes[2].sources == ("PMID:45", "PMID:46")
+
+
+def test_nested_cite_text_stays_in_the_enclosing_citation() -> None:
+    document = parse_document(
+        "<cite>PMID:1 (reviewed in <cite>PMID:2</cite>), <q>x</q></cite>"
+    )
+
+    assert document.quotes[0].sources == ("PMID:1", "PMID:2")
+    assert document.quotes[0].source is None

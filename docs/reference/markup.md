@@ -236,10 +236,12 @@ The quoted text is collected with HTML entities decoded and whitespace,
 including line wraps, collapsed to single spaces. Markup inside a quote, such as
 a nested `<q>`, is part of the quoted text, and paragraph or `<br>` boundaries
 separate words, in quotes and in citation text. Inside a `<code>` element,
-a start or self-closing tag, a comment or a declaration is a parser diagnostic
-that blocks verification, as anywhere else, and an end tag is kept in the code
-exactly as written, so it never closes markup outside the code. An ignore
-marker has no effect inside `<code>`. Even a `</cite>` or
+a start or self-closing tag is a parser diagnostic that blocks verification, as
+anywhere else. An end tag, comment, declaration or processing instruction is
+kept in the code exactly as written, so it never closes markup outside the
+code. An ignore marker has no effect inside `<code>`. An ignored region inside
+a quote or citation keeps its visible text there: the marker keeps markup out of
+the executable contract, not words out of a quotation. Even a `</cite>` or
 `</figure>`
 end tag inside an open quote is treated as quoted text, so a stray end tag never
 cuts a quote short. Markdown inside a quote is not rendered first, so avoid

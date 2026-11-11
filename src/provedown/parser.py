@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
@@ -59,9 +59,6 @@ class _CodeBuilder:
     language: str
     attributes: Mapping[str, str]
     parts: list[str] = field(default_factory=list)
-    # Comments or declarations seen inside; reported only if the block closes,
-    # since an unclosed block is already a diagnostic that covers the rest.
-    pending_diagnostics: list[str] = field(default_factory=list)
 
     def build(self) -> CodeBlock:
         return CodeBlock(
@@ -176,8 +173,9 @@ class _ProvedownHTMLParser(HTMLParser):
         self._code: _CodeBuilder | None = None
         self._results: list[_ResultBuilder] = []
         self._ignore_depth = 0
-        self._endtag_into_code = False
-        self._markup_handled = False
+        # Set while a parse_* override copies a markup span into open code, so
+        # a nested parse_* call (end tag -> bogus comment) does not copy twice.
+        self._keeping_in_code = False
         self.quotes: list[QuoteClaim] = []
         self._quote: _QuoteBuilder | None = None
         self._quote_containers: list[_CiteBuilder | _FigureBuilder] = []
@@ -192,6 +190,8 @@ class _ProvedownHTMLParser(HTMLParser):
 
         if self._ignore_depth > 0:
             self._ignore_depth += 1
+            if tag in _QUOTE_WORD_BREAK_TAGS:
+                self._append_quotation_text(" ")
             return
 
         if self._code is not None:
@@ -202,6 +202,8 @@ class _ProvedownHTMLParser(HTMLParser):
             return
 
         if _is_ignored_region(attr_map):
+            if tag in _QUOTE_WORD_BREAK_TAGS:
+                self._append_quotation_text(" ")
             self._ignore_depth = 1
             return
 
@@ -265,12 +267,13 @@ class _ProvedownHTMLParser(HTMLParser):
             self._finish_result()
 
     def handle_data(self, data: str) -> None:
+        # Visible text belongs to a quote or citation around it, even inside an
+        # ignored region or a code block: the ignore marker keeps markup out of
+        # the executable contract, never words out of a verbatim quote.
+        self._append_quotation_text(data)
+
         if self._ignore_depth > 0:
             return
-
-        # Code text is still visible text, so it is part of a quote or
-        # citation around it as well as of the code block.
-        self._append_quotation_text(data)
 
         if self._code is not None:
             self._code.parts.append(data)
@@ -279,50 +282,45 @@ class _ProvedownHTMLParser(HTMLParser):
         if self._results and self._results[-1].method_depth == 0:
             self._results[-1].parts.append(data)
 
+    # End tags, comments, declarations and processing instructions inside
+    # <code> are code text, exactly as written: dropping one would turn a check
+    # on "</p>" or "<!-- x -->" into a check on "". The base parser hands these
+    # to handlers without their source text (or, for "</>", to no handler), so
+    # these overrides of internal HTMLParser hooks copy the span it consumed.
+    # Tests pin "</P >", "</>", "</ p>", comments, declarations and PIs.
+
     def parse_endtag(self, i: int) -> int:
-        # An end tag inside <code> is code text, exactly as written: dropping it
-        # would turn a check on "</p>" into a check on "". handle_endtag only
-        # gets a lowercased name, and "</>" reaches no handler at all, so the
-        # source span the base parser consumed is copied here instead. This
-        # overrides an internal HTMLParser hook; tests pin "</P >" and "</>".
-        self._endtag_into_code = False
-        self._markup_handled = False
+        return self._keep_in_code(super().parse_endtag, i)
+
+    def parse_comment(self, i: int, report: bool = True) -> int:
+        return self._keep_in_code(
+            lambda j: HTMLParser.parse_comment(self, j, report), i
+        )
+
+    def parse_bogus_comment(self, i: int, report: bool = True) -> int:
+        return self._keep_in_code(
+            lambda j: HTMLParser.parse_bogus_comment(self, j, report), i
+        )
+
+    def parse_html_declaration(self, i: int) -> int:
+        return self._keep_in_code(super().parse_html_declaration, i)
+
+    def parse_pi(self, i: int) -> int:
+        return self._keep_in_code(super().parse_pi, i)
+
+    def _keep_in_code(self, parse: Callable[[int], int], i: int) -> int:
+        if self._keeping_in_code:
+            return parse(i)
         code_before = self._code
-        end = super().parse_endtag(i)
-        if end > i and (
-            self._endtag_into_code
-            or (code_before is not None and self._code is code_before
-                and not self._markup_handled)
-        ):
-            assert self._code is not None
-            self._code.parts.append(self.rawdata[i:end])
+        self._keeping_in_code = True
+        try:
+            end = parse(i)
+        finally:
+            self._keeping_in_code = False
+        # Not for the </code> that closes the block, which ends the code.
+        if end > i and code_before is not None and self._code is code_before:
+            code_before.parts.append(self.rawdata[i:end])
         return end
-
-    def handle_comment(self, data: str) -> None:
-        self._markup_inside_code("comment")
-
-    def handle_decl(self, decl: str) -> None:
-        self._markup_inside_code("declaration")
-
-    def unknown_decl(self, data: str) -> None:
-        self._markup_inside_code("declaration")
-
-    def handle_pi(self, data: str) -> None:
-        self._markup_inside_code("processing instruction")
-
-    def _markup_inside_code(self, kind: str) -> None:
-        """Report a comment or declaration inside code, which would vanish.
-
-        Outside code these carry nothing for Provedown and are ignored. Inside
-        code they would silently drop from the executed text, so they block
-        verification, as a start tag there does.
-        """
-
-        self._markup_handled = True
-        if self._code is not None and self._ignore_depth == 0:
-            self._code.pending_diagnostics.append(
-                f"{self._location().display()}: {kind} inside <code> was ignored"
-            )
 
     def handle_entityref(self, name: str) -> None:
         self.handle_data(f"&{name};")
@@ -333,10 +331,11 @@ class _ProvedownHTMLParser(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         if self._ignore_depth > 0:
             self._ignore_depth -= 1
+            if tag in _QUOTE_WORD_BREAK_TAGS:
+                self._append_quotation_text(" ")
             return
 
         if tag == "code" and self._code is not None:
-            self.diagnostics.extend(self._code.pending_diagnostics)
             code = self._code.build()
             self._code = None
             self._append_code_block(code)
@@ -344,7 +343,6 @@ class _ProvedownHTMLParser(HTMLParser):
 
         if self._code is not None:
             # Code text; parse_endtag copies its exact source span.
-            self._endtag_into_code = True
             return
 
         self._end_quote_markup(tag)
@@ -461,6 +459,9 @@ class _ProvedownHTMLParser(HTMLParser):
             parent = self._quote_containers[-1] if self._quote_containers else None
             if isinstance(parent, _FigureBuilder) and parent.caption_depth > 0:
                 parent.captions.append(container)
+            elif isinstance(parent, _CiteBuilder):
+                # A nested citation's text is part of the enclosing citation.
+                parent.parts.append(container.text)
             return
 
         citation = (
