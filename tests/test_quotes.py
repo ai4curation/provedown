@@ -1079,3 +1079,17 @@ def test_balanced_ignored_region_that_skipped_a_quote_in_a_closed_cite_is_quiet(
     assert document.quotes == []
     assert document.diagnostics == []
     assert verify_document(document).ok
+
+
+def test_leak_closed_by_a_stray_tag_reports_even_when_a_quote_survives() -> None:
+    document = parse_document(
+        '<cite>PMID:1 <span class="provedown-ignore">draft <cite>x</span>, '
+        "<q>lost</q></cite> <q>kept</q></cite>"
+    )
+
+    assert [quote.text for quote in document.quotes] == ["kept"]
+    [diagnostic] = document.diagnostics
+    assert "lost the quotation markup an ignored region inside it skipped" in (
+        diagnostic
+    )
+    assert not verify_document(document).ok

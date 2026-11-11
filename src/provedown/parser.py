@@ -523,6 +523,8 @@ class _ProvedownHTMLParser(HTMLParser):
                     "most likely a <figcaption> in an ignored region inside it "
                     "has no end tag"
                 )
+                # Reported once: finishing it below must not report it again.
+                container.ignored_region_leaked = False
             self._finish_quote_container()
         elif (
             tag == "figcaption"
@@ -542,9 +544,10 @@ class _ProvedownHTMLParser(HTMLParser):
 
     def _finish_quote_container(self) -> None:
         container = self._quote_containers.pop()
-        if container.ignored_region_leaked and not container.quotes:
-            # A leaked ignored region skipped its quotations; a stray end tag
-            # closed the container after the region took the real one.
+        if container.ignored_region_leaked:
+            # A leaked ignored region skipped quotation markup; a stray end tag
+            # closed the container after the region took the real one. Any
+            # quotation that survived carries no lint for the ones lost.
             kind = "cite" if isinstance(container, _CiteBuilder) else "figure"
             self.diagnostics.append(
                 f"{container.location.display()}: <{kind}> lost the quotation "
