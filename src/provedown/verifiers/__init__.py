@@ -70,9 +70,16 @@ class VerifierRegistry:
         and a ``verify()`` method, the shape the rest of the registry relies on.
         """
 
-        verifier_id, problem = _verifier_shape(verifier)
-        if verifier_id is None:
-            raise TypeError(f"cannot register {_short_repr(verifier)}: {problem}")
+        try:
+            verifier_id = _validated_id(verifier)
+        except _NotAVerifier as problem:
+            raise TypeError(
+                f"cannot register {_short_repr(verifier)}: {problem}"
+            ) from None
+        self._register_as(verifier_id, verifier)
+
+    def _register_as(self, verifier_id: str, verifier: Verifier) -> None:
+        # For an id already validated by _validated_id.
         self._verifiers[verifier_id] = verifier
 
     def get(self, verifier_id: str) -> Verifier:
@@ -247,22 +254,31 @@ def _short_traceback(exc: BaseException) -> str:
     return text[:head] + "\n...\n" + text[-(_TRACEBACK_LIMIT - 5 - head) :]
 
 
-def _verifier_shape(verifier: object) -> tuple[str, None] | tuple[None, str]:
-    """Return ``(verifier_id, None)`` for a usable verifier, else ``(None, why)``.
+class _NotAVerifier(Exception):
+    """Says why an object is not a usable verifier, as "it ..."."""
 
-    The id is read once, here, so the id that was checked is the one used.
+
+def _validated_id(verifier: object) -> str:
+    """Return the id of a usable verifier, or raise ``_NotAVerifier``.
+
+    The id is read once, here; callers keep this value rather than reading the
+    attribute again, so the id that was checked is the one used.
     """
 
-    try:
-        verifier_id = getattr(verifier, "verifier_id", None)
-        verify = getattr(verifier, "verify", None)
-    except Exception as exc:  # A plugin's attributes are outside our control.
-        return None, f"reading its verifier_id raised {type(exc).__name__}"
+    values = {}
+    for name, label in (("verifier_id", "verifier_id"), ("verify", "verify attribute")):
+        try:
+            values[name] = getattr(verifier, name, None)
+        except Exception as exc:  # A plugin's attributes are outside our control.
+            raise _NotAVerifier(
+                f"it raised {type(exc).__name__} when its {label} was read"
+            ) from exc
+    verifier_id = values["verifier_id"]
     if not isinstance(verifier_id, str) or not verifier_id:
-        return None, "it has no verifier_id"
-    if not callable(verify):
-        return None, "it has no verify() method"
-    return verifier_id, None
+        raise _NotAVerifier("it has no verifier_id")
+    if not callable(values["verify"]):
+        raise _NotAVerifier("it has no verify() method")
+    return verifier_id
 
 
 def default_registry(*, plugins: bool = True) -> VerifierRegistry:
@@ -282,8 +298,8 @@ def default_registry(*, plugins: bool = True) -> VerifierRegistry:
     registry.register(SQLResultVerifier())
     if plugins:
         taken = dict.fromkeys(registry.names(), "a built-in verifier")
-        for verifier in _load_plugins(taken):
-            registry.register(verifier)
+        for verifier_id, verifier in _load_plugins(taken):
+            registry._register_as(verifier_id, verifier)
     return registry
 
 
@@ -297,33 +313,36 @@ def load_plugin_verifiers() -> list[Verifier]:
     is easy to trace.
     """
 
-    return _load_plugins({})
+    return [verifier for _, verifier in _load_plugins({})]
 
 
-def _load_plugins(taken: Mapping[str, str]) -> list[Verifier]:
-    """Load plugins in name order; ``taken`` maps used ids to who holds them."""
+def _load_plugins(taken: Mapping[str, str]) -> list[tuple[str, Verifier]]:
+    """Load plugins in name order as ``(verifier_id, verifier)`` pairs.
+
+    ``taken`` maps used ids to who holds them. Each id is the one validated at
+    load time, used for clash detection and registration alike.
+    """
 
     found = sorted(
         entry_points(group=VERIFIER_ENTRY_POINT_GROUP),
         key=lambda entry_point: entry_point.name,
     )
     holders = dict(taken)
-    verifiers: list[Verifier] = []
+    loaded: list[tuple[str, Verifier]] = []
     for entry_point in found:
-        verifier = _load_plugin(entry_point)
-        holder = holders.get(verifier.verifier_id)
+        verifier_id, verifier = _load_plugin(entry_point)
+        holder = holders.get(verifier_id)
         if holder is not None:
             raise PluginLoadError(
                 f"verifier plugin {_describe(entry_point)} uses the id "
-                f"{verifier.verifier_id!r}, which is already registered by "
-                f"{holder}"
+                f"{verifier_id!r}, which is already registered by {holder}"
             )
-        holders[verifier.verifier_id] = _describe(entry_point)
-        verifiers.append(verifier)
-    return verifiers
+        holders[verifier_id] = _describe(entry_point)
+        loaded.append((verifier_id, verifier))
+    return loaded
 
 
-def _load_plugin(entry_point: EntryPoint) -> Verifier:
+def _load_plugin(entry_point: EntryPoint) -> tuple[str, Verifier]:
     try:
         factory = entry_point.load()
         verifier = factory()
@@ -333,13 +352,15 @@ def _load_plugin(entry_point: EntryPoint) -> Verifier:
             f"{type(exc).__name__}: {_safe_str(exc)}"
         ) from exc
     # Verifier is a Protocol, so nothing checked what the factory returned.
-    verifier_id, problem = _verifier_shape(verifier)
-    if verifier_id is None:
-        assert problem is not None
-        which = problem.removeprefix("it ")
-        raise PluginLoadError(f"{_returned(entry_point, verifier)}, which {which}")
+    try:
+        verifier_id = _validated_id(verifier)
+    except _NotAVerifier as problem:
+        which = str(problem).removeprefix("it ")
+        raise PluginLoadError(
+            f"{_returned(entry_point, verifier)}, which {which}"
+        ) from None
     loaded: Verifier = verifier
-    return loaded
+    return verifier_id, loaded
 
 
 def _returned(entry_point: EntryPoint, verifier: object) -> str:

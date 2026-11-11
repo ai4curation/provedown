@@ -13,9 +13,10 @@ provedown verify [--verifier VERIFIER_ID] [--no-plugins] [--format text|json]
 
 Parser diagnostics become `error` findings. If a document has any parser error,
 the command adds a `skip` finding, does not invoke verifiers for that document,
-and exits with status `1`. Installed [verifier plugins](verifier-plugins.md#publishing-a-plugin)
-are loaded once per run, before any document is verified; a plugin that cannot
-be loaded stops the run with status `2`.
+and exits with status `1`. Installed [verifier
+plugins](verifier-plugins.md#publishing-a-plugin) are loaded once per run,
+before any document is verified; a plugin that cannot be loaded stops the run
+with status `2`.
 
 Arguments:
 

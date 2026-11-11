@@ -35,10 +35,10 @@ class MyVerifier:
 Each finding has:
 
 `verifier_id`
-: The verifier that produced the finding, as a `str`. Provedown does not check it against
-  the verifier that yielded the finding, so a composite verifier may report
-  under sub-ids; treat it as the plugin's claim, not as proof of which code
-  ran.
+: The verifier that produced the finding, as a `str`. Provedown does not check
+  it against the verifier that yielded the finding, so a composite verifier may
+  report under sub-ids; treat it as the plugin's claim, not as proof of which
+  code ran.
 
 `status`
 : A `Status`: `Status.PASS`, `Status.FAIL`, `Status.SKIP` or `Status.ERROR`.

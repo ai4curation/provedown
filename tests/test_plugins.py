@@ -67,6 +67,29 @@ class RaisingIdVerifier:
         return []
 
 
+class RaisingVerifyVerifier:
+    verifier_id = "raising-verify"
+
+    @property
+    def verify(self):
+        raise RuntimeError("lazy import failed")
+
+
+class ShiftingIdVerifier:
+    # Returns a fresh id on the first read and a taken one afterwards.
+
+    def __init__(self):
+        self._reads = 0
+
+    @property
+    def verifier_id(self):
+        self._reads += 1
+        return "fresh-id" if self._reads == 1 else "python-results"
+
+    def verify(self, document, context):
+        return []
+
+
 def not_a_verifier():
     return {"verifier_id": "dict"}
 
@@ -878,9 +901,31 @@ def test_verifier_id_that_raises_is_a_load_error_and_a_register_error(
         tmp_path, monkeypatch, {"raising-id": "countplugin:RaisingIdVerifier"}
     )
 
-    with pytest.raises(PluginLoadError, match="'raising-id' from countplugin"):
+    with pytest.raises(PluginLoadError) as info:
         load_plugin_verifiers()
+    assert str(info.value).endswith(
+        ", which raised RuntimeError when its verifier_id was read"
+    )
 
     verifier = sys.modules["countplugin"].RaisingIdVerifier()
-    with pytest.raises(TypeError, match="reading its verifier_id raised RuntimeError"):
+    with pytest.raises(
+        TypeError, match=r": it raised RuntimeError when its verifier_id was read$"
+    ):
         VerifierRegistry().register(verifier)
+    other = sys.modules["countplugin"].RaisingVerifyVerifier()
+    with pytest.raises(TypeError, match="when its verify attribute was read"):
+        VerifierRegistry().register(other)
+
+
+def test_a_plugin_id_is_read_once_from_load_to_registration(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    install_plugin(
+        tmp_path, monkeypatch, {"shifting": "countplugin:ShiftingIdVerifier"}
+    )
+
+    registry = default_registry()
+
+    # Registered under the id that was checked, so it cannot take a built-in's.
+    assert registry.names() == ["fresh-id", "python-results", "sql-results"]
+    assert type(registry.get("python-results")).__name__ == "PythonResultVerifier"
