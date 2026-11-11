@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import reprlib
 import traceback
 from collections.abc import Iterable, Mapping, Sequence
@@ -285,7 +284,13 @@ def _read_attribute(verifier: object, name: str, label: str) -> object:
     try:
         return getattr(verifier, name)
     except AttributeError as exc:
-        if inspect.getattr_static(verifier, name, None) is None:
+        # Imported here: only a broken plugin reaches this branch.
+        import inspect
+        import types
+
+        static = inspect.getattr_static(verifier, name, None)
+        if static is None or isinstance(static, types.MemberDescriptorType):
+            # Not defined, or an unset __slots__ entry: the attribute is absent.
             return None
         raise _NotAVerifier(
             f"it raised {type(exc).__name__} when its {label} was read"

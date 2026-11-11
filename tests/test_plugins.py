@@ -76,6 +76,13 @@ class AttributeErrorIdVerifier:
         return []
 
 
+class UnsetSlotVerifier:
+    __slots__ = ("verifier_id",)
+
+    def verify(self, document, context):
+        return []
+
+
 class RaisingVerifyVerifier:
     verifier_id = "raising-verify"
 
@@ -965,3 +972,20 @@ def test_shape_errors_keep_the_plugin_exception_and_name_attribute_errors(
         TypeError, match="it raised AttributeError when its verifier_id was read"
     ):
         VerifierRegistry().register(module.AttributeErrorIdVerifier())
+
+
+def test_plain_shape_errors_carry_no_internal_chain_and_unset_slots_are_absent(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    from provedown import VerifierRegistry
+
+    install_plugin(tmp_path, monkeypatch, {"dict": "countplugin:not_a_verifier"})
+
+    with pytest.raises(PluginLoadError) as loaded:
+        load_plugin_verifiers()
+    assert loaded.value.__cause__ is None
+
+    slotted = sys.modules["countplugin"].UnsetSlotVerifier()
+    with pytest.raises(TypeError, match=r": it has no verifier_id$") as registered:
+        VerifierRegistry().register(slotted)
+    assert registered.value.__cause__ is None
