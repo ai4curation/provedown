@@ -820,6 +820,10 @@ def test_quote_inside_an_ignored_region_inside_a_quote_does_not_close_it() -> No
     assert [(quote.text, quote.unclosed) for quote in document.quotes] == [
         ("a x b", False)
     ]
+    # The <br> leaked the region, so the quote's own end tag closed it, and the
+    # leak is reported: the document is not verified.
+    [diagnostic] = document.diagnostics
+    assert "unclosed ignored region" in diagnostic
 
 
 def test_ignored_region_leaked_by_a_void_element_in_a_citation_is_reported() -> None:
@@ -860,3 +864,44 @@ def test_ignored_region_left_open_inside_a_citation_is_reported() -> None:
     )
 
     assert any("unclosed ignored region" in d for d in document.diagnostics)
+
+
+def test_ignore_marked_element_of_the_owners_kind_does_not_end_the_owner() -> None:
+    for source, expected in (
+        (
+            '<cite>PMID:1, <q>a <q class="provedown-ignore">x</q> b</q></cite>',
+            ("a x b", "PMID:1"),
+        ),
+        (
+            "<figure><blockquote>A</blockquote>"
+            '<figure class="provedown-ignore"><span>decoration</span></figure>'
+            "<figcaption><cite>PMID:1</cite></figcaption></figure>",
+            ("A", "PMID:1"),
+        ),
+        (
+            '<cite>PMID:1 <cite class="provedown-ignore">draft</cite>, '
+            "<q>the claim</q></cite>",
+            ("the claim", "PMID:1"),
+        ),
+    ):
+        document = parse_document(source)
+
+        assert [
+            (quote.text, quote.source, quote.unclosed, quote.citation_unclosed)
+            for quote in document.quotes
+        ] == [(*expected, False, False)], source
+        assert document.diagnostics == [], source
+        assert lint_document(document).findings == [], source
+
+
+def test_void_element_in_an_ignore_marked_figure_inside_a_figure_fails_closed() -> None:
+    document = parse_document(
+        "<figure><blockquote>A</blockquote>"
+        '<figure class="provedown-ignore"><img src="x"></figure>'
+        "<figcaption><cite>PMID:1</cite></figcaption></figure>"
+    )
+
+    # The <img> leaks the region, so the caption is skipped; the leak is
+    # reported, so the uncited quote is never verified as if nothing happened.
+    [diagnostic] = document.diagnostics
+    assert "unclosed ignored region" in diagnostic

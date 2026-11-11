@@ -214,7 +214,7 @@ class _ProvedownHTMLParser(HTMLParser):
         if _is_ignored_region(attr_map):
             if tag in _QUOTE_WORD_BREAK_TAGS:
                 self._append_quotation_text(" ")
-            self._start_ignored_region(location)
+            self._start_ignored_region(tag, location)
             return
 
         if tag == "code":
@@ -347,12 +347,18 @@ class _ProvedownHTMLParser(HTMLParser):
                 # The quote or citation the region began in ends here while the
                 # region is still open: end the region too, and report it.
                 self._report_unclosed_ignored_region()
-                self._ignore_depth = 0
+                self._end_ignored_region()
             else:
-                if self._ignore_owner is not None and tag == self._ignore_owner_tag:
+                if (
+                    self._ignore_owner is not None
+                    and tag == self._ignore_owner_tag
+                    and self._ignored_owner_tags > 0
+                ):
                     # It closes the same tag opened inside the region.
                     self._ignored_owner_tags -= 1
                 self._ignore_depth -= 1
+                if self._ignore_depth == 0:
+                    self._end_ignored_region()
                 if tag in _QUOTE_WORD_BREAK_TAGS:
                     self._append_quotation_text(" ")
                 return
@@ -522,10 +528,9 @@ class _ProvedownHTMLParser(HTMLParser):
             attributes=attr_map,
         )
 
-    def _start_ignored_region(self, location: SourceLocation) -> None:
+    def _start_ignored_region(self, tag: str, location: SourceLocation) -> None:
         self._ignore_depth = 1
         self._ignore_location = location
-        self._ignored_owner_tags = 0
         if self._quote is not None:
             self._ignore_owner = self._quote
             self._ignore_owner_tag = self._quote.element
@@ -538,6 +543,15 @@ class _ProvedownHTMLParser(HTMLParser):
         else:
             self._ignore_owner = None
             self._ignore_owner_tag = ""
+        # The opening element counts too when it is of the owner's own kind, so
+        # its end tag is not taken for the owner's.
+        self._ignored_owner_tags = 1 if tag == self._ignore_owner_tag else 0
+
+    def _end_ignored_region(self) -> None:
+        self._ignore_depth = 0
+        self._ignore_owner = None
+        self._ignore_owner_tag = ""
+        self._ignored_owner_tags = 0
 
     def _is_owner_end_tag(self, tag: str) -> bool:
         """Whether ``tag`` ends the markup the current ignored region began in."""
