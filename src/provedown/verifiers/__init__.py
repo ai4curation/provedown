@@ -110,28 +110,47 @@ def _run_verifier(
 
     Verifiers should return ``error`` findings rather than raise. Plugins are
     third-party code, so one that raises anyway, or yields something that is
-    not a ``Finding``, is reported against its own id, with the traceback in the
-    finding's evidence, instead of discarding the findings of every other
-    verifier and document. Findings yielded before the problem are kept.
+    not a ``Finding``, is reported against its own id instead of discarding the
+    findings of every other verifier and document. Findings yielded before the
+    problem are kept.
     """
 
     findings: list[Finding] = []
+    location = SourceLocation(path=document.path, line=1, column=1)
     try:
         for finding in verifier.verify(document, context):
             if not isinstance(finding, Finding):
-                raise TypeError(f"verifier yielded {finding!r}, which is not a Finding")
+                yielded = _short_repr(finding)
+                findings.append(
+                    Finding(
+                        verifier_id=verifier.verifier_id,
+                        status=Status.ERROR,
+                        location=location,
+                        message=f"verifier yielded {yielded}, which is not a Finding",
+                        evidence={"yielded": yielded},
+                    )
+                )
+                return findings
             findings.append(finding)
     except Exception as exc:  # Verifier code may be a third-party plugin.
         findings.append(
             Finding(
                 verifier_id=verifier.verifier_id,
                 status=Status.ERROR,
-                location=SourceLocation(path=document.path, line=1, column=1),
+                location=location,
                 message=f"verifier raised {type(exc).__name__}: {exc}",
                 evidence={"traceback": traceback.format_exc()},
             )
         )
     return findings
+
+
+def _short_repr(value: object, limit: int = 200) -> str:
+    """Return ``repr(value)`` cut to ``limit`` characters for a report."""
+
+    text = repr(value)
+    return text if len(text) <= limit else text[: limit - 3] + "..."
+
 
 
 def default_registry(*, plugins: bool = True) -> VerifierRegistry:

@@ -77,6 +77,49 @@ class CrashingVerifier:
         raise RuntimeError("source cache is corrupt")
 
 
+class StringStatusVerifier:
+    verifier_id = "strings"
+
+    def verify(self, document, context):
+        yield Finding(
+            verifier_id=self.verifier_id,
+            status="pass",
+            location=SourceLocation(path=document.path, line=1, column=1),
+            message="plain string status",
+        )
+
+
+class BadStatusVerifier:
+    verifier_id = "bad-status"
+
+    def verify(self, document, context):
+        yield Finding(
+            verifier_id=self.verifier_id,
+            status="passed",
+            location=SourceLocation(path=document.path, line=1, column=1),
+            message="unknown status",
+        )
+
+
+class StringLocationVerifier:
+    verifier_id = "bad-location"
+
+    def verify(self, document, context):
+        yield Finding(
+            verifier_id=self.verifier_id,
+            status="pass",
+            location="report.md:1:1",
+            message="location is a string",
+        )
+
+
+class HugeYieldVerifier:
+    verifier_id = "huge"
+
+    def verify(self, document, context):
+        yield {"rows": list(range(10000))}
+
+
 class DictVerifier:
     verifier_id = "dicts"
 
@@ -388,9 +431,9 @@ def test_verifier_that_yields_a_non_finding_keeps_earlier_findings(
     error = report.findings[1]
     assert error.status == Status.ERROR
     assert error.verifier_id == "dicts"
+    assert error.message.startswith("verifier yielded {'status': 'pass'}")
     assert "which is not a Finding" in error.message
-    assert error.evidence is not None
-    assert "Traceback" in error.evidence["traceback"]
+    assert error.evidence == {"yielded": "{'status': 'pass'}"}
 
     assert main(["verify", str(report_path), "--verifier", "dicts"]) == 1
     assert "[error] dicts" in capsys.readouterr().out
@@ -402,6 +445,19 @@ def test_unknown_verifier_id_raises_even_for_a_document_with_parser_errors() -> 
 
     with pytest.raises(UnknownVerifierError):
         verify_document(document, verifier_ids=["nope"])
+
+
+def test_broken_plugin_raises_whether_or_not_ids_are_given(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    install_plugin(tmp_path, monkeypatch, {"broken": "countplugin:broken"})
+    document = parse_document('<code use=""/>')
+    assert document.diagnostics
+
+    with pytest.raises(PluginLoadError):
+        verify_document(document)
+    with pytest.raises(PluginLoadError):
+        verify_document(document, verifier_ids=["python-results"])
 
 
 def test_registry_get_raises_the_typed_error() -> None:
@@ -429,3 +485,49 @@ def test_cli_reports_an_unknown_id_before_the_sandbox_guard(
 
     assert code == 2
     assert "unknown verifier 'pyton-results'" in capsys.readouterr().err
+
+
+def test_finding_status_may_be_the_plain_string_the_docs_describe() -> None:
+    from provedown import Finding, SourceLocation
+
+    finding = Finding(
+        verifier_id="x",
+        status="fail",  # type: ignore[arg-type]
+        location=SourceLocation(path=None, line=1, column=1),
+        message="m",
+    )
+
+    assert finding.status is Status.FAIL
+    assert finding.to_dict()["status"] == "fail"
+
+
+def test_findings_with_bad_fields_become_attributed_errors(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    install_plugin(
+        tmp_path,
+        monkeypatch,
+        {
+            "bad-location": "countplugin:StringLocationVerifier",
+            "bad-status": "countplugin:BadStatusVerifier",
+            "huge": "countplugin:HugeYieldVerifier",
+            "strings": "countplugin:StringStatusVerifier",
+        },
+    )
+
+    report = verify_document(parse_document("text"), registry=default_registry())
+    by_id = {finding.verifier_id: finding for finding in report.findings}
+
+    assert by_id["strings"].status is Status.PASS
+    assert by_id["bad-status"].status is Status.ERROR
+    assert "'passed' is not a valid Status" in by_id["bad-status"].message
+    assert by_id["bad-location"].status is Status.ERROR
+    assert "location" in by_id["bad-location"].message
+    assert by_id["huge"].status is Status.ERROR
+    assert len(by_id["huge"].message) < 300
+    assert len(by_id["huge"].evidence["yielded"]) < 300
+
+    report_path = tmp_path / "report.md"
+    report_path.write_text("text\n", encoding="utf-8")
+    assert main(["verify", str(report_path), "--format", "json"]) == 1
+    assert '"verifier_id": "bad-status"' in capsys.readouterr().out

@@ -10,7 +10,7 @@ A verifier has a stable id and a `verify()` method:
 ```python
 from collections.abc import Iterable
 
-from provedown import Document, Finding, VerificationContext
+from provedown import Document, Finding, Status, VerificationContext
 
 
 class MyVerifier:
@@ -21,7 +21,13 @@ class MyVerifier:
         document: Document,
         context: VerificationContext,
     ) -> Iterable[Finding]:
-        ...
+        for event in document.events:
+            yield Finding(
+                verifier_id=self.verifier_id,
+                status=Status.PASS,
+                location=event.location,
+                message=f"checked {type(event).__name__}",
+            )
 ```
 
 ## Findings
@@ -32,10 +38,13 @@ Each finding has:
 : The verifier that produced the finding.
 
 `status`
-: One of `pass`, `fail`, `skip`, or `error`.
+: A `Status`: `Status.PASS`, `Status.FAIL`, `Status.SKIP` or `Status.ERROR`.
+  The plain strings `"pass"`, `"fail"`, `"skip"` and `"error"` are accepted and
+  converted; any other value raises `ValueError`.
 
 `location`
-: Source location for the relevant document item.
+: A `SourceLocation` for the relevant document item, such as an event's or
+  quote's `location`. Anything else raises `TypeError`.
 
 `message`
 : Human-readable explanation.
@@ -60,10 +69,13 @@ Use `skip` when the verifier intentionally did not check the item.
 Use `error` when the verifier could not complete the check.
 
 Return an `error` finding rather than raising, and yield only `Finding`
-objects. If a verifier raises anyway, or yields something else, the registry
-reports it as an `error` finding attributed to that verifier's id, with the
-traceback under `evidence["traceback"]`. Findings the verifier yielded before
-that, and the other verifiers' findings, are kept.
+objects. If a verifier raises anyway, including from building a `Finding` with
+a bad `status` or `location`, the registry reports it as an `error` finding
+attributed to that verifier's id, with the traceback under
+`evidence["traceback"]`. If it yields something that is not a `Finding`, the
+error finding names it, shortened, under `evidence["yielded"]`, and the rest of
+that verifier's output is ignored. Findings the verifier yielded before the
+problem, and the other verifiers' findings, are kept.
 
 Only `fail` and `error` make a report not ok.
 

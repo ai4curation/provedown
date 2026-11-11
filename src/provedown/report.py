@@ -31,6 +31,18 @@ class Finding:
     actual: str | None = None
     evidence: Mapping[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        # Plugins may pass the status as the plain string the docs describe; a
+        # bad value raises here, inside the verifier, so the registry reports
+        # it against that verifier instead of failing later in reporting.
+        if not isinstance(self.status, Status):
+            object.__setattr__(self, "status", Status(self.status))
+        if not isinstance(self.location, SourceLocation):
+            raise TypeError(
+                "Finding location must be a SourceLocation, not "
+                f"{type(self.location).__name__}"
+            )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "verifier_id": self.verifier_id,
