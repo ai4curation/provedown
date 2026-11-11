@@ -307,7 +307,9 @@ Markup diagnostics include:
 
 A void element inside an ignored region also extends the region past its own
 end tag when later end tags close it again before the end of the document.
-Claims and quotations in that stretch are skipped without a diagnostic, so
-keep void elements out of ignored regions.
+Claims and quotations that start in that stretch are skipped without a
+diagnostic, so keep void elements out of hand-written ignored regions. A
+quotation the region began in is still closed by its own end tag. The diagram
+tooling already counts void elements correctly; the core parser does not yet.
 
 See [Frontmatter](frontmatter.md) for document-level metadata and defaults.

@@ -768,7 +768,6 @@ def test_unclosed_ignored_region_is_a_parser_diagnostic() -> None:
 
 
 def test_every_break_spelling_in_an_ignored_region_separates_quoted_words() -> None:
-    texts = []
     for markup in (
         '<span class="provedown-ignore">not<br/>yet</span>',
         '<span class="provedown-ignore">not<br>yet</span>',
@@ -776,15 +775,39 @@ def test_every_break_spelling_in_an_ignored_region_separates_quoted_words() -> N
     ):
         document = parse_document(
             f"<cite>PMID:1, <q>the gene is {markup} required</q></cite>"
+            "<cite>PMID:2, <q>a later claim</q></cite>"
         )
-        texts.append(document.quotes[0].text)
 
-    assert texts == ["the gene is not yet required"] * 3
+        # Same text, closed, and the later quotation still parsed.
+        assert [
+            (quote.text, quote.unclosed, quote.citation_unclosed)
+            for quote in document.quotes
+        ] == [
+            ("the gene is not yet required", False, False),
+            ("a later claim", False, False),
+        ], markup
+        assert document.diagnostics == [], markup
+        assert lint_document(document).findings == [], markup
 
 
 def test_unclosed_ignored_region_message_names_the_likely_cause() -> None:
-    document = parse_document('<span class="provedown-ignore"><br class="a"></span>')
+    for source in (
+        '<span class="provedown-ignore"><br class="a"></span>',
+        '<div class="provedown-ignore">\nDraft notes.',
+    ):
+        [diagnostic] = parse_document(source).diagnostics
 
-    [diagnostic] = document.diagnostics
-    assert "unclosed ignored region" in diagnostic
-    assert "void element such as <br>" in diagnostic
+        assert "unclosed ignored region" in diagnostic
+        assert "most likely a void element such as <br>" in diagnostic
+        assert "or a missing end tag" in diagnostic
+
+
+def test_quote_inside_an_ignored_region_inside_a_quote_does_not_close_it() -> None:
+    document = parse_document(
+        '<cite>PMID:3, <q>a <span class="provedown-ignore"><br><q>x</q></span> b</q>'
+        "</cite>"
+    )
+
+    assert [(quote.text, quote.unclosed) for quote in document.quotes] == [
+        ("a x b", False)
+    ]
