@@ -1120,4 +1120,4 @@ def test_path_likes_are_converted_and_the_net_survives_any_path(
     for bad in (b"notes.md", Unprintable("notes.md")):
         odd = dataclasses.replace(base, path=bad)  # type: ignore[arg-type]
         errors = [f for f in verify_document(odd).findings if f.status == Status.ERROR]
-        assert errors and all(f.location.path is None for f in errors), bad
+        assert errors and all(f.location.path is None for f in errors), type(bad)

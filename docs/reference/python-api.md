@@ -30,7 +30,7 @@ The parsed `Document` contains:
 : Original source text.
 
 `path`
-: Optional source path.
+: Optional source path. A `str` or other path-like is converted to a `Path`.
 
 `events`
 : Ordered `CodeBlock`, `CodeUse`, and `ResultAssertion` events.
@@ -48,6 +48,11 @@ The parsed `Document` contains:
 
 `diagnostics`
 : Parser diagnostics.
+
+`Document.start_location()` returns a `SourceLocation` for the document's first
+line, for findings about the whole document. Its path is `None` unless the
+document's path is a real path that renders as text, so a finding built from it
+is always valid.
 
 ## Verify Documents
 

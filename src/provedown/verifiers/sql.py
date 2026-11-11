@@ -42,7 +42,8 @@ class SQLResultVerifier:
                     status=Status.ERROR,
                     location=document.start_location(),
                     message=(
-                        f"sql-results does not support sandbox mode {context.sandbox!r}"
+                        "sql-results does not support sandbox mode "
+                        f"{context.sandbox!r}"
                     ),
                 )
             ]

@@ -127,10 +127,15 @@ class Document:
         return dict(self.named_code)
 
 
+_PATH_LIKE = (str, os.PathLike)
+
+
 def _as_path(value: Any) -> Any:
     """Convert a ``str`` or other path-like from an untyped caller to a ``Path``.
 
     Anything else is returned unchanged, for the caller's own checks to reject.
+    A path-like whose ``__fspath__`` returns ``bytes`` makes ``Path`` raise
+    ``TypeError`` here.
     """
 
     if value is None or isinstance(value, PurePath):
@@ -138,6 +143,3 @@ def _as_path(value: Any) -> Any:
     if isinstance(value, _PATH_LIKE):
         return Path(value)
     return value
-
-
-_PATH_LIKE = (str, os.PathLike)
