@@ -203,8 +203,9 @@ shaped token in citation text is held to these rules, so keep prose such as
 `Chapter:3–5` out of the citation. The prefix is not checked against a list:
 any `prefix:local` token counts as a reference id, so a verifier should reject
 prefixes it does not know. A bare link such as `https://...` or `mailto:...`
-is not a reference id; write a URL source as `url:https://...`. Do not wrap an id in an HTML `<code>` element, which would be
-executed; Markdown backticks are fine.
+is not a reference id; write a URL source as `url:https://...`. Do not wrap an
+id in an HTML `<code>` element, which would be executed; Markdown backticks are
+fine.
 Each `<q>` in the citation is a separate claim against that source, and the id
 may be link text, from an HTML `<a>` or a Markdown `[PMID:18467591](https://...)`
 link:
@@ -306,13 +307,16 @@ Markup diagnostics include:
   verified. Documents that verified before this diagnostic existed may now
   report it.
 - a `<cite>` or `<figure>` still open at the end of the document, holding no
-  quotation, after an ignore-marked element of the same kind inside it skipped
-  a quotation, citation, code block or result span. That element most likely
-  has no end tag, so it took the outer element's end tag and skipped what lay
-  between, and no quotation is left to carry a lint. An unclosed `<cite>` or
-  `<figure>` that holds a quotation is reported by lint instead, as
+  quotation, after an element of the same kind inside an ignored region took
+  its end tag while that region skipped a quotation, citation, code block or
+  result span. The inner element most likely has no end tag, so what the region
+  skipped was lost, and no quotation is left to carry a lint. An unclosed
+  `<cite>` or `<figure>` that holds a quotation is reported by lint instead, as
   `unclosed-citation`, and does not block verification; so is one whose
-  ignore-marked element held only text.
+  ignored region skipped only text;
+- a `<figure>` that ends while its `<figcaption>` is still open, after a
+  `<figcaption>` inside an ignored region took the caption's end tag while that
+  region skipped such markup.
 
 A void element inside an ignored region also extends the region past its own
 end tag. If the region began inside a quote, a `<cite>`, a `<figure>` or a

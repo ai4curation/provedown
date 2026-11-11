@@ -926,8 +926,8 @@ def test_unclosed_ignore_marked_container_inside_its_own_kind_is_reported() -> N
         assert document.quotes == [], source
         [diagnostic] = document.diagnostics
         assert (
-            f"unclosed <{outer}> holding no quotation; most likely an "
-            f"ignore-marked <{kind}> inside it has no end tag"
+            f"unclosed <{outer}> holding no quotation; most likely a "
+            f"<{kind}> in an ignored region inside it has no end tag"
         ) in diagnostic
         assert not verify_document(document).ok
 
@@ -1002,3 +1002,41 @@ def test_closed_ignored_cite_in_an_unclosed_cite_without_quotes_still_runs_code(
 
     assert document.diagnostics == []
     assert verify_document(document).ok
+
+
+def test_owner_kind_tag_left_open_inside_a_region_still_reports_the_lost_claim() -> (
+    None
+):
+    document = parse_document(
+        '<cite>PMID:1 <span class="provedown-ignore">draft <cite>x</span>, '
+        "<q>a claim</q></cite>"
+    )
+
+    assert document.quotes == []
+    [diagnostic] = document.diagnostics
+    assert "unclosed <cite> holding no quotation" in diagnostic
+    assert not verify_document(document).ok
+
+
+def test_ignored_figcaption_left_open_in_a_caption_reports_the_lost_citation() -> None:
+    document = parse_document(
+        "<figure><blockquote>A</blockquote><figcaption>"
+        '<span class="provedown-ignore">see <figcaption>draft</span>'
+        "<cite>PMID:1</cite></figcaption></figure>"
+    )
+
+    [diagnostic] = document.diagnostics
+    assert "unclosed <figcaption>" in diagnostic
+    assert not verify_document(document).ok
+
+
+def test_closed_ignored_cite_that_skipped_a_quote_in_a_closed_cite_is_quiet() -> None:
+    document = parse_document(
+        '<cite>PMID:1 <cite class="provedown-ignore">draft, <q>maybe</q></cite>, '
+        "<q>the claim</q></cite>"
+    )
+
+    assert [(quote.text, quote.source) for quote in document.quotes] == [
+        ("the claim", "PMID:1")
+    ]
+    assert document.diagnostics == []

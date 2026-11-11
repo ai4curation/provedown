@@ -46,6 +46,15 @@ _CLOSING_BRACKETS = {")": "(", "]": "[", "}": "{"}
 # Start tags that, skipped inside an ignored region, lose markup that would
 # otherwise be parsed: quotations, citations and code.
 _SWALLOWABLE_TAGS = frozenset({"q", "blockquote", "cite", "figure", "code"})
+
+
+def _is_swallowable(tag: str, attr_map: Mapping[str, str]) -> bool:
+    """Whether skipping this start tag loses markup that would be parsed."""
+
+    is_result = tag == "span" and _has_class(attr_map, "result")
+    return tag in _SWALLOWABLE_TAGS or is_result
+
+
 _QUOTE_WORD_BREAK_TAGS = frozenset(
     {"br", "p", "div", "li", "tr", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6"}
 )
@@ -191,10 +200,9 @@ class _ProvedownHTMLParser(HTMLParser):
         self._ignore_owner: _QuoteBuilder | _CiteBuilder | _FigureBuilder | None = None
         self._ignore_owner_ends: frozenset[str] = frozenset()
         self._ignored_owner_tags: dict[str, int] = {}
-        # Set while a region opened by an element of its owner container's own
-        # kind is open: that container, and the region's opening tag.
-        self._own_kind_container: _CiteBuilder | _FigureBuilder | None = None
-        self._own_kind_tag = ""
+        # Whether the current region skipped markup that would otherwise be
+        # parsed: a quotation, citation, code block or result span.
+        self._region_skipped_markup = False
         self.quotes: list[QuoteClaim] = []
         self._quote: _QuoteBuilder | None = None
         self._quote_containers: list[_CiteBuilder | _FigureBuilder] = []
@@ -213,12 +221,8 @@ class _ProvedownHTMLParser(HTMLParser):
                 self._append_quotation_text(" ")
             if self._ignore_owner is not None and tag in self._ignore_owner_ends:
                 self._ignored_owner_tags[tag] = self._ignored_owner_tags.get(tag, 0) + 1
-            if self._own_kind_container is not None and (
-                tag in _SWALLOWABLE_TAGS
-                or (tag == "span" and _has_class(attr_map, "result"))
-            ):
-                # The region skipped markup that would otherwise be parsed.
-                self._own_kind_container.ignored_own_kind = self._own_kind_tag
+            if _is_swallowable(tag, attr_map):
+                self._region_skipped_markup = True
             return
 
         if self._code is not None:
@@ -261,6 +265,8 @@ class _ProvedownHTMLParser(HTMLParser):
             # Ignored markup still separates the visible words around it.
             if tag in _QUOTE_WORD_BREAK_TAGS:
                 self._append_quotation_text(" ")
+            if _is_swallowable(tag, attr_map):
+                self._region_skipped_markup = True
             return
 
         if self._code is not None:
@@ -367,8 +373,16 @@ class _ProvedownHTMLParser(HTMLParser):
                 self._end_ignored_region()
             else:
                 if self._ignored_owner_tags.get(tag, 0) > 0:
-                    # It closes the same tag opened inside the region.
+                    # It closes the same tag opened inside the region. If that
+                    # element lacked its own end tag, this is the owner's, and
+                    # what the region skipped is lost; whether the owner then
+                    # stays open is known only later, so mark it.
                     self._ignored_owner_tags[tag] -= 1
+                    owner = self._ignore_owner
+                    if self._region_skipped_markup and not isinstance(
+                        owner, _QuoteBuilder | None
+                    ):
+                        owner.ignored_own_kind = tag
                 self._ignore_depth -= 1
                 if self._ignore_depth == 0:
                     self._end_ignored_region()
@@ -424,13 +438,13 @@ class _ProvedownHTMLParser(HTMLParser):
             kind = container.ignored_own_kind
             if kind and not container.quotes:
                 # No quotation can carry the unclosed-citation lint: its end tag
-                # most likely closed an ignore-marked element of the same kind
-                # that lacked one, so what lay inside was skipped.
+                # most likely closed an ignored element of the same kind that
+                # lacked one, so what the region skipped was lost.
                 outer = "cite" if isinstance(container, _CiteBuilder) else "figure"
                 self.diagnostics.append(
                     f"{container.location.display()}: unclosed <{outer}> holding "
-                    f"no quotation; most likely an ignore-marked <{kind}> inside "
-                    "it has no end tag"
+                    f"no quotation; most likely a <{kind}> in an ignored region "
+                    "inside it has no end tag"
                 )
             for quote in container.quotes:
                 # An unclosed quote already says its text is untrustworthy.
@@ -484,6 +498,18 @@ class _ProvedownHTMLParser(HTMLParser):
             return
         container = self._quote_containers[-1]
         if _closes_container(tag, container):
+            if (
+                isinstance(container, _FigureBuilder)
+                and container.caption_depth > 0
+                and container.ignored_own_kind == "figcaption"
+            ):
+                # An ignored <figcaption> took the caption's end tag, and the
+                # caption's citation was skipped with it.
+                self.diagnostics.append(
+                    f"{container.location.display()}: unclosed <figcaption>; "
+                    "most likely a <figcaption> in an ignored region inside it "
+                    "has no end tag"
+                )
             self._finish_quote_container()
         elif (
             tag == "figcaption"
@@ -576,13 +602,7 @@ class _ProvedownHTMLParser(HTMLParser):
         # The opening element counts too when it is of the owner's own kind, so
         # its end tag is not taken for the owner's.
         self._ignored_owner_tags = {tag: 1} if tag in self._ignore_owner_ends else {}
-        owner = self._ignore_owner
-        if self._ignored_owner_tags and not isinstance(owner, _QuoteBuilder):
-            assert owner is not None
-            # Its end tag may yet be missing; that matters only if the region
-            # swallows markup, which handle_starttag records on the container.
-            self._own_kind_container = owner
-            self._own_kind_tag = tag
+        self._region_skipped_markup = False
 
     def _end_ignored_region(self) -> None:
         self._ignore_depth = 0
@@ -590,8 +610,7 @@ class _ProvedownHTMLParser(HTMLParser):
         self._ignore_owner = None
         self._ignore_owner_ends = frozenset()
         self._ignored_owner_tags = {}
-        self._own_kind_container = None
-        self._own_kind_tag = ""
+        self._region_skipped_markup = False
 
     def _is_owner_end_tag(self, tag: str) -> bool:
         """Whether ``tag`` ends the markup the current ignored region began in."""
