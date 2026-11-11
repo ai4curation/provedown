@@ -9,7 +9,7 @@ from provedown.model import Document, SourceLocation
 from provedown.parser import parse_file
 from provedown.report import Finding, Report, Status
 from provedown.verifiers import (
-    EMPTY_VERIFIER_IDS_MESSAGE,
+    _EMPTY_VERIFIER_IDS_MESSAGE,
     VerificationContext,
     VerifierRegistry,
     default_registry,
@@ -42,7 +42,7 @@ def verify_document(
     active_registry = registry or default_registry()
     if verifier_ids is not None:
         if not verifier_ids:
-            raise ValueError(EMPTY_VERIFIER_IDS_MESSAGE)
+            raise ValueError(_EMPTY_VERIFIER_IDS_MESSAGE)
         active_registry.check_ids(verifier_ids)
 
     findings = list(_diagnostic_findings(document))

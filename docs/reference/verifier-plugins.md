@@ -77,13 +77,14 @@ Use `skip` when the verifier intentionally did not check the item.
 Use `error` when the verifier could not complete the check.
 
 Return an `error` finding rather than raising, and yield only `Finding`
-objects. If a verifier raises anyway, including from building a `Finding` with
-a bad `status` or `location`, the registry reports it as an `error` finding
-attributed to that verifier's id, with the traceback under `evidence["traceback"]`: its frames, nearest the raise
-first to be kept, and a short form of the message. If it yields something that is not a `Finding`, the
-error finding names it, shortened, under `evidence["yielded"]`, and the rest of
-that verifier's output is ignored. Findings the verifier yielded before the
-problem, and the other verifiers' findings, are kept.
+objects. If a verifier raises anyway, including from building a `Finding`
+with a bad `status` or `location`, the registry reports it as an `error`
+finding attributed to that verifier's id. Its `evidence["traceback"]` holds
+the traceback, chained causes included, with each frame and message cut to a
+bounded length. If the verifier yields something that is not a `Finding`, the
+error finding names it, shortened, under `evidence["yielded"]`, and the rest
+of that verifier's output is ignored. Findings the verifier yielded before
+the problem, and the other verifiers' findings, are kept.
 
 Only `fail` and `error` make a report not ok.
 

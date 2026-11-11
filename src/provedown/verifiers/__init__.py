@@ -23,7 +23,7 @@ from provedown.report import Finding, Report, Status
 VERIFIER_ENTRY_POINT_GROUP = "provedown.verifiers"
 
 
-EMPTY_VERIFIER_IDS_MESSAGE = "no verifier ids given; pass None to run them all"
+_EMPTY_VERIFIER_IDS_MESSAGE = "no verifier ids given; pass None to run them all"
 
 
 class PluginLoadError(RuntimeError):
@@ -94,17 +94,21 @@ class VerifierRegistry:
         active_context = context or VerificationContext()
         if verifier_ids is not None and not verifier_ids:
             # Running nothing must not look like a passing report.
-            raise ValueError(EMPTY_VERIFIER_IDS_MESSAGE)
+            raise ValueError(_EMPTY_VERIFIER_IDS_MESSAGE)
         self.check_ids(verifier_ids or ())
+        # A repeated id runs its verifier once.
         selected = (
-            # A repeated id runs its verifier once.
-            [self._verifiers[name] for name in dict.fromkeys(verifier_ids)]
+            list(dict.fromkeys(verifier_ids))
             if verifier_ids is not None
-            else [self._verifiers[name] for name in self.names()]
+            else self.names()
         )
         findings: list[Finding] = []
-        for verifier in selected:
-            findings.extend(_run_verifier(verifier, document, active_context))
+        for verifier_id in selected:
+            findings.extend(
+                _run_verifier(
+                    verifier_id, self._verifiers[verifier_id], document, active_context
+                )
+            )
         return Report.from_findings(findings)
 
     def check_ids(self, verifier_ids: Iterable[str]) -> None:
@@ -119,6 +123,7 @@ class VerifierRegistry:
 
 
 def _run_verifier(
+    verifier_id: str,
     verifier: Verifier,
     document: Document,
     context: VerificationContext,
@@ -142,7 +147,7 @@ def _run_verifier(
                     yielded = _short_repr(finding)
                     findings.append(
                         Finding(
-                            verifier_id=verifier.verifier_id,
+                            verifier_id=verifier_id,
                             status=Status.ERROR,
                             location=location,
                             message=(
@@ -161,7 +166,7 @@ def _run_verifier(
     except Exception as exc:  # Verifier code may be a third-party plugin.
         findings.append(
             Finding(
-                verifier_id=verifier.verifier_id,
+                verifier_id=verifier_id,
                 status=Status.ERROR,
                 location=location,
                 message=f"verifier raised {type(exc).__name__}: {_safe_str(exc)}",
@@ -210,21 +215,28 @@ def _safe_str(exc: BaseException) -> str:
 _TRACEBACK_LIMIT = 4000
 
 
-def _short_traceback(exc: BaseException) -> str:
-    """Format the frames of ``exc`` and a short form of its message.
+_TRACEBACK_PIECE_LIMIT = 500
 
-    The frames nearest the raise are kept when there are too many to fit. The
-    message is cut like the finding's own, so a huge message cannot push the
-    frames out.
+
+def _short_traceback(exc: BaseException) -> str:
+    """Format ``exc`` as ``traceback`` does, chained causes included, bounded.
+
+    Each piece (a frame, or an exception's message line) is cut on its own, so
+    one huge message cannot push the frames out. If the whole still does not
+    fit, both its start and its end are kept, since the end holds the error.
     """
 
-    header = "Traceback (most recent call last):\n"
-    footer = f"{type(exc).__name__}: {_safe_str(exc)}\n"
-    frames = "".join(traceback.format_tb(exc.__traceback__))
-    room = _TRACEBACK_LIMIT - len(header) - len(footer)
-    if len(frames) > room:
-        frames = "  ...\n" + frames[-(room - 6) :]
-    return header + frames + footer
+    pieces = traceback.TracebackException.from_exception(exc).format()
+    text = "".join(
+        piece
+        if len(piece) <= _TRACEBACK_PIECE_LIMIT
+        else piece[: _TRACEBACK_PIECE_LIMIT - 4] + "...\n"
+        for piece in pieces
+    )
+    if len(text) <= _TRACEBACK_LIMIT:
+        return text
+    head = (_TRACEBACK_LIMIT - 5) // 2
+    return text[:head] + "\n...\n" + text[-(_TRACEBACK_LIMIT - 5 - head) :]
 
 
 def _verifier_shape_problem(verifier: object) -> str | None:

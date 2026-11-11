@@ -95,6 +95,20 @@ class UnstringableRaiseVerifier:
         raise _UnstringableError()
 
 
+class SourceFetchError(Exception):
+    pass
+
+
+class ChainedErrorVerifier:
+    verifier_id = "chained"
+
+    def verify(self, document, context):
+        try:
+            raise ConnectionError("dns lookup failed for example.org")
+        except ConnectionError as exc:
+            raise SourceFetchError("could not fetch source") from exc
+
+
 class HugeErrorVerifier:
     verifier_id = "huge-error"
 
@@ -744,7 +758,7 @@ def test_raise_with_an_unprintable_or_huge_exception_is_attributed(
     # The frames survive a huge message, which is kept only in short form.
     assert traceback_text.startswith("Traceback (most recent call last):")
     assert "HugeErrorVerifier" in traceback_text or "countplugin" in traceback_text
-    assert traceback_text.count("x" * 300) == 0
+    assert traceback_text.count("x" * 600) == 0
 
 
 def test_empty_verifier_ids_is_an_error_not_an_empty_ok_report() -> None:
@@ -767,7 +781,7 @@ def test_register_rejects_a_verifier_without_a_string_id_or_verify() -> None:
     registry = VerifierRegistry()
     with pytest.raises(TypeError, match="verifier_id"):
         registry.register(NoId())  # type: ignore[arg-type]
-    with pytest.raises(TypeError, match="verify"):
+    with pytest.raises(TypeError, match=r"verify\(\) method"):
         registry.register(NoVerify())  # type: ignore[arg-type]
     assert registry.names() == []
 
@@ -785,3 +799,19 @@ def test_registry_verify_rejects_empty_ids_and_dedupes_repeats() -> None:
         document, verifier_ids=["python-results", "python-results"]
     )
     assert report.count(Status.PASS) == 1
+
+
+def test_raising_verifier_traceback_keeps_the_exception_chain(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    install_plugin(
+        tmp_path, monkeypatch, {"chained": "countplugin:ChainedErrorVerifier"}
+    )
+
+    report = verify_document(parse_document("text"), registry=default_registry())
+
+    [finding] = report.findings
+    traceback_text = finding.evidence["traceback"]
+    assert "ConnectionError: dns lookup failed for example.org" in traceback_text
+    assert "direct cause of the following exception" in traceback_text
+    assert "countplugin.SourceFetchError: could not fetch source" in traceback_text
