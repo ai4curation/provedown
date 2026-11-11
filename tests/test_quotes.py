@@ -976,3 +976,29 @@ def test_void_element_leak_in_a_figcaption_is_reported_for_any_count() -> None:
         assert "unclosed ignored region" in diagnostic, breaks
         # The figure still ends at its own end tag, so later quotes parse.
         assert [quote.text for quote in document.quotes] == ["A", "later"], breaks
+
+
+def test_unmatched_figure_in_a_caption_region_keeps_the_rescue() -> None:
+    document = parse_document(
+        "<figure><blockquote>A</blockquote><figcaption>"
+        '<span class="provedown-ignore">see <figure>draft</span>'
+        "<cite>PMID:1</cite></figcaption></figure>"
+    )
+
+    # The stray <figure> no longer cancels the </figcaption> that ends the leak.
+    [diagnostic] = document.diagnostics
+    assert "unclosed ignored region" in diagnostic
+    assert not verify_document(document).ok
+
+
+def test_closed_ignored_cite_in_an_unclosed_cite_without_quotes_still_runs_code() -> (
+    None
+):
+    document = parse_document(
+        '<cite>Darwin, <cite class="provedown-ignore">draft note</cite>\n\n'
+        "<pre><code>total = 42</code></pre>\n"
+        '<p>The total is <span class="result" data-code="total">42</span>.</p>'
+    )
+
+    assert document.diagnostics == []
+    assert verify_document(document).ok
