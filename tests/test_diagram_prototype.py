@@ -1231,7 +1231,7 @@ def _no_fences(html: str) -> bool:
     """Whether no line of the output reads to the core parser as a fence."""
 
     lines = html.splitlines(keepends=True)
-    return all(core_parser._fence_marker(line) is None for line in lines)
+    return all(core_parser.fence_marker(line) is None for line in lines)
 
 
 def _code_blocks(html: str) -> list[str]:
@@ -1310,7 +1310,7 @@ def test_claim_after_a_defused_fence_on_its_line_is_still_matched() -> None:
 def test_fence_rule_matches_the_core_parser(line: str) -> None:
     # If core's fence rule changes, the converter's copy of it must too.
     assert bool(script.FENCE.match(line)) == (
-        core_parser._fence_marker(line + "\n") is not None
+        core_parser.fence_marker(line + "\n") is not None
     )
 
 
