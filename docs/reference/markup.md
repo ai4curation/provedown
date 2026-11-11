@@ -74,7 +74,8 @@ Provedown HTML. HTML regions with `data-provedown-ignore="true"` or the
 `provedown-ignore` class are also ignored.
 
 In source HTML, every `<code>` element is treated as Provedown code, except
-one inside a [quotation](#quotations), which is quoted text. Put other
+one inside a `<q>`, `<blockquote>` or `<cite>` of a [quotation](#quotations),
+which is quoted or citation text. Put other
 non-executable code samples inside an ignored region when they should only be
 shown to readers.
 
@@ -194,8 +195,10 @@ The `<cite>` scopes the claim. Its own text, outside its `<q>` elements, must
 name exactly one reference id: a `prefix:local` token such as `PMID:18467591`,
 `DOI:10.1016/...`, `Reactome:R-HSA-75899` or `file:genes/x.txt`. Commas and
 semicolons separate an id from the text around it; trailing sentence
-punctuation and unbalanced closing brackets are dropped. A bare web link such
-as `https://...` is not a reference id; write a URL source as `url:https://...`.
+punctuation, unbalanced closing brackets, and Markdown code or emphasis markers
+around an id (`` `PMID:1` ``, `**PMID:1**`) are dropped. A bare link such as
+`https://...` or `mailto:...` is not a reference id; write a URL source as
+`url:https://...`.
 Each `<q>` in the citation is a separate claim against that source, and the id
 may be link text, from an HTML `<a>` or a Markdown `[PMID:18467591](https://...)`
 link:
@@ -225,9 +228,16 @@ quotation marks.
 The quoted text is collected with HTML entities decoded and whitespace,
 including line wraps, collapsed to single spaces. Markup inside a quote, such as
 a nested `<q>` or a `<code>` element, is part of the quoted text, and paragraph
-or `<br>` boundaries separate words. A `<code>` element inside a quote is
-quoted text only: it is never executed, and neither is a `<code use="..."/>`
-there. Even a `</cite>` or `</figure>` end tag
+or `<br>` boundaries separate words. A `<code>` element inside a quote, or
+anywhere in a `<cite>`, is ordinary inline markup: its text belongs to the
+quote or citation and it is never executed, and neither is a
+`<code use="..."/>` there. A `<code>` in a `<figure>` outside its
+`<blockquote>`, such as a captioned listing, is still executable.
+
+Compatibility note: before quotations were recognized, every `<code>` was
+executable, including one inside a `<blockquote>`. A document that wrapped an
+executable `<code>` in a `<blockquote>` for presentation must move it out, or
+the check silently stops running. Even a `</cite>` or `</figure>` end tag
 inside an open quote is treated as quoted text, so a stray end tag never cuts
 a quote short. Markdown inside a quote is not rendered first, so avoid
 Markdown emphasis there.

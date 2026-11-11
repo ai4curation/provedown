@@ -26,17 +26,21 @@ from provedown.model import (
 # ``PMID:18467591``, ``DOI:10.1016/...``, ``Reactome:R-HSA-75899`` or
 # ``file:genes/x.txt``. Commas and semicolons separate ids from each other and
 # from the quote, so they never belong to one.
-_SOURCE_ID_PATTERN = re.compile(r"(?<![\w/:.-])[A-Za-z][\w.-]*:[^\s,;\[\]]+")
+# Markdown code and emphasis markers around an id (`PMID:1`, **PMID:1**,
+# _PMID:1_) are not part of it, so they are excluded from the body or trimmed.
+_SOURCE_ID_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9/:.-])[A-Za-z][\w.-]*:[^\s,;\[\]`*]+"
+)
 _VALID_SOURCE_ID = re.compile(r"[A-Za-z][\w.-]*:\S+")
 # The target of a Markdown link, ``[text](target "title")``: the id is the link
 # text. A target may hold one level of balanced parentheses, as DOIs often do.
 _MARKDOWN_LINK_TARGET = re.compile(
     r'\]\((?:[^()\s]|\([^()\s]*\))*(?:\s+"[^"]*")?\)'
 )
-# A bare web link is where a source lives, not a reference id for it; a URL
-# source is written with a ``url:`` prefix.
-_WEB_LINK_PREFIXES = frozenset({"http", "https"})
-_SOURCE_ID_TRAILING = ".:"
+# A bare link (http, ftp, mailto) is where a source lives, not a reference id
+# for it; a URL source is written with a ``url:`` prefix.
+_WEB_LINK_PREFIXES = frozenset({"http", "https", "ftp", "mailto"})
+_SOURCE_ID_TRAILING = ".:_"
 _CLOSING_BRACKETS = {")": "(", "]": "[", "}": "{"}
 # Elements whose boundaries separate words in quoted text.
 _QUOTE_WORD_BREAK_TAGS = frozenset(
@@ -55,8 +59,6 @@ class _CodeBuilder:
     language: str
     attributes: Mapping[str, str]
     parts: list[str] = field(default_factory=list)
-    # Started inside an open quote: quoted text, not an executable cell.
-    quoted: bool = False
 
     def build(self) -> CodeBlock:
         return CodeBlock(
@@ -182,13 +184,12 @@ class _ProvedownHTMLParser(HTMLParser):
             return
 
         if self._code is not None:
-            if not self._code.quoted:
-                self.diagnostics.append(
-                    f"{location.display()}: nested HTML tag inside <code> was ignored"
-                )
+            self.diagnostics.append(
+                f"{location.display()}: nested HTML tag inside <code> was ignored"
+            )
             return
 
-        if tag == "code":
+        if tag == "code" and not self._in_quotation_text():
             self._start_code(attr_map, location)
             return
 
@@ -216,8 +217,8 @@ class _ProvedownHTMLParser(HTMLParser):
         if self._quote is not None and tag in _QUOTE_WORD_BREAK_TAGS:
             self._quote.parts.append(" ")
 
-        if tag == "code" and self._quote is not None:
-            # A self-closing <code/> in a quote holds no text and runs nothing.
+        if tag == "code" and self._in_quotation_text():
+            # A self-closing <code/> in quotation text holds no text, runs nothing.
             return
 
         if tag == "code":
@@ -269,7 +270,9 @@ class _ProvedownHTMLParser(HTMLParser):
             return
 
         if tag == "code" and self._code is not None:
-            self._finish_code()
+            code = self._code.build()
+            self._code = None
+            self._append_code_block(code)
             return
 
         self._end_quote_markup(tag)
@@ -285,11 +288,12 @@ class _ProvedownHTMLParser(HTMLParser):
     def close(self) -> None:
         super().close()
         if self._code is not None:
-            if not self._code.quoted:
-                self.diagnostics.append(
-                    f"{self._code.location.display()}: unclosed <code> block"
-                )
-            self._finish_code()
+            self.diagnostics.append(
+                f"{self._code.location.display()}: unclosed <code> block"
+            )
+            code = self._code.build()
+            self._code = None
+            self._append_code_block(code)
         while self._results:
             result = self._results[-1]
             self.diagnostics.append(
@@ -303,7 +307,8 @@ class _ProvedownHTMLParser(HTMLParser):
             self._finish_quote()
         while self._quote_containers:
             for quote in self._quote_containers[-1].quotes:
-                quote.citation_unclosed = True
+                # An unclosed quote already says its text is untrustworthy.
+                quote.citation_unclosed = not quote.unclosed
             self._finish_quote_container()
 
     def _start_quote_markup(self, tag: str, location: SourceLocation) -> None:
@@ -394,8 +399,7 @@ class _ProvedownHTMLParser(HTMLParser):
         attr_map: Mapping[str, str],
         location: SourceLocation,
     ) -> None:
-        quoted = self._quote is not None
-        if "use" in attr_map and not quoted:
+        if "use" in attr_map:
             self._append_code_use(attr_map, location)
             return
 
@@ -404,18 +408,21 @@ class _ProvedownHTMLParser(HTMLParser):
             name=_empty_to_none(attr_map.get("name")),
             language=_language(attr_map, self.default_language),
             attributes=attr_map,
-            quoted=quoted,
         )
 
-    def _finish_code(self) -> None:
-        assert self._code is not None
-        quoted = self._code.quoted
-        code = self._code.build()
-        self._code = None
-        if not quoted:
-            self._append_code_block(code)
-        elif self._quote is not None:
-            self._quote.parts.append(code.code)
+    def _in_quotation_text(self) -> bool:
+        """Whether the parser is inside a quote or a citation.
+
+        There, ``<code>`` is ordinary inline markup whose text belongs to the
+        quote or citation, never an executable cell. A ``<code>`` in a
+        ``<figure>`` outside its quote, such as a captioned listing, is still
+        executable.
+        """
+
+        return self._quote is not None or any(
+            isinstance(container, _CiteBuilder)
+            for container in self._quote_containers
+        )
 
     def _append_code_use(
         self,

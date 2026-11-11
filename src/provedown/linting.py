@@ -177,6 +177,7 @@ def _add_quote_lints(
                         "the end of the document and quotations after it are "
                         "not parsed"
                     ),
+                    target=quote.citation,
                 )
             )
         elif quote.citation_unclosed:

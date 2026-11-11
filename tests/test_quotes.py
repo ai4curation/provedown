@@ -409,3 +409,80 @@ def test_bare_web_links_are_not_reference_ids() -> None:
         ("PMID:28",),
         ("url:https://example.org/paper",),
     ]
+
+
+def test_quote_end_tag_inside_quoted_code_keeps_the_code_text() -> None:
+    document = parse_document(
+        "<cite>PMID:29, <q>the gene <code>ERG9 is required</q></cite> after"
+    )
+
+    assert document.diagnostics == []
+    assert document.events == []
+    assert [
+        (quote.text, quote.unclosed, quote.citation_unclosed)
+        for quote in document.quotes
+    ] == [("the gene ERG9 is required", False, False)]
+
+
+def test_code_in_a_citation_is_citation_text_not_an_executable_cell() -> None:
+    document = parse_document("<cite><code>PMID:30</code>, <q>x</q></cite>")
+
+    assert document.events == []
+    assert document.quotes[0].sources == ("PMID:30",)
+
+
+def test_code_in_a_figure_outside_its_blockquote_stays_executable() -> None:
+    document = parse_document(
+        "<figure><pre><code>x = 1</code></pre>"
+        "<figcaption>Listing 1</figcaption></figure>"
+    )
+
+    assert len(document.events) == 1
+    assert document.quotes == []
+
+
+def test_word_breaks_inside_quoted_code_separate_words() -> None:
+    document = parse_document(
+        "<cite>PMID:31, <q>a <code>x<br/>y</code> <code>p<br>q</code></q></cite>"
+    )
+
+    assert document.quotes[0].text == "a x y p q"
+
+
+def test_markdown_inline_markup_around_a_reference_id_is_not_part_of_it() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<cite>`PMID:32`, <q>a</q></cite>",
+                "<cite>**PMID:33**, <q>b</q></cite>",
+                "<cite>_PMID:34_, <q>c</q></cite>",
+                "<cite>file:genes/x_y.txt, <q>d</q></cite>",
+            ]
+        )
+    )
+
+    assert [quote.sources for quote in document.quotes] == [
+        ("PMID:32",),
+        ("PMID:33",),
+        ("PMID:34",),
+        ("file:genes/x_y.txt",),
+    ]
+
+
+def test_unclosed_quote_is_not_also_citation_unclosed() -> None:
+    document = parse_document("<cite>PMID:35, <q>never closed")
+
+    assert [(quote.unclosed, quote.citation_unclosed) for quote in document.quotes] == [
+        (True, False)
+    ]
+    [finding] = lint_document(document).findings
+    assert finding.code == "unclosed-quote"
+    assert finding.target == "PMID:35,"
+
+
+def test_other_url_schemes_are_not_reference_ids() -> None:
+    document = parse_document(
+        "<cite>PMID:36 mailto:a@example.org ftp://example.org/x, <q>a</q></cite>"
+    )
+
+    assert document.quotes[0].sources == ("PMID:36",)
