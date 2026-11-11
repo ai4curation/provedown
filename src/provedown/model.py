@@ -16,6 +16,11 @@ class SourceLocation:
     line: int
     column: int
 
+    def __post_init__(self) -> None:
+        # Untyped callers may pass a string path; reports expect a Path.
+        if isinstance(self.path, str):
+            object.__setattr__(self, "path", Path(self.path))
+
     def display(self) -> str:
         prefix = str(self.path) if self.path is not None else "<string>"
         return f"{prefix}:{self.line}:{self.column}"
@@ -89,6 +94,11 @@ class Document:
     frontmatter: Mapping[str, Any] = field(default_factory=dict)
     provedown: ProvedownConfig = field(default_factory=ProvedownConfig)
     diagnostics: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        # Untyped callers may pass a string path; verifiers use Path methods.
+        if isinstance(self.path, str):
+            object.__setattr__(self, "path", Path(self.path))
 
     def referenced_code_names(self) -> list[str]:
         names: list[str] = []

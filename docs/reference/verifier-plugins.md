@@ -37,9 +37,9 @@ state inside `verify()`, not on the instance.
 
 Treat `document` and `context` as read-only. Every selected verifier receives
 the same objects, in `verifier_id` order, or in the order requested with
-`--verifier`, so a verifier that changes
-`document.events`, `document.named_code` or `context.comparators` changes what
-the verifiers after it check, and their findings would not show it.
+`--verifier` or `verifier_ids`, so a verifier that changes `document.events`,
+`document.named_code` or `context.comparators` changes what the verifiers after
+it check, and their findings would not show it.
 
 ## Findings
 

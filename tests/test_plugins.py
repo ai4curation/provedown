@@ -1030,7 +1030,7 @@ def test_finding_location_contents_are_checked_when_the_finding_is_built() -> No
             raise RuntimeError("no")
 
     for location, match in (
-        (SourceLocation(path="notes.md", line=1, column=1), "path must be a Path"),  # type: ignore[arg-type]
+        (SourceLocation(path=b"notes.md", line=1, column=1), "path must be a Path"),  # type: ignore[arg-type]
         (SourceLocation(path=None, line=None, column=1), "line must be an int"),  # type: ignore[arg-type]
         (SourceLocation(path=None, line=1, column=2.5), "column must be an int"),  # type: ignore[arg-type]
         (SourceLocation(path=None, line=True, column=1), "line must be an int"),
@@ -1071,3 +1071,28 @@ def test_a_string_document_path_from_a_library_caller_still_verifies() -> None:
     assert {
         finding.to_dict()["location"].split(":")[0] for finding in report.findings
     } == {"notes.md"}
+
+
+def test_string_paths_from_untyped_callers_never_break_the_safety_net(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    import dataclasses
+
+    from provedown import SourceLocation
+    from provedown.integrations.okf import parse_okf_document
+
+    install_plugin(tmp_path, monkeypatch, {"crashing": "countplugin:CrashingVerifier"})
+    document = dataclasses.replace(
+        parse_document("<pre><code>x = 1</code></pre>"),
+        path="notes.md",  # type: ignore[arg-type]
+    )
+    assert document.path == Path("notes.md")
+    assert SourceLocation(path="a.md", line=1, column=1).path == Path("a.md")  # type: ignore[arg-type]
+
+    # The raising plugin's error finding is built from document.path.
+    report = verify_document(document)
+    errors = [f for f in report.findings if f.status == Status.ERROR]
+    assert errors and all(f.location.path == Path("notes.md") for f in errors)
+
+    okf = parse_okf_document("plain text", path="notes.md")  # type: ignore[arg-type]
+    assert okf.document.path == Path("notes.md")

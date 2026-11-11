@@ -186,8 +186,13 @@ class OkfDocument:
 
 
 def parse_okf_document(source: str, path: Path | None = None) -> OkfDocument:
-    """Parse an OKF document and lift its computation into executable markup."""
+    """Parse an OKF document and lift its computation into executable markup.
 
+    A string ``path`` from an untyped caller is converted to a ``Path``.
+    """
+
+    if isinstance(path, str):
+        path = Path(path)
     base = parse_document(source, path=path)
     metadata = _metadata(base.frontmatter)
     diagnostics: list[str] = []
