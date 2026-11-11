@@ -736,6 +736,9 @@ def test_ignored_region_inside_a_quote_keeps_its_visible_text() -> None:
         "y",
     ]
     assert document.quotes[2].sources == ("PMID:45", "PMID:46")
+    assert [f.code for f in lint_document(document).findings] == [
+        "quote-citation-with-several-sources"
+    ]
 
 
 def test_nested_cite_text_stays_in_the_enclosing_citation() -> None:
@@ -745,3 +748,20 @@ def test_nested_cite_text_stays_in_the_enclosing_citation() -> None:
 
     assert document.quotes[0].sources == ("PMID:1", "PMID:2")
     assert document.quotes[0].source is None
+    assert [f.code for f in lint_document(document).findings] == [
+        "quote-citation-with-several-sources"
+    ]
+    glued = parse_document("<cite>see <cite>PMID:2</cite>and PMID:1, <q>x</q></cite>")
+    assert glued.quotes[0].sources == ("PMID:2", "PMID:1")
+
+
+def test_unclosed_ignored_region_is_a_parser_diagnostic() -> None:
+    document = parse_document(
+        '<span class="provedown-ignore"><br class="a"></span>\n'
+        "<cite>PMID:47, <q>a claim that would otherwise vanish</q></cite>"
+    )
+
+    # The <br> deepens the region and never closes, so everything after it is
+    # skipped; that must block verification rather than pass with no quotes.
+    assert document.quotes == []
+    assert any("unclosed ignored region" in d for d in document.diagnostics)

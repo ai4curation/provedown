@@ -239,7 +239,7 @@ separate words, in quotes and in citation text. Inside a `<code>` element,
 a start or self-closing tag is a parser diagnostic that blocks verification, as
 anywhere else. An end tag, comment, declaration or processing instruction is
 kept in the code exactly as written, so it never closes markup outside the
-code. An ignore marker has no effect inside `<code>`. An ignored region inside
+code; the verifier then runs it as part of the code, where it must be valid. An ignore marker has no effect inside `<code>`. An ignored region inside
 a quote or citation keeps its visible text there: the marker keeps markup out of
 the executable contract, not words out of a quotation. Even a `</cite>` or
 `</figure>`
@@ -253,7 +253,8 @@ its text is also part of that quote or citation. That is a trap: a result
 span's authored value becomes part of the verbatim quote, so correcting the
 value to fix a failed check rewrites the quotation. `provedown lint` warns about
 executable markup inside a quote or its citation; to quote code from a source,
-use `<samp>`, which Provedown never executes:
+use `<samp>`, which Provedown never executes, or, for a whole block, a
+`<code>` carrying the ignore marker, whose text still joins the quote:
 
 ````markdown
 <cite>PMID:1, <q>the patch adds <samp>retry=3</samp> to the client</q></cite>

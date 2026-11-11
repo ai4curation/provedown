@@ -176,6 +176,7 @@ class _ProvedownHTMLParser(HTMLParser):
         # Set while a parse_* override copies a markup span into open code, so
         # a nested parse_* call (end tag -> bogus comment) does not copy twice.
         self._keeping_in_code = False
+        self._ignore_location: SourceLocation | None = None
         self.quotes: list[QuoteClaim] = []
         self._quote: _QuoteBuilder | None = None
         self._quote_containers: list[_CiteBuilder | _FigureBuilder] = []
@@ -205,6 +206,7 @@ class _ProvedownHTMLParser(HTMLParser):
             if tag in _QUOTE_WORD_BREAK_TAGS:
                 self._append_quotation_text(" ")
             self._ignore_depth = 1
+            self._ignore_location = location
             return
 
         if tag == "code":
@@ -357,6 +359,11 @@ class _ProvedownHTMLParser(HTMLParser):
 
     def close(self) -> None:
         super().close()
+        if self._ignore_depth > 0 and self._ignore_location is not None:
+            # Everything after it was skipped, so nothing there was checked.
+            self.diagnostics.append(
+                f"{self._ignore_location.display()}: unclosed ignored region"
+            )
         if self._code is not None:
             self.diagnostics.append(
                 f"{self._code.location.display()}: unclosed <code> block"
@@ -460,8 +467,9 @@ class _ProvedownHTMLParser(HTMLParser):
             if isinstance(parent, _FigureBuilder) and parent.caption_depth > 0:
                 parent.captions.append(container)
             elif isinstance(parent, _CiteBuilder):
-                # A nested citation's text is part of the enclosing citation.
-                parent.parts.append(container.text)
+                # A nested citation's text is part of the enclosing citation,
+                # kept apart from the words around it.
+                parent.parts.append(f" {container.text} ")
             return
 
         citation = (
