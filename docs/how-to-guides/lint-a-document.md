@@ -78,7 +78,11 @@ JSON output is intended for CI, editor integrations, and scripts.
   source its own `<cite>`. This is an error.
 
 `empty-quote`
-: A `<q>` or `<blockquote>` has no text. This is an error.
+: A `<q>` or `<blockquote>` inside a citation has no text. This is an error.
+
+`unclosed-quote`
+: A `<q>` or `<blockquote>`, or the `<cite>` or `<figure>` around it, has no
+  end tag, so the quote may have swallowed the text after it. This is an error.
 
 ## Justify Explicitly Unverified Claims
 

@@ -160,17 +160,22 @@ def _add_quote_lints(
 
     A quote outside any citation is ordinary HTML, so it is only a warning. A
     quote inside a citation claims to be verbatim, so a citation that does not
-    name exactly one source, or a quote with no text, is an error.
+    name exactly one source, or a quote with no text, is an error. Unclosed
+    quote markup is an error wherever it is, because it swallows the text after
+    it.
     """
 
     for quote in document.quotes:
-        if not quote.text:
+        if quote.unclosed:
             findings.append(
                 LintFinding(
                     level="error",
-                    code="empty-quote",
+                    code="unclosed-quote",
                     location=quote.location,
-                    message=f"<{quote.element}> has no quoted text",
+                    message=(
+                        f"<{quote.element}>, or the citation or figure around "
+                        "it, has no end tag"
+                    ),
                 )
             )
         elif quote.citation is None:
@@ -183,6 +188,15 @@ def _add_quote_lints(
                         f"<{quote.element}> is not inside a citation, so it "
                         "cannot be checked against a source"
                     ),
+                )
+            )
+        elif not quote.text:
+            findings.append(
+                LintFinding(
+                    level="error",
+                    code="empty-quote",
+                    location=quote.location,
+                    message=f"<{quote.element}> has no quoted text",
                 )
             )
         elif not quote.sources:
@@ -206,7 +220,8 @@ def _add_quote_lints(
                     location=quote.location,
                     message=(
                         "the citation around this quote names several reference "
-                        "ids; give each source its own <cite>"
+                        f"ids ({', '.join(quote.sources)}); a quote must cite "
+                        "exactly one source"
                     ),
                     target=" ".join(quote.sources),
                 )

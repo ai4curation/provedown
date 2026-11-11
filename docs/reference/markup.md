@@ -194,7 +194,8 @@ name exactly one reference id: a `prefix:local` token such as `PMID:18467591`,
 `DOI:10.1016/...`, `Reactome:R-HSA-75899` or `file:genes/x.txt`. Commas and
 semicolons separate an id from the text around it; trailing sentence
 punctuation and unbalanced closing brackets are dropped. Each `<q>` in the
-citation is a separate claim against that source, and the id may be link text:
+citation is a separate claim against that source, and the id may be link text,
+from an HTML `<a>` or a Markdown `[PMID:18467591](https://...)` link:
 
 ````markdown
 <cite><a href="https://pubmed.ncbi.nlm.nih.gov/18467591/">PMID:18467591</a>, <q>first excerpt</q> and <q>second excerpt</q></cite>
@@ -220,8 +221,17 @@ quotation marks.
 
 The quoted text is collected with HTML entities decoded and whitespace,
 including line wraps, collapsed to single spaces. Markup inside a quote, such as
-a nested `<q>`, is part of the quoted text. Markdown inside a quote is not
-rendered first, so avoid Markdown emphasis there.
+a nested `<q>` or a `<code>` element, is part of the quoted text, and paragraph
+or `<br>` boundaries separate words. Even a `</cite>` or `</figure>` end tag
+inside an open quote is treated as quoted text, so a stray end tag never cuts
+a quote short. Markdown inside a quote is not rendered first, so avoid
+Markdown emphasis there.
+
+A quote whose end tag is missing runs to the end of the document. Such a quote,
+and any quote in a `<cite>` or `<figure>` without an end tag, is marked
+`unclosed` and reported by `provedown lint`. Unclosed quote markup is not a
+parser diagnostic, so it never stops a document's Python or SQL claims from
+being verified.
 
 Quotations are parsed into `Document.quotes` as `QuoteClaim` objects, not into
 `Document.events`, because they are not executable. Provedown itself does not
@@ -252,8 +262,6 @@ Markup diagnostics include:
 - empty code uses;
 - unclosed `<code>` blocks;
 - unclosed result spans;
-- unclosed `<q>` or `<blockquote>` elements, and unclosed `<cite>` or
-  `<figure>` elements that contain a quote;
 - result spans missing `data-code`.
 
 See [Frontmatter](frontmatter.md) for document-level metadata and defaults.

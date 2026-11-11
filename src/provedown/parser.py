@@ -26,7 +26,10 @@ from provedown.model import (
 # ``PMID:18467591``, ``DOI:10.1016/...``, ``Reactome:R-HSA-75899`` or
 # ``file:genes/x.txt``. Commas and semicolons separate ids from each other and
 # from the quote, so they never belong to one.
-_SOURCE_ID_PATTERN = re.compile(r"(?<![\w/:.-])[A-Za-z][\w.-]*:[^\s,;]+")
+_SOURCE_ID_PATTERN = re.compile(r"(?<![\w/:.-])[A-Za-z][\w.-]*:[^\s,;\[\]]+")
+_VALID_SOURCE_ID = re.compile(r"[A-Za-z][\w.-]*:\S+")
+# The target of a Markdown link, ``[text](target)``: the id is the link text.
+_MARKDOWN_LINK_TARGET = re.compile(r"\]\([^)\s]*\)")
 _SOURCE_ID_TRAILING = ".:"
 _CLOSING_BRACKETS = {")": "(", "]": "[", "}": "{"}
 # Elements whose boundaries separate words in quoted text.
@@ -86,6 +89,7 @@ class _QuoteBuilder:
     owner: _CiteBuilder | _FigureBuilder | None
     depth: int = 1
     parts: list[str] = field(default_factory=list)
+    unclosed: bool = False
 
     def build(
         self,
@@ -99,6 +103,7 @@ class _QuoteBuilder:
             citation=citation,
             citation_location=citation_location,
             sources=source_ids(citation) if citation is not None else (),
+            unclosed=self.unclosed,
         )
 
 
@@ -252,6 +257,8 @@ class _ProvedownHTMLParser(HTMLParser):
             code = self._code.build()
             self._code = None
             self._append_code_block(code)
+            if self._quote is not None:
+                self._quote.parts.append(code.code)
             return
 
         self._end_quote_markup(tag)
@@ -279,15 +286,14 @@ class _ProvedownHTMLParser(HTMLParser):
                 f"{result.location.display()}: unclosed result span"
             )
             self._finish_result()
+        # Unclosed quote markup is reported by lint rather than as a parser
+        # diagnostic, so it never blocks the document's executable checks.
         if self._quote is not None:
-            self._close_unclosed_quote()
+            self._quote.unclosed = True
+            self._finish_quote()
         while self._quote_containers:
-            container = self._quote_containers[-1]
-            if container.quotes:
-                tag = "cite" if isinstance(container, _CiteBuilder) else "figure"
-                self.diagnostics.append(
-                    f"{container.location.display()}: unclosed <{tag}>"
-                )
+            for quote in self._quote_containers[-1].quotes:
+                quote.unclosed = True
             self._finish_quote_container()
 
     def _start_quote_markup(self, tag: str, location: SourceLocation) -> None:
@@ -295,6 +301,11 @@ class _ProvedownHTMLParser(HTMLParser):
 
         Markup inside an open quote is part of the quoted text, so only a
         nested quote of the same element is tracked there, to find its end.
+        Even a ``</cite>`` or ``</figure>`` end tag does not close an open
+        quote: a stray end tag cannot be told apart from a missing ``</q>``
+        without reading ahead, and treating it as quoted text never truncates
+        the quote. A quote whose end tag is missing runs to the end of the
+        document and is marked ``unclosed``.
         """
 
         if self._quote is not None:
@@ -324,16 +335,7 @@ class _ProvedownHTMLParser(HTMLParser):
                 self._quote.depth -= 1
                 if self._quote.depth == 0:
                     self._finish_quote()
-                return
-            container = self._quote_containers[-1] if self._quote_containers else None
-            if (
-                container is None
-                or self._quote.owner is not container
-                or not _closes_container(tag, container)
-            ):
-                return
-            # The quote's own citation is closing around it.
-            self._close_unclosed_quote()
+            return
 
         if not self._quote_containers:
             return
@@ -346,13 +348,6 @@ class _ProvedownHTMLParser(HTMLParser):
             and container.caption_depth > 0
         ):
             container.caption_depth -= 1
-
-    def _close_unclosed_quote(self) -> None:
-        assert self._quote is not None
-        self.diagnostics.append(
-            f"{self._quote.location.display()}: unclosed <{self._quote.element}>"
-        )
-        self._finish_quote()
 
     def _finish_quote(self) -> None:
         assert self._quote is not None
@@ -505,13 +500,22 @@ def source_ids(citation: str) -> tuple[str, ...]:
     ('DOI:10.1016/S0092-8674(00)81141-4',)
     >>> source_ids("PMID:1; Reactome:R-HSA-75899 and file:genes/x.txt")
     ('PMID:1', 'Reactome:R-HSA-75899', 'file:genes/x.txt')
-    >>> source_ids("Smith 2020, 10:30")
+    >>> source_ids("[PMID:123](https://pubmed.ncbi.nlm.nih.gov/123/),")
+    ('PMID:123',)
+    >>> source_ids("Smith 2020, 10:30, Figure:.")
     ()
     """
 
-    return tuple(
+    candidates = (
         _trim_source_id(match.group(0))
-        for match in _SOURCE_ID_PATTERN.finditer(citation)
+        for match in _SOURCE_ID_PATTERN.finditer(
+            _MARKDOWN_LINK_TARGET.sub("]", citation)
+        )
+    )
+    return tuple(
+        candidate
+        for candidate in candidates
+        if _VALID_SOURCE_ID.fullmatch(candidate)
     )
 
 

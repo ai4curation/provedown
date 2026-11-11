@@ -49,6 +49,40 @@ The parsed `Document` contains:
 `diagnostics`
 : Parser diagnostics.
 
+`quotes`
+: Ordered `QuoteClaim` objects for the document's
+  [quotations](markup.md#quotations). They are not executable, so they are not
+  in `events`.
+
+Each `QuoteClaim` has:
+
+`text`
+: The quoted text, with entities decoded and whitespace collapsed.
+
+`location`
+: Location of the `<q>` or `<blockquote>` start tag.
+
+`element`
+: `"q"` or `"blockquote"`.
+
+`citation`
+: The citation's own text, without its quotes, or `None` when the quote is not
+  inside a citation.
+
+`citation_location`
+: Location of the `<cite>` start tag, or `None`.
+
+`sources`
+: Reference ids named in the citation text, in order.
+
+`source`
+: The single reference id when `sources` has exactly one, else `None`. A quote
+  verifier checks `text` against this source.
+
+`unclosed`
+: True when the quote, or the citation or figure around it, has no end tag.
+  Its `text` may then run to the end of the document.
+
 ## Verify Documents
 
 Verify parsed text:

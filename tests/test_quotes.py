@@ -1,6 +1,13 @@
 from pathlib import Path
 
-from provedown import QuoteClaim, SourceLocation, lint_document, parse_document
+from provedown import (
+    QuoteClaim,
+    SourceLocation,
+    Status,
+    lint_document,
+    parse_document,
+    verify_document,
+)
 
 
 def test_quote_inside_cite_takes_its_source_from_the_citation_text() -> None:
@@ -172,12 +179,69 @@ def test_quotes_in_fenced_code_and_ignored_regions_are_skipped() -> None:
     assert [quote.text for quote in document.quotes] == ["live"]
 
 
-def test_unclosed_quote_is_a_parser_diagnostic() -> None:
-    document = parse_document("<cite>PMID:12, <q>never closed</cite>")
+def test_unclosed_quote_is_flagged_without_blocking_verification() -> None:
+    document = parse_document(
+        "<code>x = 1</code>\n"
+        '<span class="result" data-code="x">1<span class="method"></span></span>\n'
+        "<cite>PMID:12, <q>never closed</cite>"
+    )
 
-    assert len(document.diagnostics) == 1
-    assert "unclosed <q>" in document.diagnostics[0]
-    assert [quote.text for quote in document.quotes] == ["never closed"]
+    assert document.diagnostics == []
+    assert [(quote.text, quote.unclosed) for quote in document.quotes] == [
+        ("never closed", True)
+    ]
+    report = verify_document(document)
+    assert report.ok
+    assert report.count(Status.PASS) == 1
+    assert [finding.code for finding in lint_document(document).findings] == [
+        "unclosed-quote"
+    ]
+
+
+def test_quotes_in_an_unclosed_citation_are_flagged() -> None:
+    document = parse_document("<cite>PMID:20, <q>complete</q> but no end tag")
+
+    assert document.diagnostics == []
+    assert [(quote.text, quote.unclosed) for quote in document.quotes] == [
+        ("complete", True)
+    ]
+
+
+def test_nested_or_stray_cite_end_tag_does_not_truncate_a_quote() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<cite>PMID:21, <q>he cited <cite>Nature</cite> here</q></cite>",
+                "<cite>PMID:22, <q>a </cite> b</q></cite>",
+            ]
+        )
+    )
+
+    assert [
+        (quote.text, quote.source, quote.unclosed) for quote in document.quotes
+    ] == [
+        ("he cited Nature here", "PMID:21", False),
+        ("a b", "PMID:22", False),
+    ]
+
+
+def test_figure_nested_in_a_figure_blockquote_keeps_the_caption() -> None:
+    document = parse_document(
+        "<figure><blockquote>outer <figure>inner</figure> text</blockquote>"
+        "<figcaption><cite>PMID:23</cite></figcaption></figure>"
+    )
+
+    assert [(quote.text, quote.source) for quote in document.quotes] == [
+        ("outer inner text", "PMID:23")
+    ]
+
+
+def test_code_inside_a_quote_is_part_of_the_quoted_text() -> None:
+    document = parse_document(
+        "<cite>PMID:24, <q>the gene <code>ERG9</code> is required</q></cite>"
+    )
+
+    assert document.quotes[0].text == "the gene ERG9 is required"
 
 
 def test_quote_markup_alone_does_not_add_events_or_block_verification() -> None:
@@ -206,6 +270,7 @@ def test_lint_reports_quote_citation_problems() -> None:
                 "<cite>Smith 2020, <q>no id</q></cite>",
                 "<cite>PMID:15; PMID:16, <q>two ids</q></cite>",
                 "<cite>PMID:17, <q>  </q></cite>",
+                "<q></q>",
             ]
         ),
         path=Path("notes.md"),
@@ -221,6 +286,7 @@ def test_lint_reports_quote_citation_problems() -> None:
         ("error", "quote-citation-without-source", 2),
         ("error", "quote-citation-with-several-sources", 3),
         ("error", "empty-quote", 4),
+        ("warning", "uncited-quote", 5),
     ]
     assert report.findings[2].target == "PMID:15 PMID:16"
 
@@ -245,3 +311,17 @@ def test_stray_end_tag_does_not_close_a_quote() -> None:
     assert [(quote.text, quote.source) for quote in document.quotes] == [
         ("kept open", "PMID:19")
     ]
+
+
+def test_markdown_link_in_a_citation_names_its_link_text() -> None:
+    document = parse_document(
+        "<cite>[PMID:25](https://pubmed.ncbi.nlm.nih.gov/25/), <q>linked</q></cite>"
+    )
+
+    assert document.quotes[0].sources == ("PMID:25",)
+
+
+def test_trimmed_tokens_without_a_local_part_are_not_sources() -> None:
+    document = parse_document("<cite>see Figure:. PMID:26, <q>text</q></cite>")
+
+    assert document.quotes[0].sources == ("PMID:26",)
