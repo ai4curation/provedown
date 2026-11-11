@@ -67,6 +67,15 @@ class RaisingIdVerifier:
         return []
 
 
+class AttributeErrorIdVerifier:
+    @property
+    def verifier_id(self):
+        return self._missing_module.Thing
+
+    def verify(self, document, context):
+        return []
+
+
 class RaisingVerifyVerifier:
     verifier_id = "raising-verify"
 
@@ -929,3 +938,30 @@ def test_a_plugin_id_is_read_once_from_load_to_registration(
     # Registered under the id that was checked, so it cannot take a built-in's.
     assert registry.names() == ["fresh-id", "python-results", "sql-results"]
     assert type(registry.get("python-results")).__name__ == "PythonResultVerifier"
+
+
+def test_shape_errors_keep_the_plugin_exception_and_name_attribute_errors(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    from provedown import VerifierRegistry
+
+    install_plugin(
+        tmp_path, monkeypatch, {"raising-id": "countplugin:RaisingIdVerifier"}
+    )
+
+    with pytest.raises(PluginLoadError) as loaded:
+        load_plugin_verifiers()
+    # The plugin's own exception stays chained for library callers to inspect.
+    assert isinstance(loaded.value.__cause__, RuntimeError)
+    assert str(loaded.value.__cause__) == "lazy import failed"
+
+    module = sys.modules["countplugin"]
+    with pytest.raises(TypeError) as registered:
+        VerifierRegistry().register(module.RaisingIdVerifier())
+    assert isinstance(registered.value.__cause__, RuntimeError)
+
+    # An AttributeError raised inside a property is not a missing attribute.
+    with pytest.raises(
+        TypeError, match="it raised AttributeError when its verifier_id was read"
+    ):
+        VerifierRegistry().register(module.AttributeErrorIdVerifier())

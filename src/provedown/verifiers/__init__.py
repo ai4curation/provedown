@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import reprlib
 import traceback
 from collections.abc import Iterable, Mapping, Sequence
@@ -75,7 +76,7 @@ class VerifierRegistry:
         except _NotAVerifier as problem:
             raise TypeError(
                 f"cannot register {_short_repr(verifier)}: {problem}"
-            ) from None
+            ) from problem.__cause__
         self._register_as(verifier_id, verifier)
 
     def _register_as(self, verifier_id: str, verifier: Verifier) -> None:
@@ -265,20 +266,34 @@ def _validated_id(verifier: object) -> str:
     attribute again, so the id that was checked is the one used.
     """
 
-    values = {}
-    for name, label in (("verifier_id", "verifier_id"), ("verify", "verify attribute")):
-        try:
-            values[name] = getattr(verifier, name, None)
-        except Exception as exc:  # A plugin's attributes are outside our control.
-            raise _NotAVerifier(
-                f"it raised {type(exc).__name__} when its {label} was read"
-            ) from exc
-    verifier_id = values["verifier_id"]
+    verifier_id = _read_attribute(verifier, "verifier_id", "verifier_id")
     if not isinstance(verifier_id, str) or not verifier_id:
         raise _NotAVerifier("it has no verifier_id")
-    if not callable(values["verify"]):
+    if not callable(_read_attribute(verifier, "verify", "verify attribute")):
         raise _NotAVerifier("it has no verify() method")
     return verifier_id
+
+
+def _read_attribute(verifier: object, name: str, label: str) -> object:
+    """Read ``name`` from a plugin object, or ``None`` when it has no such attribute.
+
+    An exception raised while reading it, including an ``AttributeError`` from
+    inside a property defined on the object, becomes ``_NotAVerifier`` chained to
+    the plugin's exception, rather than being mistaken for a missing attribute.
+    """
+
+    try:
+        return getattr(verifier, name)
+    except AttributeError as exc:
+        if inspect.getattr_static(verifier, name, None) is None:
+            return None
+        raise _NotAVerifier(
+            f"it raised {type(exc).__name__} when its {label} was read"
+        ) from exc
+    except Exception as exc:  # A plugin's attributes are outside our control.
+        raise _NotAVerifier(
+            f"it raised {type(exc).__name__} when its {label} was read"
+        ) from exc
 
 
 def default_registry(*, plugins: bool = True) -> VerifierRegistry:
@@ -358,7 +373,7 @@ def _load_plugin(entry_point: EntryPoint) -> tuple[str, Verifier]:
         which = str(problem).removeprefix("it ")
         raise PluginLoadError(
             f"{_returned(entry_point, verifier)}, which {which}"
-        ) from None
+        ) from problem.__cause__
     loaded: Verifier = verifier
     return verifier_id, loaded
 
