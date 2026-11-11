@@ -167,6 +167,7 @@ def _add_quote_lints(
     """
 
     for quote in document.quotes:
+        rejected_named = False
         if quote.unclosed:
             findings.append(
                 LintFinding(
@@ -216,6 +217,7 @@ def _add_quote_lints(
                 )
             )
         elif not quote.sources:
+            rejected_named = True
             findings.append(
                 LintFinding(
                     level="error",
@@ -239,7 +241,7 @@ def _add_quote_lints(
                     target=" ".join(quote.sources),
                 )
             )
-        if quote.rejected_sources and quote.sources:
+        if quote.rejected_sources and not rejected_named:
             findings.append(
                 LintFinding(
                     level="error",
@@ -281,7 +283,11 @@ def _without_source_message(rejected: tuple[str, ...]) -> str:
 
 
 def _quoted(tokens: tuple[str, ...]) -> str:
-    """Quote each token so its boundaries show, even when it holds a quote."""
+    """Quote each token so its boundaries show, even when it holds a quote.
+
+    ``json.dumps`` also escapes non-ASCII characters on purpose: that is how an
+    invisible or look-alike character in a rejected id becomes visible.
+    """
 
     return ", ".join(json.dumps(token) for token in tokens)
 

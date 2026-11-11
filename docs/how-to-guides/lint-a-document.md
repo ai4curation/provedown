@@ -75,9 +75,10 @@ JSON output is intended for CI, editor integrations, and scripts.
   `PMID:1~~`. This is an error.
 
 `rejected-reference-id`
-: The citation around a quote names a valid reference id and also an id-shaped
-  token that is not valid, such as `PMID:1~~`. The quote is not attributed to
-  the valid id alone. This is an error.
+: The citation around a quote names an id-shaped token that is not valid, such
+  as `PMID:1~~`, and no other finding already names it. When a valid id is also
+  present, the quote is not attributed to it alone: `QuoteClaim.source` is
+  `None`. This is an error.
 
 `quote-citation-with-several-sources`
 : The citation around a quote names more than one reference id: a `<cite>`

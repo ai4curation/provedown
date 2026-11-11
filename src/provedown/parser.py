@@ -173,6 +173,7 @@ class _ProvedownHTMLParser(HTMLParser):
         self._code: _CodeBuilder | None = None
         self._results: list[_ResultBuilder] = []
         self._ignore_depth = 0
+        self._endtag_text: str | None = None
         self.quotes: list[QuoteClaim] = []
         self._quote: _QuoteBuilder | None = None
         self._quote_containers: list[_CiteBuilder | _FigureBuilder] = []
@@ -222,7 +223,7 @@ class _ProvedownHTMLParser(HTMLParser):
         attr_map = _attrs_to_dict(attrs)
         location = self._location()
 
-        if self._ignore_depth > 0 or _is_ignored_region(attr_map):
+        if self._ignore_depth > 0:
             return
 
         if self._code is not None:
@@ -230,6 +231,9 @@ class _ProvedownHTMLParser(HTMLParser):
             self.diagnostics.append(
                 f"{location.display()}: nested HTML tag inside <code> was ignored"
             )
+            return
+
+        if _is_ignored_region(attr_map):
             return
 
         if tag in _QUOTE_WORD_BREAK_TAGS:
@@ -270,6 +274,16 @@ class _ProvedownHTMLParser(HTMLParser):
         if self._results and self._results[-1].method_depth == 0:
             self._results[-1].parts.append(data)
 
+    def parse_endtag(self, i: int) -> int:
+        # Keep the end tag's source text, which handle_endtag only gets as a
+        # lowercased name, so one inside <code> can be kept exactly as written.
+        end = self.rawdata.find(">", i)
+        self._endtag_text = self.rawdata[i : end + 1] if end != -1 else None
+        try:
+            return super().parse_endtag(i)
+        finally:
+            self._endtag_text = None
+
     def handle_entityref(self, name: str) -> None:
         self.handle_data(f"&{name};")
 
@@ -288,7 +302,9 @@ class _ProvedownHTMLParser(HTMLParser):
             return
 
         if self._code is not None:
-            # Any other end tag inside code is code text, as start tags are.
+            # An end tag inside code is code text, exactly as written: dropping
+            # it would turn a check on "</p>" into a check on "".
+            self._code.parts.append(self._endtag_text or f"</{tag}>")
             return
 
         self._end_quote_markup(tag)
@@ -600,7 +616,8 @@ def _source_id_candidates(citation: str) -> tuple[tuple[str, ...], tuple[str, ..
             valid.append(candidate)
         elif ":" in candidate and candidate.split(":", 1)[1]:
             rejected.append(candidate)
-    return tuple(valid), tuple(rejected)
+    # A repeated id names the same source once.
+    return tuple(dict.fromkeys(valid)), tuple(dict.fromkeys(rejected))
 
 
 def _trim_source_id(token: str) -> str:

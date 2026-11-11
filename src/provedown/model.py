@@ -84,7 +84,8 @@ class QuoteClaim:
     the wrong source.
 
     ``rejected_sources`` are tokens in the citation text that look like ids
-    but hold a character an id cannot, such as leftover markup.
+    but hold a character an id cannot, such as leftover markup. When there is
+    any, ``source`` is ``None``: the quote may be from the rejected one.
 
     ``contains_executable_markup`` is true when a ``<code>`` or result span
     appears inside the quote or its citation text. Quote markup never changes
@@ -105,9 +106,13 @@ class QuoteClaim:
 
     @property
     def source(self) -> str | None:
-        """The reference id to check against, when the citation names exactly one."""
+        """The reference id to check against, when the citation names exactly one.
 
-        if len(self.sources) == 1:
+        ``None`` when the citation names several ids, or a rejected id-shaped
+        token as well as a valid one, since either could be the quote's source.
+        """
+
+        if len(self.sources) == 1 and not self.rejected_sources:
             return self.sources[0]
         return None
 

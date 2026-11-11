@@ -80,7 +80,8 @@ Each `QuoteClaim` has:
   character an id cannot, such as leftover markup.
 
 `source`
-: The single reference id when `sources` has exactly one, else `None`. A quote
+: The single reference id when `sources` has exactly one and
+  `rejected_sources` is empty, else `None`. A quote
   verifier checks `text` against this source.
 
 `unclosed`

@@ -428,8 +428,8 @@ def test_quote_end_tag_inside_code_does_not_close_the_quote() -> None:
         "<cite>PMID:29, <q>the gene <code>ERG9 is required</q></cite> after"
     )
 
-    # Code text is opaque: the </q> inside it is code, so the <code> is
-    # unclosed, which blocks verification instead of truncating the quote.
+    # The </q> inside the code is code text, so the quote is not closed and
+    # the unclosed <code> blocks verification, instead of a truncated quote.
     assert any("unclosed <code> block" in d for d in document.diagnostics)
     assert [(quote.text, quote.unclosed) for quote in document.quotes] == [
         ("the gene ERG9 is required after", True)
@@ -579,14 +579,27 @@ def test_block_boundaries_in_citation_text_separate_words() -> None:
     assert [quote.sources for quote in document.quotes] == [("PMID:39",), ("PMID:40",)]
 
 
-def test_end_tag_inside_executable_code_is_code_text() -> None:
+def test_end_tag_inside_code_is_kept_as_written() -> None:
     document = parse_document(
-        '<figure><pre><code>s = "</figure>"</code></pre>'
-        "<blockquote>kept</blockquote>"
-        "<figcaption><cite>PMID:41</cite></figcaption></figure>"
+        "\n".join(
+            [
+                '<pre><code>assert "</P >" in page</code></pre>',
+                '<figure><pre><code>s = "</figure>"</code></pre>'
+                "<blockquote>kept</blockquote>"
+                "<figcaption><cite>PMID:41</cite></figcaption></figure>",
+            ]
+        )
     )
 
-    assert len(document.events) == 1
+    # Dropping it would execute assert "" in page, which always passes.
+    assert document.diagnostics == []
+    assert [
+        event.code for event in document.events if isinstance(event, CodeBlock)
+    ] == [
+        'assert "</P >" in page',
+        's = "</figure>"',
+    ]
+    # It never closes markup outside the code.
     assert [(quote.text, quote.source) for quote in document.quotes] == [
         ("kept", "PMID:41")
     ]
@@ -607,7 +620,10 @@ def test_self_closing_tags_inside_code_are_parser_diagnostics() -> None:
 def test_rejected_id_next_to_a_valid_one_is_an_error() -> None:
     document = parse_document("<cite>~~PMID:37~~ and PMID:38, <q>x</q></cite>")
 
-    assert document.quotes[0].sources == ("PMID:38",)
+    quote = document.quotes[0]
+    assert quote.sources == ("PMID:38",)
+    # Ambiguous like two valid ids: the claim is not attributed to PMID:38.
+    assert quote.source is None
     [finding] = lint_document(document).findings
     assert (finding.level, finding.code) == ("error", "rejected-reference-id")
     assert '"PMID:37~~"' in finding.message
@@ -626,3 +642,29 @@ def test_realistic_id_in_code_in_a_citation_is_an_executable_cell() -> None:
     assert [f.code for f in lint_document(document).findings] == [
         "executable-markup-in-quote"
     ]
+
+
+def test_rejected_id_is_named_even_when_the_quote_has_another_problem() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<cite>~~PMID:37~~, <q></q></cite>",
+                "<cite>~~PMID:38~~, <q>x</q>",
+            ]
+        )
+    )
+
+    findings = lint_document(document).findings
+    assert [f.code for f in findings] == [
+        "empty-quote",
+        "rejected-reference-id",
+        "unclosed-citation",
+        "rejected-reference-id",
+    ]
+
+
+def test_repeated_reference_id_counts_once() -> None:
+    document = parse_document("<cite>PMID:1 and PMID:1, <q>x</q></cite>")
+
+    assert document.quotes[0].sources == ("PMID:1",)
+    assert lint_document(document).findings == []

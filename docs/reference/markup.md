@@ -234,8 +234,9 @@ The quoted text is collected with HTML entities decoded and whitespace,
 including line wraps, collapsed to single spaces. Markup inside a quote, such as
 a nested `<q>`, is part of the quoted text, and paragraph or `<br>` boundaries
 separate words, in quotes and in citation text. Inside a `<code>` element,
-any tag, self-closing or not, is a parser diagnostic that blocks verification,
-as anywhere else. Even a `</cite>` or
+a start or self-closing tag is a parser diagnostic that blocks verification, as
+anywhere else, and an end tag is kept in the code exactly as written, so it
+never closes markup outside the code. Even a `</cite>` or
 `</figure>`
 end tag inside an open quote is treated as quoted text, so a stray end tag never
 cuts a quote short. Markdown inside a quote is not rendered first, so avoid
