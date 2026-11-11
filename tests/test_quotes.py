@@ -1040,3 +1040,42 @@ def test_closed_ignored_cite_that_skipped_a_quote_in_a_closed_cite_is_quiet() ->
         ("the claim", "PMID:1")
     ]
     assert document.diagnostics == []
+
+
+def test_closed_plain_cite_in_a_draft_region_does_not_block_a_document() -> None:
+    document = parse_document(
+        '<cite>Darwin, <span class="provedown-ignore">draft: see '
+        "<cite>Wallace 1858</cite></span>\n\n"
+        "<pre><code>total = 42</code></pre>\n"
+        '<p>The total is <span class="result" data-code="total">42</span>.</p>'
+    )
+
+    assert document.diagnostics == []
+    assert verify_document(document).ok
+
+
+def test_stray_end_tag_closing_a_container_after_a_leak_still_reports() -> None:
+    document = parse_document(
+        '<cite>PMID:1 <span class="provedown-ignore">draft <cite>x</span>, '
+        "<q>a claim</q></cite></cite>"
+    )
+
+    assert document.quotes == []
+    [diagnostic] = document.diagnostics
+    assert "lost the quotation markup an ignored region inside it skipped" in (
+        diagnostic
+    )
+    assert not verify_document(document).ok
+
+
+def test_balanced_ignored_region_that_skipped_a_quote_in_a_closed_cite_is_quiet() -> (
+    None
+):
+    document = parse_document(
+        '<cite>PMID:1 <cite class="provedown-ignore">draft, <q>maybe</q></cite>'
+        "</cite>\n<pre><code>total = 42</code></pre>"
+    )
+
+    assert document.quotes == []
+    assert document.diagnostics == []
+    assert verify_document(document).ok
