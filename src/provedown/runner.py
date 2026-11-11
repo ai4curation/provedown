@@ -20,6 +20,12 @@ def verify_document(
     context: VerificationContext | None = None,
     verifier_ids: Sequence[str] | None = None,
 ) -> Report:
+    """Verify a parsed document, refusing to run verifiers on parser errors.
+
+    Without ``registry``, the default registry is built, which loads installed
+    verifier plugins; a plugin that cannot be loaded raises ``PluginLoadError``.
+    """
+
     findings = list(_diagnostic_findings(document))
     # Parser diagnostics are currently all errors. Keep the status-based gate so
     # typed warning diagnostics can remain non-blocking if they are added later.

@@ -118,13 +118,29 @@ Once that package is installed alongside Provedown, `default_registry()` loads
 the verifier, `provedown list-verifiers` lists it, and `provedown verify` runs
 it with the built-in verifiers or alone with `--verifier <id>`.
 
-Entry points load in name order. A plugin may not reuse the id of a verifier
-that is already registered. A plugin that cannot be imported or constructed,
-or that reuses an id, raises `PluginLoadError` naming the entry point and the
-package that provides it; the CLI prints that message and exits with status 2.
-Call `default_registry(plugins=False)` to get only the built-in verifiers, and
-`load_plugin_verifiers()` to inspect what is installed.
+The id that `--verifier` and `list-verifiers` use is the verifier's
+`verifier_id`, not the entry point name. In the example above the entry point
+is called `quotes`, but `--verifier` takes whatever `QuoteVerifier.verifier_id`
+is. The entry point name only sets the load order and appears in error
+messages.
 
-A plugin runs in the Provedown process, so install only plugins you trust. A
-verifier that does not execute document code, such as one that checks quoted
-text against its sources, can ignore `context.sandbox`.
+Entry points load in name order. A plugin may not reuse the `verifier_id` of a
+built-in verifier or of a plugin loaded before it. A plugin that cannot be
+imported or constructed, that does not return an object with a string
+`verifier_id` and a `verify()` method, or that reuses an id, raises
+`PluginLoadError` naming the entry point and the package that provides it.
+`default_registry()`, and `verify_document()` and `verify_file()` when called
+without a registry, raise it to library callers. The CLI prints the message
+and exits with status 2. Run `provedown verify --no-plugins` or
+`provedown list-verifiers --no-plugins` to use only the built-in verifiers
+while a broken plugin is installed. In Python, call
+`default_registry(plugins=False)`, and use `load_plugin_verifiers()` to see
+what is installed.
+
+A plugin runs in the Provedown process, so install only plugins you trust. The
+sandbox rule in [Context](#context) applies to plugins as it does to the
+built-in verifiers. The only exemption is narrow: a verifier that executes
+nothing (no document code, no subprocesses, no network access) has nothing to
+sandbox and may leave `context.sandbox` unread. A verifier that fetches
+sources over the network or runs any process must honour the requested
+sandbox or return an `error` finding.

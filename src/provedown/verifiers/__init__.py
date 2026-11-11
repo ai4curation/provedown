@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Sequence, Set
 from dataclasses import dataclass, field
 from importlib.metadata import EntryPoint, entry_points
 from pathlib import Path
@@ -86,6 +86,7 @@ def default_registry(*, plugins: bool = True) -> VerifierRegistry:
     ``provedown.verifiers`` group.
 
     A plugin may not take the id of a verifier that is already registered.
+    Raises ``PluginLoadError`` when a plugin cannot be loaded.
     """
 
     from provedown.verifiers.python import PythonResultVerifier
@@ -95,12 +96,7 @@ def default_registry(*, plugins: bool = True) -> VerifierRegistry:
     registry.register(PythonResultVerifier())
     registry.register(SQLResultVerifier())
     if plugins:
-        for verifier in load_plugin_verifiers():
-            if verifier.verifier_id in registry.names():
-                raise PluginLoadError(
-                    f"verifier plugin {type(verifier).__qualname__} uses the id "
-                    f"{verifier.verifier_id!r}, which is already registered"
-                )
+        for verifier in _load_plugins(taken=set(registry.names())):
             registry.register(verifier)
     return registry
 
@@ -109,26 +105,59 @@ def load_plugin_verifiers() -> list[Verifier]:
     """Instantiate the verifiers advertised in the ``provedown.verifiers`` group.
 
     Entry points are loaded in name order. A plugin that cannot be imported or
-    constructed raises ``PluginLoadError`` naming the entry point and the
-    distribution that provides it, so a broken install is easy to trace.
+    constructed, that does not return a verifier with a ``verifier_id``, or
+    whose id an earlier plugin already uses, raises ``PluginLoadError`` naming
+    the entry point and the distribution that provides it, so a broken install
+    is easy to trace.
     """
 
+    return _load_plugins(taken=set())
+
+
+def _load_plugins(taken: Set[str]) -> list[Verifier]:
     found = sorted(
         entry_points(group=VERIFIER_ENTRY_POINT_GROUP),
         key=lambda entry_point: entry_point.name,
     )
-    return [_load_plugin(entry_point) for entry_point in found]
+    used = set(taken)
+    verifiers: list[Verifier] = []
+    for entry_point in found:
+        verifier = _load_plugin(entry_point)
+        if verifier.verifier_id in used:
+            raise PluginLoadError(
+                f"verifier plugin {_describe(entry_point)} uses the id "
+                f"{verifier.verifier_id!r}, which is already registered"
+            )
+        used.add(verifier.verifier_id)
+        verifiers.append(verifier)
+    return verifiers
 
 
 def _load_plugin(entry_point: EntryPoint) -> Verifier:
-    distribution = entry_point.dist.name if entry_point.dist is not None else None
-    origin = f" from {distribution}" if distribution else ""
     try:
         factory = entry_point.load()
-        verifier: Verifier = factory()
+        verifier = factory()
     except Exception as exc:  # Plugin code is outside Provedown's control.
         raise PluginLoadError(
-            f"cannot load verifier plugin {entry_point.name!r}{origin} "
-            f"({entry_point.value}): {exc}"
+            f"cannot load verifier plugin {_describe(entry_point)}: {exc}"
         ) from exc
-    return verifier
+    # Verifier is a Protocol, so nothing checked what the factory returned.
+    verifier_id = getattr(verifier, "verifier_id", None)
+    if not isinstance(verifier_id, str) or not verifier_id:
+        raise PluginLoadError(
+            f"verifier plugin {_describe(entry_point)} returned {verifier!r}, "
+            "which has no verifier_id"
+        )
+    if not callable(getattr(verifier, "verify", None)):
+        raise PluginLoadError(
+            f"verifier plugin {_describe(entry_point)} returned {verifier!r}, "
+            "which has no verify() method"
+        )
+    loaded: Verifier = verifier
+    return loaded
+
+
+def _describe(entry_point: EntryPoint) -> str:
+    distribution = entry_point.dist.name if entry_point.dist is not None else None
+    origin = f" from {distribution}" if distribution else ""
+    return f"{entry_point.name!r}{origin} ({entry_point.value})"

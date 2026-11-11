@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -13,7 +14,7 @@ from provedown import (
 )
 from provedown.cli import main
 
-PLUGIN_MODULE = '''
+PLUGIN_MODULE = """
 from provedown import Finding, SourceLocation, Status
 
 
@@ -40,7 +41,32 @@ class ClashingVerifier(EventCountVerifier):
 
 def broken():
     raise RuntimeError("no source cache configured")
-'''
+
+
+def not_a_verifier():
+    return {"verifier_id": "dict"}
+
+
+class SecondEventCountVerifier(EventCountVerifier):
+    pass
+
+
+LOADED = []
+
+
+class FirstByName(EventCountVerifier):
+    verifier_id = "first"
+
+    def __init__(self):
+        LOADED.append("aaa")
+
+
+class SecondByName(EventCountVerifier):
+    verifier_id = "second"
+
+    def __init__(self):
+        LOADED.append("zzz")
+"""
 
 
 def install_plugin(
@@ -64,6 +90,8 @@ def install_plugin(
         "\n".join(lines) + "\n", encoding="utf-8"
     )
     monkeypatch.syspath_prepend(str(tmp_path))
+    # Each test writes its own module; never reuse one an earlier test imported.
+    monkeypatch.delitem(sys.modules, "countplugin", raising=False)
 
 
 def test_no_plugins_installed_leaves_the_builtin_verifiers() -> None:
@@ -125,7 +153,9 @@ def test_plugin_cannot_replace_an_existing_verifier(
 ) -> None:
     install_plugin(tmp_path, monkeypatch, {"clash": "countplugin:ClashingVerifier"})
 
-    with pytest.raises(PluginLoadError, match="'python-results'"):
+    with pytest.raises(
+        PluginLoadError, match=r"'clash' from countplugin .*'python-results'"
+    ):
         default_registry()
 
 
@@ -153,3 +183,81 @@ def test_cli_reports_a_broken_plugin_without_a_traceback(
     assert main(["list-verifiers"]) == 2
     captured = capsys.readouterr()
     assert captured.err.startswith("provedown: cannot load verifier plugin 'broken'")
+
+
+def test_plugin_that_returns_a_non_verifier_names_its_entry_point(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    install_plugin(tmp_path, monkeypatch, {"dict": "countplugin:not_a_verifier"})
+
+    with pytest.raises(PluginLoadError, match="'dict' from countplugin"):
+        load_plugin_verifiers()
+    assert main(["list-verifiers"]) == 2
+    assert "has no verifier_id" in capsys.readouterr().err
+
+
+def test_two_plugins_with_one_id_name_the_second_entry_point(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    install_plugin(
+        tmp_path,
+        monkeypatch,
+        {
+            "aaa": "countplugin:EventCountVerifier",
+            "bbb": "countplugin:SecondEventCountVerifier",
+        },
+    )
+
+    with pytest.raises(
+        PluginLoadError, match=r"'bbb' from countplugin .*'event-count'"
+    ):
+        load_plugin_verifiers()
+
+
+def test_entry_points_load_in_name_order(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    install_plugin(
+        tmp_path,
+        monkeypatch,
+        {"zzz": "countplugin:SecondByName", "aaa": "countplugin:FirstByName"},
+    )
+
+    verifiers = load_plugin_verifiers()
+
+    assert [verifier.verifier_id for verifier in verifiers] == ["first", "second"]
+    assert sys.modules["countplugin"].LOADED == ["aaa", "zzz"]
+
+
+def test_cli_no_plugins_skips_a_broken_plugin(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    install_plugin(tmp_path, monkeypatch, {"broken": "countplugin:broken"})
+    report_path = tmp_path / "report.md"
+    report_path.write_text(
+        '<code>x = 1</code>\n<span class="result" data-code="x">1'
+        '<span class="method"></span></span>\n',
+        encoding="utf-8",
+    )
+
+    assert main(["verify", str(report_path)]) == 2
+    assert "--no-plugins" in capsys.readouterr().err
+
+    assert main(["verify", "--no-plugins", str(report_path)]) == 0
+    capsys.readouterr()
+    assert main(["list-verifiers", "--no-plugins"]) == 0
+    assert capsys.readouterr().out.splitlines() == ["python-results", "sql-results"]
+
+
+def test_cli_loads_plugins_once_for_many_files(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    install_plugin(tmp_path, monkeypatch, {"first": "countplugin:FirstByName"})
+    paths = []
+    for name in ("a.md", "b.md", "c.md"):
+        path = tmp_path / name
+        path.write_text("<code>x = 1</code>\n", encoding="utf-8")
+        paths.append(str(path))
+
+    assert main(["verify", *paths]) == 0
+    assert sys.modules["countplugin"].LOADED == ["aaa"]

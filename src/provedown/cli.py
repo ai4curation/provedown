@@ -26,6 +26,9 @@ OKF_HELP = (
 )
 
 
+NO_PLUGINS_HELP = "run only the built-in verifiers, not installed plugins"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -33,7 +36,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         return _run(parser, args)
     except PluginLoadError as exc:
-        print(f"provedown: {exc}", file=sys.stderr)
+        print(
+            f"provedown: {exc} (use --no-plugins to run only the built-in "
+            "verifiers)",
+            file=sys.stderr,
+        )
         return 2
 
 
@@ -45,7 +52,7 @@ def _run(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     if args.command == "lint":
         return _lint(args)
     if args.command == "list-verifiers":
-        registry = default_registry()
+        registry = default_registry(plugins=not args.no_plugins)
         for name in registry.names():
             print(name)
         return 0
@@ -66,6 +73,7 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="verifiers",
         help="verifier id to run; may be passed more than once",
     )
+    verify.add_argument("--no-plugins", action="store_true", help=NO_PLUGINS_HELP)
     verify.add_argument(
         "--format",
         choices=("text", "json"),
@@ -105,7 +113,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     lint.add_argument("--okf", action="store_true", help=OKF_HELP)
 
-    subparsers.add_parser("list-verifiers", help="list available verifier ids")
+    list_verifiers = subparsers.add_parser(
+        "list-verifiers", help="list available verifier ids"
+    )
+    list_verifiers.add_argument(
+        "--no-plugins", action="store_true", help=NO_PLUGINS_HELP
+    )
     return parser
 
 
@@ -124,11 +137,14 @@ def _verify(args: argparse.Namespace) -> int:
         return 2
 
     verify = verify_okf_file if args.okf else verify_file
+    # Load plugins once for all paths, not once per file.
+    registry = default_registry(plugins=not args.no_plugins)
     reports: list[Report] = []
     for path in args.paths:
         reports.append(
             verify(
                 path,
+                registry=registry,
                 verifier_ids=verifier_ids,
                 sandbox=args.sandbox,
             )

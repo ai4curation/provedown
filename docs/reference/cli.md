@@ -7,13 +7,15 @@ The command-line entry point is `provedown`.
 Verify one or more documents.
 
 ```bash
-provedown verify [--verifier VERIFIER_ID] [--format text|json]
+provedown verify [--verifier VERIFIER_ID] [--no-plugins] [--format text|json]
   [--sandbox uv] [--okf] PATH [PATH ...]
 ```
 
 Parser diagnostics become `error` findings. If a document has any parser error,
-the command adds a `skip` finding, does not load or invoke verifiers for that
-document, and exits with status `1`.
+the command adds a `skip` finding, does not invoke verifiers for that document,
+and exits with status `1`. Installed [verifier plugins](verifier-plugins.md#publishing-a-plugin)
+are loaded once per run, before any document is verified; a plugin that cannot
+be loaded stops the run with status `2`.
 
 Arguments:
 
@@ -24,6 +26,9 @@ Options:
 
 `--verifier VERIFIER_ID`
 : Run only the named verifier. May be passed more than once.
+
+`--no-plugins`
+: Use only the built-in verifiers, without loading installed verifier plugins.
 
 `--format text`
 : Print human-readable output. This is the default.
@@ -56,7 +61,8 @@ Exit codes:
 
 ## `provedown list-verifiers`
 
-List verifier ids registered in the default registry.
+List verifier ids registered in the default registry, including installed
+verifier plugins. Pass `--no-plugins` to list only the built-in verifiers.
 
 ```bash
 provedown list-verifiers
