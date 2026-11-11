@@ -134,6 +134,8 @@ class _CiteBuilder:
     parts: list[str] = field(default_factory=list)
     quotes: list[_QuoteBuilder] = field(default_factory=list)
     contains_executable_markup: bool = False
+    # An ignore-marked element of its own kind was opened inside it.
+    holds_ignored_own_kind: bool = False
 
     @property
     def text(self) -> str:
@@ -146,6 +148,8 @@ class _FigureBuilder:
     caption_depth: int = 0
     quotes: list[_QuoteBuilder] = field(default_factory=list)
     captions: list[_CiteBuilder] = field(default_factory=list)
+    # An ignore-marked element of its own kind was opened inside it.
+    holds_ignored_own_kind: bool = False
 
 
 @dataclass(frozen=True)
@@ -407,7 +411,16 @@ class _ProvedownHTMLParser(HTMLParser):
             self._quote.unclosed = True
             self._finish_quote()
         while self._quote_containers:
-            for quote in self._quote_containers[-1].quotes:
+            container = self._quote_containers[-1]
+            if container.holds_ignored_own_kind:
+                # Its end tag most likely closed an ignore-marked element of the
+                # same kind that lacked one, so what lay inside was skipped.
+                kind = "cite" if isinstance(container, _CiteBuilder) else "figure"
+                self.diagnostics.append(
+                    f"{container.location.display()}: unclosed <{kind}>; most "
+                    f"likely an ignore-marked <{kind}> inside it has no end tag"
+                )
+            for quote in container.quotes:
                 # An unclosed quote already says its text is untrustworthy.
                 quote.citation_unclosed = not quote.unclosed
             self._finish_quote_container()
@@ -537,18 +550,28 @@ class _ProvedownHTMLParser(HTMLParser):
         elif self._quote_containers:
             container = self._quote_containers[-1]
             self._ignore_owner = container
-            self._ignore_owner_tag = (
-                "cite" if isinstance(container, _CiteBuilder) else "figure"
-            )
+            if isinstance(container, _CiteBuilder):
+                self._ignore_owner_tag = "cite"
+            elif container.caption_depth > 0:
+                # Inside a caption, the caption's end tag comes first.
+                self._ignore_owner_tag = "figcaption"
+            else:
+                self._ignore_owner_tag = "figure"
         else:
             self._ignore_owner = None
             self._ignore_owner_tag = ""
         # The opening element counts too when it is of the owner's own kind, so
         # its end tag is not taken for the owner's.
         self._ignored_owner_tags = 1 if tag == self._ignore_owner_tag else 0
+        if self._ignored_owner_tags and not isinstance(
+            self._ignore_owner, _QuoteBuilder
+        ):
+            assert self._ignore_owner is not None
+            self._ignore_owner.holds_ignored_own_kind = True
 
     def _end_ignored_region(self) -> None:
         self._ignore_depth = 0
+        self._ignore_location = None
         self._ignore_owner = None
         self._ignore_owner_tag = ""
         self._ignored_owner_tags = 0

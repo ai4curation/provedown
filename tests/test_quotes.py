@@ -905,3 +905,39 @@ def test_void_element_in_an_ignore_marked_figure_inside_a_figure_fails_closed() 
     # reported, so the uncited quote is never verified as if nothing happened.
     [diagnostic] = document.diagnostics
     assert "unclosed ignored region" in diagnostic
+
+
+def test_unclosed_ignore_marked_container_inside_its_own_kind_is_reported() -> None:
+    for source, kind in (
+        (
+            '<cite>PMID:1 <cite class="provedown-ignore">draft, <q>a claim</q></cite>',
+            "cite",
+        ),
+        (
+            '<figure><blockquote>A</blockquote><figure class="provedown-ignore">'
+            "<figcaption><cite>PMID:1</cite></figcaption></figure>",
+            "figure",
+        ),
+    ):
+        document = parse_document(source)
+
+        assert any(
+            f"unclosed <{kind}>; most likely an ignore-marked <{kind}>" in diagnostic
+            for diagnostic in document.diagnostics
+        ), (source, document.diagnostics)
+        assert not verify_document(document).ok
+
+
+def test_void_element_leak_in_a_figcaption_is_reported_for_any_count() -> None:
+    for breaks in ("<br>", "<br><br>"):
+        document = parse_document(
+            "<figure><blockquote>A</blockquote><figcaption>"
+            f'<span class="provedown-ignore">draft{breaks}note</span>'
+            "<cite>PMID:1</cite></figcaption></figure>"
+            "<cite>PMID:2, <q>later</q></cite>"
+        )
+
+        [diagnostic] = document.diagnostics
+        assert "unclosed ignored region" in diagnostic, breaks
+        # The figure still ends at its own end tag, so later quotes parse.
+        assert [quote.text for quote in document.quotes] == ["A", "later"], breaks

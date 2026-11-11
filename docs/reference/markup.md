@@ -306,17 +306,20 @@ Markup diagnostics include:
   is there. What it swallowed was skipped, so the whole document is not
   verified. Documents that verified before this diagnostic existed may now
   report it.
+- a `<cite>` or `<figure>` still open at the end of the document after an
+  ignore-marked element of the same kind was opened inside it. The ignored
+  element most likely has no end tag, so it took the outer element's end tag
+  and skipped what lay between. A plain unclosed `<cite>` or `<figure>` is
+  reported by lint instead, through its quotations.
 
 A void element inside an ignored region also extends the region past its own
-end tag. If the region began inside a quote or citation, that quote's or
-citation's own end tag still closes it and ends the region, and the region is
-reported as unclosed, so verification stops instead of silently skipping what
-the region swallowed. Elsewhere, when later end tags close the region again
-before the end of the document, claims and quotations in that stretch are
-skipped without a diagnostic. That includes a region inside a `<figcaption>`
-but outside its `<cite>`: the `</figcaption>` closes the region, the `<cite>`
-before it is skipped, and the quotation is reported only as `uncited-quote`. Keep void elements out of hand-written ignored
-regions; the diagram tooling already counts them correctly, the core parser
-does not yet.
+end tag. If the region began inside a quote, a `<cite>`, a `<figure>` or a
+`<figcaption>`, that element's own end tag still closes it and ends the region,
+and the region is reported as unclosed, so verification stops instead of
+silently skipping what the region swallowed. Elsewhere, when later end tags
+close the region again before the end of the document, claims and quotations
+in that stretch are skipped without a diagnostic. Keep void elements out of
+hand-written ignored regions; the diagram tooling already counts them
+correctly, the core parser does not yet.
 
 See [Frontmatter](frontmatter.md) for document-level metadata and defaults.
