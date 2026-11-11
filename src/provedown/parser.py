@@ -207,6 +207,9 @@ class _ProvedownHTMLParser(HTMLParser):
         self._ignore_opening_tag = ""
         # The owner-kind end tag the region consumed, if any.
         self._region_took_owner_end_tag = ""
+        # Whether the region's own end tag came while an owner-kind element
+        # opened inside it was still open.
+        self._region_closed_over_owner_kind = False
         # Whether the current region skipped markup that would otherwise be
         # parsed: a quotation, citation, code block or result span.
         self._region_skipped_markup = False
@@ -380,12 +383,25 @@ class _ProvedownHTMLParser(HTMLParser):
                 self._report_unclosed_ignored_region()
                 self._end_ignored_region()
             else:
+                if (
+                    tag == self._ignore_opening_tag
+                    and tag not in self._ignore_owner_ends
+                    and any(self._ignored_owner_tags.values())
+                ):
+                    # The region's own end tag, while an owner-kind element
+                    # opened inside it is still open: that element's end tag,
+                    # when it comes, is most likely the owner's.
+                    self._region_closed_over_owner_kind = True
                 if self._ignored_owner_tags.get(tag, 0) > 0:
                     # It closes the same tag opened inside the region. If that
                     # element lacked its own end tag, this is the owner's; what
                     # that loses is decided when the region ends.
                     self._ignored_owner_tags[tag] -= 1
-                    self._region_took_owner_end_tag = tag
+                    if (
+                        tag == self._ignore_opening_tag
+                        or self._region_closed_over_owner_kind
+                    ):
+                        self._region_took_owner_end_tag = tag
                 self._ignore_depth -= 1
                 if self._ignore_depth == 0:
                     self._mark_owner_losses(tag)
@@ -624,6 +640,7 @@ class _ProvedownHTMLParser(HTMLParser):
         self._ignored_owner_tags = {tag: 1} if tag in self._ignore_owner_ends else {}
         self._region_skipped_markup = False
         self._region_took_owner_end_tag = ""
+        self._region_closed_over_owner_kind = False
 
     def _mark_owner_losses(self, ending_tag: str) -> None:
         """Record on the owner container what a region that took its end tag lost.
@@ -653,6 +670,7 @@ class _ProvedownHTMLParser(HTMLParser):
         self._region_skipped_markup = False
         self._ignore_opening_tag = ""
         self._region_took_owner_end_tag = ""
+        self._region_closed_over_owner_kind = False
 
     def _is_owner_end_tag(self, tag: str) -> bool:
         """Whether ``tag`` ends the markup the current ignored region began in."""

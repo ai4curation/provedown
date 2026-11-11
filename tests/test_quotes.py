@@ -1135,3 +1135,16 @@ def test_skipped_markup_after_the_owner_end_tag_was_taken_is_still_reported() ->
         diagnostic
     )
     assert not verify_document(document).ok
+
+
+def test_balanced_inner_cite_in_a_void_leaked_region_does_not_block() -> None:
+    document = parse_document(
+        '<cite>PMID:1 <p><span class="provedown-ignore">draft<br> <cite>x</cite> '
+        "<q>note</q></span></p>, <q>real</q></cite>"
+    )
+
+    assert [(quote.text, quote.source) for quote in document.quotes] == [
+        ("real", "PMID:1")
+    ]
+    assert document.diagnostics == []
+    assert verify_document(document).ok
