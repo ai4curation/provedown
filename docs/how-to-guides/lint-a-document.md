@@ -89,6 +89,11 @@ JSON output is intended for CI, editor integrations, and scripts.
 : The `<cite>` or `<figure>` around a properly closed quote has no end tag, so
   the citation may name the wrong source. This is an error.
 
+`executable-markup-in-quote`
+: A quote contains a `<code>` element or result span. `provedown verify` still
+  executes it; mark up code quoted from a source with `<samp>` instead. This is
+  a warning.
+
 ## Justify Explicitly Unverified Claims
 
 When a claim is intentionally outside the verifier's scope, mark it with

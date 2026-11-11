@@ -88,6 +88,10 @@ Each `QuoteClaim` has:
   end tag. The `text` is complete, but `citation` and `sources` may include
   text after the quote.
 
+`contains_executable_markup`
+: True when a `<code>` element or result span appears inside the quote. That
+  markup is still executed; its text is also part of `text`.
+
 ## Verify Documents
 
 Verify parsed text:

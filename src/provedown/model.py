@@ -82,6 +82,10 @@ class QuoteClaim:
     ``<cite>`` or ``<figure>`` around a properly closed quote has no end tag:
     the quote's text is complete, but the citation text may run on and name
     the wrong source.
+
+    ``contains_executable_markup`` is true when a ``<code>`` or result span
+    appears inside the quote. Quote markup never changes what is executable,
+    so that markup still runs; its text is also part of the quote.
     """
 
     text: str
@@ -92,6 +96,7 @@ class QuoteClaim:
     sources: tuple[str, ...] = ()
     unclosed: bool = False
     citation_unclosed: bool = False
+    contains_executable_markup: bool = False
 
     @property
     def source(self) -> str | None:

@@ -31,7 +31,7 @@ from provedown.model import (
 _SOURCE_ID_PATTERN = re.compile(
     r"(?<![A-Za-z0-9/:.-])[A-Za-z][\w.-]*:[^\s,;\[\]`*]+"
 )
-_VALID_SOURCE_ID = re.compile(r"[A-Za-z][\w.-]*:\S+")
+_VALID_SOURCE_ID = re.compile(r"[A-Za-z][\w.-]*:[\w.\-/():#%+=&?@]*[\w/)#]")
 # The target of a Markdown link, ``[text](target "title")``: the id is the link
 # text. A target may hold one level of balanced parentheses, as DOIs often do.
 _MARKDOWN_LINK_TARGET = re.compile(
@@ -42,7 +42,7 @@ _MARKDOWN_LINK_TARGET = re.compile(
 _WEB_LINK_PREFIXES = frozenset({"http", "https", "ftp", "mailto"})
 _SOURCE_ID_TRAILING = ".:_"
 _CLOSING_BRACKETS = {")": "(", "]": "[", "}": "{"}
-# Elements whose boundaries separate words in quoted text.
+# Elements whose boundaries separate words in quoted and citation text.
 _QUOTE_WORD_BREAK_TAGS = frozenset(
     {"br", "p", "div", "li", "tr", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6"}
 )
@@ -101,6 +101,7 @@ class _QuoteBuilder:
     parts: list[str] = field(default_factory=list)
     unclosed: bool = False
     citation_unclosed: bool = False
+    contains_executable_markup: bool = False
 
     def build(
         self,
@@ -116,6 +117,7 @@ class _QuoteBuilder:
             sources=source_ids(citation) if citation is not None else (),
             unclosed=self.unclosed,
             citation_unclosed=self.citation_unclosed,
+            contains_executable_markup=self.contains_executable_markup,
         )
 
 
@@ -189,7 +191,8 @@ class _ProvedownHTMLParser(HTMLParser):
             )
             return
 
-        if tag == "code" and not self._in_quotation_text():
+        if tag == "code":
+            self._mark_executable_in_quote()
             self._start_code(attr_map, location)
             return
 
@@ -214,14 +217,11 @@ class _ProvedownHTMLParser(HTMLParser):
         if self._ignore_depth > 0 or _is_ignored_region(attr_map):
             return
 
-        if self._quote is not None and tag in _QUOTE_WORD_BREAK_TAGS:
-            self._quote.parts.append(" ")
-
-        if tag == "code" and self._in_quotation_text():
-            # A self-closing <code/> in quotation text holds no text, runs nothing.
-            return
+        if tag in _QUOTE_WORD_BREAK_TAGS:
+            self._append_quotation_text(" ")
 
         if tag == "code":
+            self._mark_executable_in_quote()
             if "use" in attr_map:
                 self._append_code_use(attr_map, location)
             else:
@@ -244,16 +244,13 @@ class _ProvedownHTMLParser(HTMLParser):
         if self._ignore_depth > 0:
             return
 
+        # Code text is still visible text, so it is part of a quote or
+        # citation around it as well as of the code block.
+        self._append_quotation_text(data)
+
         if self._code is not None:
             self._code.parts.append(data)
             return
-
-        if self._quote is not None:
-            self._quote.parts.append(data)
-        elif self._quote_containers and isinstance(
-            self._quote_containers[-1], _CiteBuilder
-        ):
-            self._quote_containers[-1].parts.append(data)
 
         if self._results and self._results[-1].method_depth == 0:
             self._results[-1].parts.append(data)
@@ -273,6 +270,10 @@ class _ProvedownHTMLParser(HTMLParser):
             code = self._code.build()
             self._code = None
             self._append_code_block(code)
+            return
+
+        if self._code is not None:
+            # Any other end tag inside code is code text, as start tags are.
             return
 
         self._end_quote_markup(tag)
@@ -323,11 +324,12 @@ class _ProvedownHTMLParser(HTMLParser):
         document and is marked ``unclosed``.
         """
 
+        if tag in _QUOTE_WORD_BREAK_TAGS:
+            self._append_quotation_text(" ")
+
         if self._quote is not None:
             if tag == self._quote.element:
                 self._quote.depth += 1
-            elif tag in _QUOTE_WORD_BREAK_TAGS:
-                self._quote.parts.append(" ")
             return
 
         if tag in {"q", "blockquote"}:
@@ -343,9 +345,10 @@ class _ProvedownHTMLParser(HTMLParser):
                 container.caption_depth += 1
 
     def _end_quote_markup(self, tag: str) -> None:
+        if tag in _QUOTE_WORD_BREAK_TAGS:
+            self._append_quotation_text(" ")
+
         if self._quote is not None:
-            if tag in _QUOTE_WORD_BREAK_TAGS:
-                self._quote.parts.append(" ")
             if tag == self._quote.element:
                 self._quote.depth -= 1
                 if self._quote.depth == 0:
@@ -410,19 +413,26 @@ class _ProvedownHTMLParser(HTMLParser):
             attributes=attr_map,
         )
 
-    def _in_quotation_text(self) -> bool:
-        """Whether the parser is inside a quote or a citation.
+    def _append_quotation_text(self, text: str) -> None:
+        """Add visible text to the open quote, or else to the open citation."""
 
-        There, ``<code>`` is ordinary inline markup whose text belongs to the
-        quote or citation, never an executable cell. A ``<code>`` in a
-        ``<figure>`` outside its quote, such as a captioned listing, is still
-        executable.
+        if self._quote is not None:
+            self._quote.parts.append(text)
+        elif self._quote_containers and isinstance(
+            self._quote_containers[-1], _CiteBuilder
+        ):
+            self._quote_containers[-1].parts.append(text)
+
+    def _mark_executable_in_quote(self) -> None:
+        """Record that executable markup appears inside the open quote.
+
+        Quote markup never changes what is executable: a ``<code>`` or result
+        span runs wherever it is. This only lets lint warn about it, since
+        quoted code is better marked up with ``<samp>``.
         """
 
-        return self._quote is not None or any(
-            isinstance(container, _CiteBuilder)
-            for container in self._quote_containers
-        )
+        if self._quote is not None:
+            self._quote.contains_executable_markup = True
 
     def _append_code_use(
         self,
@@ -458,6 +468,7 @@ class _ProvedownHTMLParser(HTMLParser):
         attr_map: Mapping[str, str],
         location: SourceLocation,
     ) -> None:
+        self._mark_executable_in_quote()
         code = attr_map.get("data-code", "").strip()
         if not code:
             self.diagnostics.append(

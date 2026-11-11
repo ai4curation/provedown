@@ -73,11 +73,10 @@ Markdown fenced code blocks and YAML frontmatter are ignored when scanning for
 Provedown HTML. HTML regions with `data-provedown-ignore="true"` or the
 `provedown-ignore` class are also ignored.
 
-In source HTML, every `<code>` element is treated as Provedown code, except
-one inside a `<q>`, `<blockquote>` or `<cite>` of a [quotation](#quotations),
-which is quoted or citation text. Put other
-non-executable code samples inside an ignored region when they should only be
-shown to readers.
+In source HTML, every `<code>` element is treated as Provedown code, including
+one inside a [quotation](#quotations). Put non-executable code samples inside
+an ignored region when they should only be shown to readers, and mark up code
+quoted from a source with `<samp>`.
 
 ## Code Blocks
 
@@ -198,7 +197,8 @@ semicolons separate an id from the text around it; trailing sentence
 punctuation, unbalanced closing brackets, and Markdown code or emphasis markers
 around an id (`` `PMID:1` ``, `**PMID:1**`) are dropped. A bare link such as
 `https://...` or `mailto:...` is not a reference id; write a URL source as
-`url:https://...`.
+`url:https://...`. Do not wrap an id in an HTML `<code>` element, which would be
+executed; Markdown backticks are fine.
 Each `<q>` in the citation is a separate claim against that source, and the id
 may be link text, from an HTML `<a>` or a Markdown `[PMID:18467591](https://...)`
 link:
@@ -227,20 +227,20 @@ quotation marks.
 
 The quoted text is collected with HTML entities decoded and whitespace,
 including line wraps, collapsed to single spaces. Markup inside a quote, such as
-a nested `<q>` or a `<code>` element, is part of the quoted text, and paragraph
-or `<br>` boundaries separate words. A `<code>` element inside a quote, or
-anywhere in a `<cite>`, is ordinary inline markup: its text belongs to the
-quote or citation and it is never executed, and neither is a
-`<code use="..."/>` there. A `<code>` in a `<figure>` outside its
-`<blockquote>`, such as a captioned listing, is still executable.
-
-Compatibility note: before quotations were recognized, every `<code>` was
-executable, including one inside a `<blockquote>`. A document that wrapped an
-executable `<code>` in a `<blockquote>` for presentation must move it out, or
-the check silently stops running. Even a `</cite>` or `</figure>` end tag
-inside an open quote is treated as quoted text, so a stray end tag never cuts
-a quote short. Markdown inside a quote is not rendered first, so avoid
+a nested `<q>`, is part of the quoted text, and paragraph or `<br>` boundaries
+separate words, in quotes and in citation text. Even a `</cite>` or `</figure>`
+end tag inside an open quote is treated as quoted text, so a stray end tag never
+cuts a quote short. Markdown inside a quote is not rendered first, so avoid
 Markdown emphasis there.
+
+Quotation markup never changes what is executable. A `<code>` element or a
+result span runs wherever it appears, including inside a quote or citation, and
+its text is also part of that quote or citation. `provedown lint` warns about
+executable markup inside a quote; to quote code from a source, use `<samp>`:
+
+````markdown
+<cite>PMID:1, <q>the patch adds <samp>retry=3</samp> to the client</q></cite>
+````
 
 A quote whose end tag is missing runs to the end of the document, so no
 quotation after it is parsed; it is marked `unclosed`. A properly closed quote

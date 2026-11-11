@@ -241,6 +241,20 @@ def _add_quote_lints(
                     target=" ".join(quote.sources),
                 )
             )
+        if quote.contains_executable_markup:
+            findings.append(
+                LintFinding(
+                    level="warning",
+                    code="executable-markup-in-quote",
+                    location=quote.location,
+                    message=(
+                        f"<{quote.element}> contains a <code> or result span, "
+                        "which provedown verify executes; mark up quoted code "
+                        "with <samp> instead"
+                    ),
+                    target=quote.citation,
+                )
+            )
 
 
 def _add_result_policy_lints(

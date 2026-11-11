@@ -266,32 +266,43 @@ def test_figure_nested_in_a_figure_blockquote_keeps_the_caption() -> None:
     ]
 
 
-def test_code_inside_a_quote_is_quoted_text_not_an_executable_cell() -> None:
+def test_executable_markup_inside_a_quote_still_runs_and_is_flagged() -> None:
     document = parse_document(
         "\n".join(
             [
-                "<cite>PMID:24, <q>the gene <code>ERG9</code> is required</q></cite>",
-                '<figure><blockquote><pre><code name="quoted">',
-                'os.system("rm -rf /tmp/x")',
-                '</code></pre><code use="quoted"/><code/></blockquote>',
-                "<figcaption><cite>PMID:25</cite></figcaption></figure>",
+                "<code>x = 42</code>",
+                "<cite>PMID:24, <q>the gene <code>y = 1</code> is required</q></cite>",
+                '<cite>PMID:25, <q>the value was <span class="result" data-code="x">'
+                "42</span></q></cite>",
+                "<cite>PMID:26, <q>quoted with <samp>os.system()</samp></q></cite>",
             ]
         )
     )
 
-    assert document.events == []
-    assert document.named_code == {}
+    # Quote markup never changes what runs: <code> and result spans are
+    # executable wherever they appear, and their text is part of the quote.
+    assert [type(event).__name__ for event in document.events] == [
+        "CodeBlock",
+        "CodeBlock",
+        "ResultAssertion",
+    ]
     assert [quote.text for quote in document.quotes] == [
-        "the gene ERG9 is required",
-        'os.system("rm -rf /tmp/x")',
+        "the gene y = 1 is required",
+        "the value was 42",
+        "quoted with os.system()",
     ]
     assert verify_document(document).ok
+    findings = lint_document(document).findings
+    assert [(f.level, f.code, f.location.line) for f in findings] == [
+        ("warning", "executable-markup-in-quote", 2),
+        ("warning", "executable-markup-in-quote", 3),
+    ]
 
 
-def test_unclosed_code_inside_a_quote_keeps_its_text() -> None:
+def test_unclosed_code_inside_a_quote_is_a_parser_diagnostic() -> None:
     document = parse_document("<cite>PMID:26, <q>see <code>gene X")
 
-    assert document.events == []
+    assert any("unclosed <code> block" in d for d in document.diagnostics)
     assert document.quotes[0].text == "see gene X"
 
 
@@ -411,23 +422,23 @@ def test_bare_web_links_are_not_reference_ids() -> None:
     ]
 
 
-def test_quote_end_tag_inside_quoted_code_keeps_the_code_text() -> None:
+def test_quote_end_tag_inside_code_does_not_close_the_quote() -> None:
     document = parse_document(
         "<cite>PMID:29, <q>the gene <code>ERG9 is required</q></cite> after"
     )
 
-    assert document.diagnostics == []
-    assert document.events == []
-    assert [
-        (quote.text, quote.unclosed, quote.citation_unclosed)
-        for quote in document.quotes
-    ] == [("the gene ERG9 is required", False, False)]
+    # Code text is opaque: the </q> inside it is code, so the <code> is
+    # unclosed, which blocks verification instead of truncating the quote.
+    assert any("unclosed <code> block" in d for d in document.diagnostics)
+    assert [(quote.text, quote.unclosed) for quote in document.quotes] == [
+        ("the gene ERG9 is required after", True)
+    ]
 
 
-def test_code_in_a_citation_is_citation_text_not_an_executable_cell() -> None:
+def test_code_text_in_a_citation_is_part_of_the_citation_text() -> None:
     document = parse_document("<cite><code>PMID:30</code>, <q>x</q></cite>")
 
-    assert document.events == []
+    assert len(document.events) == 1
     assert document.quotes[0].sources == ("PMID:30",)
 
 
@@ -441,12 +452,10 @@ def test_code_in_a_figure_outside_its_blockquote_stays_executable() -> None:
     assert document.quotes == []
 
 
-def test_word_breaks_inside_quoted_code_separate_words() -> None:
-    document = parse_document(
-        "<cite>PMID:31, <q>a <code>x<br/>y</code> <code>p<br>q</code></q></cite>"
-    )
+def test_self_closing_break_inside_quoted_code_separates_words() -> None:
+    document = parse_document("<cite>PMID:31, <q>a <code>x<br/>y</code></q></cite>")
 
-    assert document.quotes[0].text == "a x y p q"
+    assert document.quotes[0].text == "a x y"
 
 
 def test_markdown_inline_markup_around_a_reference_id_is_not_part_of_it() -> None:
@@ -486,3 +495,59 @@ def test_other_url_schemes_are_not_reference_ids() -> None:
     )
 
     assert document.quotes[0].sources == ("PMID:36",)
+
+
+def test_unclosed_cite_or_quote_never_stops_later_code_from_running() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<cite>Darwin, On the Origin of Species",
+                '<pre><code name="load">data = [1, 2, 3]</code></pre>',
+                "<cite>PMID:1, <q>never closed",
+                "<pre><code>total = 42</code></pre>",
+                '<p>The total is <span class="result" data-code="total">42</span>.</p>',
+            ]
+        )
+    )
+
+    assert [type(event).__name__ for event in document.events] == [
+        "CodeBlock",
+        "CodeBlock",
+        "ResultAssertion",
+    ]
+    assert verify_document(document).ok
+
+
+def test_reference_ids_end_in_a_plain_character() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<cite>~~PMID:37~~, <q>a</q></cite>",
+                '<cite>"PMID:38", <q>b</q></cite>',
+            ]
+        )
+    )
+
+    assert [quote.sources for quote in document.quotes] == [(), ()]
+
+
+def test_block_boundaries_in_citation_text_separate_words() -> None:
+    document = parse_document(
+        "<cite>PMID:39<br>and other work, <q>x</q></cite>"
+        "<cite>PMID:40<br/>and more, <q>y</q></cite>"
+    )
+
+    assert [quote.sources for quote in document.quotes] == [("PMID:39",), ("PMID:40",)]
+
+
+def test_end_tag_inside_executable_code_is_code_text() -> None:
+    document = parse_document(
+        '<figure><pre><code>s = "</figure>"</code></pre>'
+        "<blockquote>kept</blockquote>"
+        "<figcaption><cite>PMID:41</cite></figcaption></figure>"
+    )
+
+    assert len(document.events) == 1
+    assert [(quote.text, quote.source) for quote in document.quotes] == [
+        ("kept", "PMID:41")
+    ]
