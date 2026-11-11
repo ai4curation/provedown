@@ -1172,7 +1172,9 @@ def test_drawio_leak_dropping_evidence_and_claims_reports_the_open_region() -> N
     # lowering names that cause instead of guessing from the dropped claims.
     assert lowering.diagnostics == (
         "t.drawio: page 'p' cell 'ev' (line 1 of its block, column 30): "
-        "unclosed ignored region",
+        "unclosed ignored region; a void element such as <br> inside or "
+        "carrying the ignore marker counts as an open element, so the region "
+        "never closed",
     )
 
 

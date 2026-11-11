@@ -235,17 +235,17 @@ quotation marks.
 The quoted text is collected with HTML entities decoded and whitespace,
 including line wraps, collapsed to single spaces. Markup inside a quote, such as
 a nested `<q>`, is part of the quoted text, and paragraph or `<br>` boundaries
-separate words, in quotes and in citation text. Inside a `<code>` element,
-a start or self-closing tag is a parser diagnostic that blocks verification, as
+separate words, in quotes and in citation text. Inside a `<code>` element, a
+start or self-closing tag is a parser diagnostic that blocks verification, as
 anywhere else. An end tag, comment, declaration or processing instruction is
-kept in the code exactly as written, so it never closes markup outside the
-code; the verifier then runs it as part of the code, where it must be valid. An ignore marker has no effect inside `<code>`. An ignored region inside
-a quote or citation keeps its visible text there: the marker keeps markup out of
-the executable contract, not words out of a quotation. Even a `</cite>` or
-`</figure>`
-end tag inside an open quote is treated as quoted text, so a stray end tag never
-cuts a quote short. Markdown inside a quote is not rendered first, so avoid
-Markdown emphasis there.
+kept in the code exactly as written, so it never closes markup outside the code;
+the verifier then runs it as part of the code, where it must be valid. An ignore
+marker has no effect inside `<code>`. An ignored region inside a quote or
+citation keeps its visible text there: the marker keeps markup out of the
+executable contract, not words out of a quotation. Even a `</cite>` or
+`</figure>` end tag inside an open quote is treated as quoted text, so a stray
+end tag never cuts a quote short. Markdown inside a quote is not rendered first,
+so avoid Markdown emphasis there.
 
 Quotation markup never changes what is executable. A `<code>` element or a
 result span runs wherever it appears, including inside a quote or citation, and
@@ -298,6 +298,16 @@ Markup diagnostics include:
 - empty code uses;
 - unclosed `<code>` blocks;
 - unclosed result spans;
-- result spans missing `data-code`.
+- result spans missing `data-code`;
+- an ignored region still open at the end of the document. A void element such
+  as `<br>` inside a region, or carrying the ignore marker, counts as an open
+  element, so the region can stay open even though its own end tag is there.
+  Everything after it is skipped, so the whole document is not verified.
+  Documents that verified before this diagnostic existed may now report it.
+
+A void element inside an ignored region also extends the region past its own
+end tag when later end tags close it again before the end of the document.
+Claims and quotations in that stretch are skipped without a diagnostic, so
+keep void elements out of ignored regions.
 
 See [Frontmatter](frontmatter.md) for document-level metadata and defaults.

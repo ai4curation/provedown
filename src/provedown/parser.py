@@ -233,6 +233,9 @@ class _ProvedownHTMLParser(HTMLParser):
         location = self._location()
 
         if self._ignore_depth > 0:
+            # Ignored markup still separates the visible words around it.
+            if tag in _QUOTE_WORD_BREAK_TAGS:
+                self._append_quotation_text(" ")
             return
 
         if self._code is not None:
@@ -242,11 +245,11 @@ class _ProvedownHTMLParser(HTMLParser):
             )
             return
 
-        if _is_ignored_region(attr_map):
-            return
-
         if tag in _QUOTE_WORD_BREAK_TAGS:
             self._append_quotation_text(" ")
+
+        if _is_ignored_region(attr_map):
+            return
 
         if tag == "code":
             self._mark_executable_in_quote()
@@ -359,10 +362,13 @@ class _ProvedownHTMLParser(HTMLParser):
 
     def close(self) -> None:
         super().close()
-        if self._ignore_depth > 0 and self._ignore_location is not None:
+        if self._ignore_depth > 0:
             # Everything after it was skipped, so nothing there was checked.
+            assert self._ignore_location is not None
             self.diagnostics.append(
-                f"{self._ignore_location.display()}: unclosed ignored region"
+                f"{self._ignore_location.display()}: unclosed ignored region; "
+                "a void element such as <br> inside or carrying the ignore "
+                "marker counts as an open element, so the region never closed"
             )
         if self._code is not None:
             self.diagnostics.append(

@@ -765,3 +765,26 @@ def test_unclosed_ignored_region_is_a_parser_diagnostic() -> None:
     # skipped; that must block verification rather than pass with no quotes.
     assert document.quotes == []
     assert any("unclosed ignored region" in d for d in document.diagnostics)
+
+
+def test_every_break_spelling_in_an_ignored_region_separates_quoted_words() -> None:
+    texts = []
+    for markup in (
+        '<span class="provedown-ignore">not<br/>yet</span>',
+        '<span class="provedown-ignore">not<br>yet</span>',
+        'not<br class="provedown-ignore"/>yet',
+    ):
+        document = parse_document(
+            f"<cite>PMID:1, <q>the gene is {markup} required</q></cite>"
+        )
+        texts.append(document.quotes[0].text)
+
+    assert texts == ["the gene is not yet required"] * 3
+
+
+def test_unclosed_ignored_region_message_names_the_likely_cause() -> None:
+    document = parse_document('<span class="provedown-ignore"><br class="a"></span>')
+
+    [diagnostic] = document.diagnostics
+    assert "unclosed ignored region" in diagnostic
+    assert "void element such as <br>" in diagnostic
