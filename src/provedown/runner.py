@@ -34,6 +34,8 @@ def verify_document(
     # document; VerifierRegistry.verify() checks again for direct callers.
     active_registry = registry or default_registry()
     if verifier_ids is not None:
+        if not verifier_ids:
+            raise ValueError("no verifier ids given; pass None to run them all")
         active_registry.check_ids(verifier_ids)
 
     findings = list(_diagnostic_findings(document))

@@ -77,6 +77,31 @@ class CrashingVerifier:
         raise RuntimeError("source cache is corrupt")
 
 
+class _UnstringableError(Exception):
+    def __str__(self):
+        raise RuntimeError("str exploded")
+
+
+class UnstringableRaiseVerifier:
+    verifier_id = "unstringable"
+
+    def verify(self, document, context):
+        yield Finding(
+            verifier_id=self.verifier_id,
+            status="pass",
+            location=SourceLocation(path=document.path, line=1, column=1),
+            message="before the raise",
+        )
+        raise _UnstringableError()
+
+
+class HugeErrorVerifier:
+    verifier_id = "huge-error"
+
+    def verify(self, document, context):
+        raise RuntimeError("x" * 100000)
+
+
 class StringStatusVerifier:
     verifier_id = "strings"
 
@@ -668,27 +693,19 @@ def test_finding_text_fields_must_be_strings() -> None:
     assert finding.actual is None
 
 
-def test_finding_evidence_none_means_empty_and_nan_is_rejected() -> None:
+def test_finding_evidence_must_be_a_mapping_and_nan_is_rejected() -> None:
     from provedown import Finding, SourceLocation
 
     location = SourceLocation(path=None, line=1, column=1)
-    finding = Finding(
-        verifier_id="x",
-        status=Status.PASS,
-        location=location,
-        message="m",
-        evidence=None,  # type: ignore[arg-type]
-    )
-    assert finding.evidence == {}
-
-    with pytest.raises(TypeError, match="JSON-serializable"):
-        Finding(
-            verifier_id="x",
-            status=Status.PASS,
-            location=location,
-            message="m",
-            evidence={"similarity": float("nan")},
-        )
+    for evidence in (None, {"similarity": float("nan")}):
+        with pytest.raises(TypeError, match="JSON-serializable mapping"):
+            Finding(
+                verifier_id="x",
+                status=Status.PASS,
+                location=location,
+                message="m",
+                evidence=evidence,  # type: ignore[arg-type]
+            )
 
 
 def test_load_error_for_a_non_verifier_with_a_broken_repr(
@@ -698,3 +715,33 @@ def test_load_error_for_a_non_verifier_with_a_broken_repr(
 
     with pytest.raises(PluginLoadError, match="'bad' from countplugin"):
         load_plugin_verifiers()
+
+
+def test_raise_with_an_unprintable_or_huge_exception_is_attributed(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    install_plugin(
+        tmp_path,
+        monkeypatch,
+        {
+            "huge-error": "countplugin:HugeErrorVerifier",
+            "unstringable": "countplugin:UnstringableRaiseVerifier",
+        },
+    )
+
+    report = verify_document(parse_document("text"), registry=default_registry())
+
+    unstringable = [f for f in report.findings if f.verifier_id == "unstringable"]
+    assert [f.status for f in unstringable] == [Status.PASS, Status.ERROR]
+    assert unstringable[1].message == (
+        "verifier raised _UnstringableError: <unprintable _UnstringableError>"
+    )
+    [huge] = [f for f in report.findings if f.verifier_id == "huge-error"]
+    assert huge.status is Status.ERROR
+    assert len(huge.message) < 300
+    assert len(huge.evidence["traceback"]) <= 4000
+
+
+def test_empty_verifier_ids_is_an_error_not_an_empty_ok_report() -> None:
+    with pytest.raises(ValueError, match="no verifier ids"):
+        verify_document(parse_document("<code>x = 1</code>"), verifier_ids=[])

@@ -62,8 +62,9 @@ Each finding has:
 `evidence`
 : Optional structured metadata: a mapping that strict JSON can represent,
   because it appears in `--format json` output. Convert values such as `Path`
-  to strings, and avoid `NaN` and infinite floats. `None` means no evidence.
-  Anything else raises `TypeError`. The finding keeps its own copy.
+  to strings, and avoid `NaN` and infinite floats. Omit it when there is none:
+  `None`, like any other value that is not such a mapping, raises `TypeError`.
+  The finding keeps its own copy.
 
 ## Status Semantics
 
@@ -78,7 +79,7 @@ Use `error` when the verifier could not complete the check.
 Return an `error` finding rather than raising, and yield only `Finding`
 objects. If a verifier raises anyway, including from building a `Finding` with
 a bad `status` or `location`, the registry reports it as an `error` finding
-attributed to that verifier's id, with the traceback under
+attributed to that verifier's id, with the traceback, shortened to its last few thousand characters, under
 `evidence["traceback"]`. If it yields something that is not a `Finding`, the
 error finding names it, shortened, under `evidence["yielded"]`, and the rest of
 that verifier's output is ignored. Findings the verifier yielded before the

@@ -80,6 +80,9 @@ class VerifierRegistry:
         verifier_ids: Sequence[str] | None = None,
     ) -> Report:
         active_context = context or VerificationContext()
+        if verifier_ids is not None and not verifier_ids:
+            # Running nothing must not look like a passing report.
+            raise ValueError("no verifier ids given; pass None to run them all")
         self.check_ids(verifier_ids or ())
         selected = (
             [self._verifiers[name] for name in verifier_ids]
@@ -148,8 +151,8 @@ def _run_verifier(
                 verifier_id=verifier.verifier_id,
                 status=Status.ERROR,
                 location=location,
-                message=f"verifier raised {type(exc).__name__}: {exc}",
-                evidence={"traceback": traceback.format_exc()},
+                message=f"verifier raised {type(exc).__name__}: {_safe_str(exc)}",
+                evidence={"traceback": _tail(traceback.format_exc())},
             )
         )
     return findings
@@ -171,6 +174,28 @@ def _short_repr(value: object) -> str:
     text = _SHORT_REPR.repr(value)
     limit = _SHORT_REPR_LIMIT
     return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def _safe_str(exc: BaseException) -> str:
+    """Return ``str(exc)`` cut to the report length, even if its ``__str__`` raises."""
+
+    try:
+        text = str(exc)
+    except Exception:  # A plugin's exception is outside Provedown's control.
+        return f"<unprintable {type(exc).__name__}>"
+    limit = _SHORT_REPR_LIMIT
+    return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+_TRACEBACK_LIMIT = 4000
+
+
+def _tail(text: str) -> str:
+    """Keep the end of a traceback, where the raising frame and error are."""
+
+    if len(text) <= _TRACEBACK_LIMIT:
+        return text
+    return "..." + text[-(_TRACEBACK_LIMIT - 3) :]
 
 
 def default_registry(*, plugins: bool = True) -> VerifierRegistry:
@@ -241,15 +266,21 @@ def _load_plugin(entry_point: EntryPoint) -> Verifier:
         ) from exc
     # Verifier is a Protocol, so nothing checked what the factory returned.
     verifier_id = getattr(verifier, "verifier_id", None)
-    returned = (
-        f"verifier plugin {_describe(entry_point)} returned {_short_repr(verifier)}"
-    )
     if not isinstance(verifier_id, str) or not verifier_id:
-        raise PluginLoadError(f"{returned}, which has no verifier_id")
+        raise PluginLoadError(
+            f"{_returned(entry_point, verifier)}, which has no verifier_id"
+        )
     if not callable(getattr(verifier, "verify", None)):
-        raise PluginLoadError(f"{returned}, which has no verify() method")
+        raise PluginLoadError(
+            f"{_returned(entry_point, verifier)}, which has no verify() method"
+        )
     loaded: Verifier = verifier
     return loaded
+
+
+def _returned(entry_point: EntryPoint, verifier: object) -> str:
+    # Built only on failure, so a loaded plugin's __repr__ never runs.
+    return f"verifier plugin {_describe(entry_point)} returned {_short_repr(verifier)}"
 
 
 def _describe(entry_point: EntryPoint) -> str:

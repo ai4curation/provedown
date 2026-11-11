@@ -50,7 +50,7 @@ class Finding:
         for name in ("expected", "actual"):
             _require_str(name, getattr(self, name), optional=True)
         try:
-            evidence = dict(self.evidence) if self.evidence is not None else {}
+            evidence = dict(self.evidence)
             # Strict JSON: NaN and infinities are not valid in --format json.
             json.dumps(evidence, sort_keys=True, allow_nan=False)
         except (TypeError, ValueError) as exc:
