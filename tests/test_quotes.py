@@ -768,10 +768,11 @@ def test_unclosed_ignored_region_is_a_parser_diagnostic() -> None:
 
 
 def test_every_break_spelling_in_an_ignored_region_separates_quoted_words() -> None:
-    for markup in (
-        '<span class="provedown-ignore">not<br/>yet</span>',
-        '<span class="provedown-ignore">not<br>yet</span>',
-        'not<br class="provedown-ignore"/>yet',
+    for markup, leaks in (
+        ('<span class="provedown-ignore">not<br/>yet</span>', False),
+        ('<span class="provedown-ignore">not<br>yet</span>', True),
+        ('not<br class="provedown-ignore"/>yet', False),
+        ('not<br class="provedown-ignore">yet', True),
     ):
         document = parse_document(
             f"<cite>PMID:1, <q>the gene is {markup} required</q></cite>"
@@ -786,8 +787,16 @@ def test_every_break_spelling_in_an_ignored_region_separates_quoted_words() -> N
             ("the gene is not yet required", False, False),
             ("a later claim", False, False),
         ], markup
-        assert document.diagnostics == [], markup
-        assert lint_document(document).findings == [], markup
+        quote_lints = [
+            f.code
+            for f in lint_document(document).findings
+            if f.code != "parser-diagnostic"
+        ]
+        assert quote_lints == [], markup
+        # A non-self-closing <br> counts as an open element, so it leaves the
+        # region open until the quote's end tag, which is reported.
+        unclosed = [d for d in document.diagnostics if "unclosed ignored region" in d]
+        assert len(unclosed) == int(leaks), markup
 
 
 def test_unclosed_ignored_region_message_names_the_likely_cause() -> None:
@@ -811,3 +820,43 @@ def test_quote_inside_an_ignored_region_inside_a_quote_does_not_close_it() -> No
     assert [(quote.text, quote.unclosed) for quote in document.quotes] == [
         ("a x b", False)
     ]
+
+
+def test_ignored_region_leaked_by_a_void_element_in_a_citation_is_reported() -> None:
+    inline = parse_document(
+        '<cite>PMID:1 <span class="provedown-ignore">(draft<br>note)</span>, '
+        "<q>a claim</q></cite>"
+    )
+    figure = parse_document(
+        "<figure><blockquote>A</blockquote><figcaption><cite>PMID:2"
+        '<br class="provedown-ignore"> (preprint)</cite></figcaption></figure>'
+    )
+
+    # The region the <br> left open ends at the citation's own end tag and is
+    # reported, so the dropped inline claim is not silent and the figure's
+    # well-formed citation is not called unclosed.
+    for document in (inline, figure):
+        assert any("unclosed ignored region" in d for d in document.diagnostics)
+    assert inline.quotes == []
+    assert [(q.text, q.source, q.citation_unclosed) for q in figure.quotes] == [
+        ("A", "PMID:2", False)
+    ]
+
+
+def test_ignored_region_left_open_inside_a_quote_is_reported() -> None:
+    document = parse_document(
+        '<cite>PMID:1, <q>a <span class="provedown-ignore">x<b>y</q> rest</cite>'
+    )
+
+    # The quote still closes at its own end tag, but the region never did.
+    assert [(q.text, q.unclosed) for q in document.quotes] == [("a xy", False)]
+    assert any("unclosed ignored region" in d for d in document.diagnostics)
+
+
+def test_ignored_region_left_open_inside_a_citation_is_reported() -> None:
+    document = parse_document(
+        '<cite>PMID:1 <span class="provedown-ignore">(draft<b>note)</span>, '
+        "<q>a claim</q></cite> after"
+    )
+
+    assert any("unclosed ignored region" in d for d in document.diagnostics)

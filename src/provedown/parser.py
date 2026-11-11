@@ -177,11 +177,13 @@ class _ProvedownHTMLParser(HTMLParser):
         # a nested parse_* call (end tag -> bogus comment) does not copy twice.
         self._keeping_in_code = False
         self._ignore_location: SourceLocation | None = None
-        # The quote open when the current ignored region began, and how many of
-        # its element were opened inside the region, so that quote's own end
-        # tag can close it even if a void element left the region unbalanced.
-        self._ignore_quote: _QuoteBuilder | None = None
-        self._ignored_quote_tags = 0
+        # The quote or citation markup the current ignored region began in, its
+        # closing tag name, and how many of that tag were opened inside the
+        # region, so the owner's own end tag still closes it if the region was
+        # left open; that region is then reported as unclosed.
+        self._ignore_owner: _QuoteBuilder | _CiteBuilder | _FigureBuilder | None = None
+        self._ignore_owner_tag = ""
+        self._ignored_owner_tags = 0
         self.quotes: list[QuoteClaim] = []
         self._quote: _QuoteBuilder | None = None
         self._quote_containers: list[_CiteBuilder | _FigureBuilder] = []
@@ -198,8 +200,8 @@ class _ProvedownHTMLParser(HTMLParser):
             self._ignore_depth += 1
             if tag in _QUOTE_WORD_BREAK_TAGS:
                 self._append_quotation_text(" ")
-            if self._ignore_quote is not None and tag == self._ignore_quote.element:
-                self._ignored_quote_tags += 1
+            if self._ignore_owner is not None and tag == self._ignore_owner_tag:
+                self._ignored_owner_tags += 1
             return
 
         if self._code is not None:
@@ -212,10 +214,7 @@ class _ProvedownHTMLParser(HTMLParser):
         if _is_ignored_region(attr_map):
             if tag in _QUOTE_WORD_BREAK_TAGS:
                 self._append_quotation_text(" ")
-            self._ignore_depth = 1
-            self._ignore_location = location
-            self._ignore_quote = self._quote
-            self._ignored_quote_tags = 0
+            self._start_ignored_region(location)
             return
 
         if tag == "code":
@@ -344,11 +343,15 @@ class _ProvedownHTMLParser(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         if self._ignore_depth > 0:
-            if self._closes_quote_around_region(tag):
-                # A void element left the region unbalanced; the quote it began
-                # in ends here, so the region does too.
+            if self._is_owner_end_tag(tag):
+                # The quote or citation the region began in ends here while the
+                # region is still open: end the region too, and report it.
+                self._report_unclosed_ignored_region()
                 self._ignore_depth = 0
             else:
+                if self._ignore_owner is not None and tag == self._ignore_owner_tag:
+                    # It closes the same tag opened inside the region.
+                    self._ignored_owner_tags -= 1
                 self._ignore_depth -= 1
                 if tag in _QUOTE_WORD_BREAK_TAGS:
                     self._append_quotation_text(" ")
@@ -378,13 +381,7 @@ class _ProvedownHTMLParser(HTMLParser):
         super().close()
         if self._ignore_depth > 0:
             # Everything after it was skipped, so nothing there was checked.
-            assert self._ignore_location is not None
-            self.diagnostics.append(
-                f"{self._ignore_location.display()}: unclosed ignored region; "
-                "most likely a void element such as <br> inside or carrying the "
-                "ignore marker, which counts as an open element, or a missing "
-                "end tag"
-            )
+            self._report_unclosed_ignored_region()
         if self._code is not None:
             self.diagnostics.append(
                 f"{self._code.location.display()}: unclosed <code> block"
@@ -525,17 +522,42 @@ class _ProvedownHTMLParser(HTMLParser):
             attributes=attr_map,
         )
 
-    def _closes_quote_around_region(self, tag: str) -> bool:
-        """Whether ``tag`` ends the quote the current ignored region began in."""
+    def _start_ignored_region(self, location: SourceLocation) -> None:
+        self._ignore_depth = 1
+        self._ignore_location = location
+        self._ignored_owner_tags = 0
+        if self._quote is not None:
+            self._ignore_owner = self._quote
+            self._ignore_owner_tag = self._quote.element
+        elif self._quote_containers:
+            container = self._quote_containers[-1]
+            self._ignore_owner = container
+            self._ignore_owner_tag = (
+                "cite" if isinstance(container, _CiteBuilder) else "figure"
+            )
+        else:
+            self._ignore_owner = None
+            self._ignore_owner_tag = ""
 
-        quote = self._ignore_quote
-        if quote is None or quote is not self._quote or tag != quote.element:
+    def _is_owner_end_tag(self, tag: str) -> bool:
+        """Whether ``tag`` ends the markup the current ignored region began in."""
+
+        owner = self._ignore_owner
+        if owner is None or tag != self._ignore_owner_tag:
             return False
-        if self._ignored_quote_tags > 0:
-            # It closes a quote element opened inside the region instead.
-            self._ignored_quote_tags -= 1
+        if self._ignored_owner_tags > 0:
             return False
-        return True
+        if isinstance(owner, _QuoteBuilder):
+            return owner is self._quote
+        return bool(self._quote_containers) and owner is self._quote_containers[-1]
+
+    def _report_unclosed_ignored_region(self) -> None:
+        assert self._ignore_location is not None
+        self.diagnostics.append(
+            f"{self._ignore_location.display()}: unclosed ignored region; "
+            "most likely a void element such as <br> inside or carrying the "
+            "ignore marker, which counts as an open element, or a missing end tag"
+        )
 
     def _append_quotation_text(self, text: str) -> None:
         """Add visible text to the open quote, or else to the open citation."""

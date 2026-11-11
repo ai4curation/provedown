@@ -306,10 +306,13 @@ Markup diagnostics include:
   Documents that verified before this diagnostic existed may now report it.
 
 A void element inside an ignored region also extends the region past its own
-end tag when later end tags close it again before the end of the document.
-Claims and quotations that start in that stretch are skipped without a
-diagnostic, so keep void elements out of hand-written ignored regions. A
-quotation the region began in is still closed by its own end tag. The diagram
-tooling already counts void elements correctly; the core parser does not yet.
+end tag. If the region began inside a quote or citation, that quote's or
+citation's own end tag still closes it and ends the region, and the region is
+reported as unclosed, so verification stops instead of silently skipping what
+the region swallowed. Elsewhere, when later end tags close the region again
+before the end of the document, claims and quotations in that stretch are
+skipped without a diagnostic. Keep void elements out of hand-written ignored
+regions; the diagram tooling already counts them correctly, the core parser
+does not yet.
 
 See [Frontmatter](frontmatter.md) for document-level metadata and defaults.
