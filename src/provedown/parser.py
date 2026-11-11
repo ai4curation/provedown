@@ -205,8 +205,8 @@ class _ProvedownHTMLParser(HTMLParser):
         self._ignore_owner_ends: frozenset[str] = frozenset()
         self._ignored_owner_tags: dict[str, int] = {}
         self._ignore_opening_tag = ""
-        # Whether the region consumed an owner-kind end tag after skipping markup.
-        self._region_took_owner_end_tag = False
+        # The owner-kind end tag the region consumed, if any.
+        self._region_took_owner_end_tag = ""
         # Whether the current region skipped markup that would otherwise be
         # parsed: a quotation, citation, code block or result span.
         self._region_skipped_markup = False
@@ -382,29 +382,13 @@ class _ProvedownHTMLParser(HTMLParser):
             else:
                 if self._ignored_owner_tags.get(tag, 0) > 0:
                     # It closes the same tag opened inside the region. If that
-                    # element lacked its own end tag, this is the owner's, and
-                    # what the region skipped is lost; whether the owner then
-                    # stays open is known only later, so mark it.
+                    # element lacked its own end tag, this is the owner's; what
+                    # that loses is decided when the region ends.
                     self._ignored_owner_tags[tag] -= 1
-                    owner = self._ignore_owner
-                    if self._region_skipped_markup and not isinstance(
-                        owner, _QuoteBuilder | None
-                    ):
-                        owner.ignored_own_kind = tag
-                        self._region_took_owner_end_tag = True
+                    self._region_took_owner_end_tag = tag
                 self._ignore_depth -= 1
                 if self._ignore_depth == 0:
-                    owner = self._ignore_owner
-                    if (
-                        self._region_took_owner_end_tag
-                        and tag != self._ignore_opening_tag
-                        and not isinstance(owner, _QuoteBuilder | None)
-                    ):
-                        # The region ends on another element's end tag, so its
-                        # own was taken earlier, after an owner-kind end tag was
-                        # consumed: a leak, even if a stray end tag closes the
-                        # owner later.
-                        owner.ignored_region_leaked = True
+                    self._mark_owner_losses(tag)
                     self._end_ignored_region()
                 if tag in _QUOTE_WORD_BREAK_TAGS:
                     self._append_quotation_text(" ")
@@ -639,7 +623,26 @@ class _ProvedownHTMLParser(HTMLParser):
         # its end tag is not taken for the owner's.
         self._ignored_owner_tags = {tag: 1} if tag in self._ignore_owner_ends else {}
         self._region_skipped_markup = False
-        self._region_took_owner_end_tag = False
+        self._region_took_owner_end_tag = ""
+
+    def _mark_owner_losses(self, ending_tag: str) -> None:
+        """Record on the owner container what a region that took its end tag lost.
+
+        Only a region that skipped markup lost anything. Its owner may still be
+        reported at the end of the document (``ignored_own_kind``) or, if the
+        region ended on another element's end tag so its own was taken earlier,
+        even when a stray end tag closes the owner later (``ignored_region_leaked``).
+        """
+
+        owner = self._ignore_owner
+        took = self._region_took_owner_end_tag
+        if not took or not self._region_skipped_markup:
+            return
+        if isinstance(owner, _QuoteBuilder | None):
+            return
+        owner.ignored_own_kind = took
+        if ending_tag != self._ignore_opening_tag:
+            owner.ignored_region_leaked = True
 
     def _end_ignored_region(self) -> None:
         self._ignore_depth = 0
@@ -649,7 +652,7 @@ class _ProvedownHTMLParser(HTMLParser):
         self._ignored_owner_tags = {}
         self._region_skipped_markup = False
         self._ignore_opening_tag = ""
-        self._region_took_owner_end_tag = False
+        self._region_took_owner_end_tag = ""
 
     def _is_owner_end_tag(self, tag: str) -> bool:
         """Whether ``tag`` ends the markup the current ignored region began in."""

@@ -1106,6 +1106,7 @@ def test_leak_with_extra_depth_from_a_void_element_is_still_reported() -> None:
     assert "lost the quotation markup an ignored region inside it skipped" in (
         diagnostic
     )
+    assert not verify_document(document).ok
 
 
 def test_unclosed_container_holding_a_quotation_after_a_leak_stays_lint_only() -> None:
@@ -1114,7 +1115,23 @@ def test_unclosed_container_holding_a_quotation_after_a_leak_stays_lint_only() -
         "<q>lost</q></cite> <q>kept</q>"
     )
 
+    assert [quote.text for quote in document.quotes] == ["kept"]
     assert document.diagnostics == []
+    assert verify_document(document).ok
     assert "unclosed-citation" in {
         finding.code for finding in lint_document(document).findings
     }
+
+
+def test_skipped_markup_after_the_owner_end_tag_was_taken_is_still_reported() -> None:
+    document = parse_document(
+        '<cite>PMID:1 <p><span class="provedown-ignore">draft<br> <cite>x</span>'
+        "</cite>, <q>lost</q></p> <q>kept</q></cite>"
+    )
+
+    assert [quote.text for quote in document.quotes] == ["kept"]
+    [diagnostic] = document.diagnostics
+    assert "lost the quotation markup an ignored region inside it skipped" in (
+        diagnostic
+    )
+    assert not verify_document(document).ok
