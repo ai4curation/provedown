@@ -70,8 +70,9 @@ JSON output is intended for CI, editor integrations, and scripts.
   [Quotations](../reference/markup.md#quotations).
 
 `quote-citation-without-source`
-: A quote is inside a `<cite>` whose text names no reference id such as
-  `PMID:123`. This is an error.
+: A quote is inside a `<cite>` whose text names no valid reference id such as
+  `PMID:123`. The message names any id-shaped token that was rejected, such as
+  `PMID:1~~`. This is an error.
 
 `quote-citation-with-several-sources`
 : The citation around a quote names more than one reference id: a `<cite>`
@@ -90,9 +91,9 @@ JSON output is intended for CI, editor integrations, and scripts.
   the citation may name the wrong source. This is an error.
 
 `executable-markup-in-quote`
-: A quote contains a `<code>` element or result span. `provedown verify` still
-  executes it; mark up code quoted from a source with `<samp>` instead. This is
-  a warning.
+: A quote or its citation text contains a `<code>` element or result span.
+  `provedown verify` still executes it; mark up code quoted from a source with
+  `<samp>` and keep reference ids out of `<code>`. This is a warning.
 
 ## Justify Explicitly Unverified Claims
 

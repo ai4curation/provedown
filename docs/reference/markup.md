@@ -194,8 +194,10 @@ The `<cite>` scopes the claim. Its own text, outside its `<q>` elements, must
 name exactly one reference id: a `prefix:local` token such as `PMID:18467591`,
 `DOI:10.1016/...`, `Reactome:R-HSA-75899` or `file:genes/x.txt`. Commas and
 semicolons separate an id from the text around it; trailing sentence
-punctuation, unbalanced closing brackets, and Markdown code or emphasis markers
-around an id (`` `PMID:1` ``, `**PMID:1**`) are dropped. A bare link such as
+punctuation, unbalanced closing brackets, and Markdown backtick, `*` and `_`
+markers around an id (`` `PMID:1` ``, `**PMID:1**`, `_PMID:1_`) are dropped. A
+token holding any other character an id cannot contain, such as `~~PMID:1~~`,
+is rejected, and `provedown lint` names it. A bare link such as
 `https://...` or `mailto:...` is not a reference id; write a URL source as
 `url:https://...`. Do not wrap an id in an HTML `<code>` element, which would be
 executed; Markdown backticks are fine.
@@ -228,15 +230,21 @@ quotation marks.
 The quoted text is collected with HTML entities decoded and whitespace,
 including line wraps, collapsed to single spaces. Markup inside a quote, such as
 a nested `<q>`, is part of the quoted text, and paragraph or `<br>` boundaries
-separate words, in quotes and in citation text. Even a `</cite>` or `</figure>`
+separate words, in quotes and in citation text. Inside a `<code>` element,
+markup is code text, as anywhere else: a self-closing tag adds nothing, and any
+other tag is a parser diagnostic that blocks verification. Even a `</cite>` or
+`</figure>`
 end tag inside an open quote is treated as quoted text, so a stray end tag never
 cuts a quote short. Markdown inside a quote is not rendered first, so avoid
 Markdown emphasis there.
 
 Quotation markup never changes what is executable. A `<code>` element or a
 result span runs wherever it appears, including inside a quote or citation, and
-its text is also part of that quote or citation. `provedown lint` warns about
-executable markup inside a quote; to quote code from a source, use `<samp>`:
+its text is also part of that quote or citation. That is a trap: a result
+span's authored value becomes part of the verbatim quote, so correcting the
+value to fix a failed check rewrites the quotation. `provedown lint` warns about
+executable markup inside a quote or its citation; to quote code from a source,
+use `<samp>`, which Provedown never executes:
 
 ````markdown
 <cite>PMID:1, <q>the patch adds <samp>retry=3</samp> to the client</q></cite>
@@ -251,7 +259,8 @@ diagnostic, so it never stops a document's Python or SQL claims from being
 verified.
 
 Quotations are parsed into `Document.quotes` as `QuoteClaim` objects, not into
-`Document.events`, because they are not executable. Provedown itself does not
+`Document.events`, because a quotation claim is not itself executable (any
+`<code>` or result span inside it is still an event). Provedown itself does not
 fetch sources: a verifier plugin that can, such as one built on
 linkml-reference-validator, checks each claim's `text` against its `source`.
 `provedown lint` reports quotes that such a verifier could not check; see

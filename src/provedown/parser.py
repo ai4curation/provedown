@@ -107,17 +107,24 @@ class _QuoteBuilder:
         self,
         citation: str | None = None,
         citation_location: SourceLocation | None = None,
+        citation_executable: bool = False,
     ) -> QuoteClaim:
+        sources, rejected = (
+            _source_id_candidates(citation) if citation is not None else ((), ())
+        )
         return QuoteClaim(
             text=_collapse_whitespace("".join(self.parts)),
             location=self.location,
             element=self.element,
             citation=citation,
             citation_location=citation_location,
-            sources=source_ids(citation) if citation is not None else (),
+            sources=sources,
+            rejected_sources=rejected,
             unclosed=self.unclosed,
             citation_unclosed=self.citation_unclosed,
-            contains_executable_markup=self.contains_executable_markup,
+            contains_executable_markup=(
+                self.contains_executable_markup or citation_executable
+            ),
         )
 
 
@@ -126,6 +133,7 @@ class _CiteBuilder:
     location: SourceLocation
     parts: list[str] = field(default_factory=list)
     quotes: list[_QuoteBuilder] = field(default_factory=list)
+    contains_executable_markup: bool = False
 
     @property
     def text(self) -> str:
@@ -215,6 +223,10 @@ class _ProvedownHTMLParser(HTMLParser):
         location = self._location()
 
         if self._ignore_depth > 0 or _is_ignored_region(attr_map):
+            return
+
+        if self._code is not None:
+            # A self-closing tag inside code is code text, adding nothing.
             return
 
         if tag in _QUOTE_WORD_BREAK_TAGS:
@@ -380,7 +392,13 @@ class _ProvedownHTMLParser(HTMLParser):
         container = self._quote_containers.pop()
         if isinstance(container, _CiteBuilder):
             for quote in container.quotes:
-                self.quotes.append(quote.build(container.text, container.location))
+                self.quotes.append(
+                    quote.build(
+                        container.text,
+                        container.location,
+                        container.contains_executable_markup,
+                    )
+                )
             parent = self._quote_containers[-1] if self._quote_containers else None
             if isinstance(parent, _FigureBuilder) and parent.caption_depth > 0:
                 parent.captions.append(container)
@@ -394,8 +412,13 @@ class _ProvedownHTMLParser(HTMLParser):
         citation_location = (
             container.captions[0].location if container.captions else None
         )
+        citation_executable = any(
+            caption.contains_executable_markup for caption in container.captions
+        )
         for quote in container.quotes:
-            self.quotes.append(quote.build(citation, citation_location))
+            self.quotes.append(
+                quote.build(citation, citation_location, citation_executable)
+            )
 
     def _start_code(
         self,
@@ -424,15 +447,20 @@ class _ProvedownHTMLParser(HTMLParser):
             self._quote_containers[-1].parts.append(text)
 
     def _mark_executable_in_quote(self) -> None:
-        """Record that executable markup appears inside the open quote.
+        """Record executable markup inside the open quote or citation text.
 
         Quote markup never changes what is executable: a ``<code>`` or result
         span runs wherever it is. This only lets lint warn about it, since
-        quoted code is better marked up with ``<samp>``.
+        quoted code is better marked up with ``<samp>`` and an id should not be
+        executable code.
         """
 
         if self._quote is not None:
             self._quote.contains_executable_markup = True
+        elif self._quote_containers and isinstance(
+            self._quote_containers[-1], _CiteBuilder
+        ):
+            self._quote_containers[-1].contains_executable_markup = True
 
     def _append_code_use(
         self,
@@ -548,18 +576,28 @@ def source_ids(citation: str) -> tuple[str, ...]:
     ()
     """
 
-    candidates = (
-        _trim_source_id(match.group(0))
-        for match in _SOURCE_ID_PATTERN.finditer(
-            _MARKDOWN_LINK_TARGET.sub("]", citation)
-        )
-    )
-    return tuple(
-        candidate
-        for candidate in candidates
-        if _VALID_SOURCE_ID.fullmatch(candidate)
-        and candidate.split(":", 1)[0].lower() not in _WEB_LINK_PREFIXES
-    )
+    return _source_id_candidates(citation)[0]
+
+
+def _source_id_candidates(citation: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Split a citation's id-shaped tokens into valid ids and rejected ones.
+
+    A web link is neither: it is where a source lives, so it is skipped. A
+    rejected token looks like an id but holds a character an id cannot, such
+    as leftover markup; lint names it so the author can see what was refused.
+    """
+
+    valid: list[str] = []
+    rejected: list[str] = []
+    for match in _SOURCE_ID_PATTERN.finditer(_MARKDOWN_LINK_TARGET.sub("]", citation)):
+        candidate = _trim_source_id(match.group(0))
+        if candidate.split(":", 1)[0].lower() in _WEB_LINK_PREFIXES:
+            continue
+        if _VALID_SOURCE_ID.fullmatch(candidate):
+            valid.append(candidate)
+        elif ":" in candidate and candidate.split(":", 1)[1]:
+            rejected.append(candidate)
+    return tuple(valid), tuple(rejected)
 
 
 def _trim_source_id(token: str) -> str:

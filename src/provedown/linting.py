@@ -220,10 +220,7 @@ def _add_quote_lints(
                     level="error",
                     code="quote-citation-without-source",
                     location=quote.location,
-                    message=(
-                        "the citation around this quote names no reference id "
-                        "such as PMID:123"
-                    ),
+                    message=_without_source_message(quote.rejected_sources),
                     target=quote.citation,
                 )
             )
@@ -248,13 +245,27 @@ def _add_quote_lints(
                     code="executable-markup-in-quote",
                     location=quote.location,
                     message=(
-                        f"<{quote.element}> contains a <code> or result span, "
-                        "which provedown verify executes; mark up quoted code "
-                        "with <samp> instead"
+                        f"<{quote.element}> or its citation contains a <code> "
+                        "or result span, which provedown verify executes; mark "
+                        "up quoted code with <samp> and keep ids out of <code>"
                     ),
                     target=quote.citation,
                 )
             )
+
+
+def _without_source_message(rejected: tuple[str, ...]) -> str:
+    if not rejected:
+        return "the citation around this quote names no reference id such as PMID:123"
+    found = ", ".join(rejected)
+    if len(rejected) == 1:
+        which = "is not a valid reference id"
+    else:
+        which = "are not valid reference ids"
+    return (
+        "the citation around this quote names no valid reference id; "
+        f"found {found}, which {which}"
+    )
 
 
 def _add_result_policy_lints(

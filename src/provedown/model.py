@@ -83,9 +83,13 @@ class QuoteClaim:
     the quote's text is complete, but the citation text may run on and name
     the wrong source.
 
+    ``rejected_sources`` are tokens in the citation text that look like ids
+    but hold a character an id cannot, such as leftover markup.
+
     ``contains_executable_markup`` is true when a ``<code>`` or result span
-    appears inside the quote. Quote markup never changes what is executable,
-    so that markup still runs; its text is also part of the quote.
+    appears inside the quote or its citation text. Quote markup never changes
+    what is executable, so that markup still runs; its text is also part of the
+    quote or citation.
     """
 
     text: str
@@ -94,6 +98,7 @@ class QuoteClaim:
     citation: str | None = None
     citation_location: SourceLocation | None = None
     sources: tuple[str, ...] = ()
+    rejected_sources: tuple[str, ...] = ()
     unclosed: bool = False
     citation_unclosed: bool = False
     contains_executable_markup: bool = False

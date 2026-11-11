@@ -75,6 +75,10 @@ Each `QuoteClaim` has:
 `sources`
 : Reference ids named in the citation text, in order.
 
+`rejected_sources`
+: Tokens in the citation text that look like reference ids but hold a
+  character an id cannot, such as leftover markup.
+
 `source`
 : The single reference id when `sources` has exactly one, else `None`. A quote
   verifier checks `text` against this source.
@@ -89,8 +93,9 @@ Each `QuoteClaim` has:
   text after the quote.
 
 `contains_executable_markup`
-: True when a `<code>` element or result span appears inside the quote. That
-  markup is still executed; its text is also part of `text`.
+: True when a `<code>` element or result span appears inside the quote or its
+  citation text. That markup is still executed; its text is also part of
+  `text` or `citation`.
 
 ## Verify Documents
 

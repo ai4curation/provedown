@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from provedown import (
+    CodeBlock,
     QuoteClaim,
     SourceLocation,
     Status,
@@ -435,11 +436,27 @@ def test_quote_end_tag_inside_code_does_not_close_the_quote() -> None:
     ]
 
 
-def test_code_text_in_a_citation_is_part_of_the_citation_text() -> None:
-    document = parse_document("<cite><code>PMID:30</code>, <q>x</q></cite>")
+def test_executable_markup_in_citation_text_is_flagged() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<cite><code>PMID:30</code>, <q>x</q></cite>",
+                "<figure><blockquote>y</blockquote><figcaption><cite>PMID:31 "
+                "<code>z = 1</code></cite></figcaption></figure>",
+            ]
+        )
+    )
 
-    assert len(document.events) == 1
+    assert len(document.events) == 2
     assert document.quotes[0].sources == ("PMID:30",)
+    assert [quote.contains_executable_markup for quote in document.quotes] == [
+        True,
+        True,
+    ]
+    assert [f.code for f in lint_document(document).findings] == [
+        "executable-markup-in-quote",
+        "executable-markup-in-quote",
+    ]
 
 
 def test_code_in_a_figure_outside_its_blockquote_stays_executable() -> None:
@@ -452,10 +469,24 @@ def test_code_in_a_figure_outside_its_blockquote_stays_executable() -> None:
     assert document.quotes == []
 
 
-def test_self_closing_break_inside_quoted_code_separates_words() -> None:
-    document = parse_document("<cite>PMID:31, <q>a <code>x<br/>y</code></q></cite>")
+def test_markup_inside_quoted_code_is_code_text() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<cite>PMID:31, <q>a <code>x<br/>y</code></q></cite>",
+                "<cite>PMID:32, <q>b <code>p<br>q</code></q></cite>",
+            ]
+        )
+    )
 
-    assert document.quotes[0].text == "a x y"
+    # Inside <code>, tags are code text, as everywhere else: a self-closing tag
+    # adds nothing and any other tag is a blocking parser diagnostic.
+    assert [quote.text for quote in document.quotes] == ["a xy", "b pq"]
+    assert [
+        event.code for event in document.events if isinstance(event, CodeBlock)
+    ] == ["xy", "pq"]
+    assert len(document.diagnostics) == 1
+    assert "nested HTML tag inside <code>" in document.diagnostics[0]
 
 
 def test_markdown_inline_markup_around_a_reference_id_is_not_part_of_it() -> None:
@@ -518,17 +549,26 @@ def test_unclosed_cite_or_quote_never_stops_later_code_from_running() -> None:
     assert verify_document(document).ok
 
 
-def test_reference_ids_end_in_a_plain_character() -> None:
+def test_rejected_reference_ids_are_named_by_lint() -> None:
     document = parse_document(
         "\n".join(
             [
                 "<cite>~~PMID:37~~, <q>a</q></cite>",
                 '<cite>"PMID:38", <q>b</q></cite>',
+                "<cite>DOI:10.1002/(SICI)1097-0258(19980430)17:8&lt;857::AID>3.0, "
+                "<q>c</q></cite>",
             ]
         )
     )
 
-    assert [quote.sources for quote in document.quotes] == [(), ()]
+    assert [quote.sources for quote in document.quotes] == [(), (), ()]
+    assert [quote.rejected_sources for quote in document.quotes] == [
+        ("PMID:37~~",),
+        ('PMID:38"',),
+        ("DOI:10.1002/(SICI)1097-0258(19980430)17:8<857::AID>3.0",),
+    ]
+    messages = [f.message for f in lint_document(document).findings]
+    assert "found PMID:37~~, which is not a valid reference id" in messages[0]
 
 
 def test_block_boundaries_in_citation_text_separate_words() -> None:
@@ -551,3 +591,11 @@ def test_end_tag_inside_executable_code_is_code_text() -> None:
     assert [(quote.text, quote.source) for quote in document.quotes] == [
         ("kept", "PMID:41")
     ]
+
+
+def test_self_closing_tags_inside_code_add_no_events() -> None:
+    document = parse_document(
+        '<code>x = 1 <code use="other"/> <span class="result" data-code="x"/></code>'
+    )
+
+    assert [type(event).__name__ for event in document.events] == ["CodeBlock"]
