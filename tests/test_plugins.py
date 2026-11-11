@@ -739,9 +739,49 @@ def test_raise_with_an_unprintable_or_huge_exception_is_attributed(
     [huge] = [f for f in report.findings if f.verifier_id == "huge-error"]
     assert huge.status is Status.ERROR
     assert len(huge.message) < 300
-    assert len(huge.evidence["traceback"]) <= 4000
+    traceback_text = huge.evidence["traceback"]
+    assert len(traceback_text) <= 4000
+    # The frames survive a huge message, which is kept only in short form.
+    assert traceback_text.startswith("Traceback (most recent call last):")
+    assert "HugeErrorVerifier" in traceback_text or "countplugin" in traceback_text
+    assert traceback_text.count("x" * 300) == 0
 
 
 def test_empty_verifier_ids_is_an_error_not_an_empty_ok_report() -> None:
     with pytest.raises(ValueError, match="no verifier ids"):
         verify_document(parse_document("<code>x = 1</code>"), verifier_ids=[])
+
+
+def test_register_rejects_a_verifier_without_a_string_id_or_verify() -> None:
+    from provedown import VerifierRegistry
+
+    class NoId:
+        verifier_id = 1
+
+        def verify(self, document, context):  # type: ignore[no-untyped-def]
+            return []
+
+    class NoVerify:
+        verifier_id = "no-verify"
+
+    registry = VerifierRegistry()
+    with pytest.raises(TypeError, match="verifier_id"):
+        registry.register(NoId())  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="verify"):
+        registry.register(NoVerify())  # type: ignore[arg-type]
+    assert registry.names() == []
+
+
+def test_registry_verify_rejects_empty_ids_and_dedupes_repeats() -> None:
+    registry = default_registry(plugins=False)
+    document = parse_document(
+        '<code>x = 1</code> <span class="result" data-code="x">1</span>'
+    )
+
+    with pytest.raises(ValueError, match="no verifier ids"):
+        registry.verify(document, verifier_ids=[])
+
+    report = registry.verify(
+        document, verifier_ids=["python-results", "python-results"]
+    )
+    assert report.count(Status.PASS) == 1

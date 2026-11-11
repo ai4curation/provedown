@@ -8,7 +8,12 @@ from pathlib import Path
 from provedown.model import Document, SourceLocation
 from provedown.parser import parse_file
 from provedown.report import Finding, Report, Status
-from provedown.verifiers import VerificationContext, VerifierRegistry, default_registry
+from provedown.verifiers import (
+    EMPTY_VERIFIER_IDS_MESSAGE,
+    VerificationContext,
+    VerifierRegistry,
+    default_registry,
+)
 
 PARSER_VERIFIER_ID = "parser"
 VERIFICATION_SKIPPED_MESSAGE = "verification skipped: document has parser errors"
@@ -25,8 +30,10 @@ def verify_document(
     Without ``registry``, the default registry is built, which loads installed
     verifier plugins; a plugin that cannot be loaded raises ``PluginLoadError``.
     A ``verifier_ids`` entry that is not registered raises
-    ``UnknownVerifierError``. Both are raised whether or not the document has
-    parser errors.
+    ``UnknownVerifierError``, and an empty ``verifier_ids`` raises
+    ``ValueError``, since running nothing must not look like a passing report;
+    pass ``None`` to run every verifier (the CLI never passes an empty list).
+    All are raised whether or not the document has parser errors.
     """
 
     # Build the registry and check the ids before the parser-error gate, so a
@@ -35,7 +42,7 @@ def verify_document(
     active_registry = registry or default_registry()
     if verifier_ids is not None:
         if not verifier_ids:
-            raise ValueError("no verifier ids given; pass None to run them all")
+            raise ValueError(EMPTY_VERIFIER_IDS_MESSAGE)
         active_registry.check_ids(verifier_ids)
 
     findings = list(_diagnostic_findings(document))

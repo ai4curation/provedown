@@ -79,8 +79,8 @@ Use `error` when the verifier could not complete the check.
 Return an `error` finding rather than raising, and yield only `Finding`
 objects. If a verifier raises anyway, including from building a `Finding` with
 a bad `status` or `location`, the registry reports it as an `error` finding
-attributed to that verifier's id, with the traceback, shortened to its last few thousand characters, under
-`evidence["traceback"]`. If it yields something that is not a `Finding`, the
+attributed to that verifier's id, with the traceback under `evidence["traceback"]`: its frames, nearest the raise
+first to be kept, and a short form of the message. If it yields something that is not a `Finding`, the
 error finding names it, shortened, under `evidence["yielded"]`, and the rest of
 that verifier's output is ignored. Findings the verifier yielded before the
 problem, and the other verifiers' findings, are kept.
@@ -118,8 +118,12 @@ registry.register(MyVerifier())
 Then pass the registry to `verify_document()`. Requesting a verifier id that
 is not registered, through `verify_document()`, `registry.verify()` or
 `registry.get()`, raises `UnknownVerifierError`, a `KeyError` subclass whose
-message lists the registered ids. Call `registry.check_ids(ids)` to validate
-ids up front.
+message lists the registered ids. An empty list of ids raises `ValueError`,
+so that running nothing never looks like a passing report; pass `None` to run
+every verifier. A repeated id runs its verifier once. Call
+`registry.check_ids(ids)` to validate ids up front. `registry.register()`
+raises `TypeError` for an object without a string `verifier_id` and a
+`verify()` method.
 
 Do not call `registry.verify()` directly for parsed or untrusted document input.
 That low-level dispatch method does not inspect `Document.diagnostics` before

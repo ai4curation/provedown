@@ -23,6 +23,9 @@ from provedown.report import Finding, Report, Status
 VERIFIER_ENTRY_POINT_GROUP = "provedown.verifiers"
 
 
+EMPTY_VERIFIER_IDS_MESSAGE = "no verifier ids given; pass None to run them all"
+
+
 class PluginLoadError(RuntimeError):
     """Raised when an installed verifier plugin cannot be loaded or registered."""
 
@@ -64,6 +67,15 @@ class VerifierRegistry:
         self._verifiers: dict[str, Verifier] = {}
 
     def register(self, verifier: Verifier) -> None:
+        """Register ``verifier`` under its id, replacing one with the same id.
+
+        Raises ``TypeError`` unless it has a non-empty string ``verifier_id``
+        and a ``verify()`` method, the shape the rest of the registry relies on.
+        """
+
+        problem = _verifier_shape_problem(verifier)
+        if problem is not None:
+            raise TypeError(f"cannot register {_short_repr(verifier)}: {problem}")
         self._verifiers[verifier.verifier_id] = verifier
 
     def get(self, verifier_id: str) -> Verifier:
@@ -82,10 +94,11 @@ class VerifierRegistry:
         active_context = context or VerificationContext()
         if verifier_ids is not None and not verifier_ids:
             # Running nothing must not look like a passing report.
-            raise ValueError("no verifier ids given; pass None to run them all")
+            raise ValueError(EMPTY_VERIFIER_IDS_MESSAGE)
         self.check_ids(verifier_ids or ())
         selected = (
-            [self._verifiers[name] for name in verifier_ids]
+            # A repeated id runs its verifier once.
+            [self._verifiers[name] for name in dict.fromkeys(verifier_ids)]
             if verifier_ids is not None
             else [self._verifiers[name] for name in self.names()]
         )
@@ -152,7 +165,7 @@ def _run_verifier(
                 status=Status.ERROR,
                 location=location,
                 message=f"verifier raised {type(exc).__name__}: {_safe_str(exc)}",
-                evidence={"traceback": _tail(traceback.format_exc())},
+                evidence={"traceback": _short_traceback(exc)},
             )
         )
     return findings
@@ -176,26 +189,53 @@ def _short_repr(value: object) -> str:
     return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
+_MESSAGE_LIMIT = 200
+
+
 def _safe_str(exc: BaseException) -> str:
-    """Return ``str(exc)`` cut to the report length, even if its ``__str__`` raises."""
+    """Return ``str(exc)`` cut to the report length, even if its ``__str__`` raises.
+
+    An f-string calls ``__str__`` unguarded, unlike ``traceback`` formatting,
+    which already tolerates a raising ``__str__``.
+    """
 
     try:
         text = str(exc)
     except Exception:  # A plugin's exception is outside Provedown's control.
         return f"<unprintable {type(exc).__name__}>"
-    limit = _SHORT_REPR_LIMIT
+    limit = _MESSAGE_LIMIT
     return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
 _TRACEBACK_LIMIT = 4000
 
 
-def _tail(text: str) -> str:
-    """Keep the end of a traceback, where the raising frame and error are."""
+def _short_traceback(exc: BaseException) -> str:
+    """Format the frames of ``exc`` and a short form of its message.
 
-    if len(text) <= _TRACEBACK_LIMIT:
-        return text
-    return "..." + text[-(_TRACEBACK_LIMIT - 3) :]
+    The frames nearest the raise are kept when there are too many to fit. The
+    message is cut like the finding's own, so a huge message cannot push the
+    frames out.
+    """
+
+    header = "Traceback (most recent call last):\n"
+    footer = f"{type(exc).__name__}: {_safe_str(exc)}\n"
+    frames = "".join(traceback.format_tb(exc.__traceback__))
+    room = _TRACEBACK_LIMIT - len(header) - len(footer)
+    if len(frames) > room:
+        frames = "  ...\n" + frames[-(room - 6) :]
+    return header + frames + footer
+
+
+def _verifier_shape_problem(verifier: object) -> str | None:
+    """Say what keeps ``verifier`` from being a usable verifier, if anything."""
+
+    verifier_id = getattr(verifier, "verifier_id", None)
+    if not isinstance(verifier_id, str) or not verifier_id:
+        return "it has no verifier_id"
+    if not callable(getattr(verifier, "verify", None)):
+        return "it has no verify() method"
+    return None
 
 
 def default_registry(*, plugins: bool = True) -> VerifierRegistry:
@@ -265,15 +305,10 @@ def _load_plugin(entry_point: EntryPoint) -> Verifier:
             f"cannot load verifier plugin {_describe(entry_point)}: {exc}"
         ) from exc
     # Verifier is a Protocol, so nothing checked what the factory returned.
-    verifier_id = getattr(verifier, "verifier_id", None)
-    if not isinstance(verifier_id, str) or not verifier_id:
-        raise PluginLoadError(
-            f"{_returned(entry_point, verifier)}, which has no verifier_id"
-        )
-    if not callable(getattr(verifier, "verify", None)):
-        raise PluginLoadError(
-            f"{_returned(entry_point, verifier)}, which has no verify() method"
-        )
+    problem = _verifier_shape_problem(verifier)
+    if problem is not None:
+        which = problem.removeprefix("it ")
+        raise PluginLoadError(f"{_returned(entry_point, verifier)}, which {which}")
     loaded: Verifier = verifier
     return loaded
 
