@@ -1148,3 +1148,15 @@ def test_balanced_inner_cite_in_a_void_leaked_region_does_not_block() -> None:
     ]
     assert document.diagnostics == []
     assert verify_document(document).ok
+
+
+def test_owner_kind_opened_after_the_region_end_tag_still_reports_the_loss() -> None:
+    document = parse_document(
+        '<cite>PMID:1 <p><span class="provedown-ignore">draft<br></span>, '
+        "<cite>x <q>lost</q></p> <q>kept</q></cite>"
+    )
+
+    assert document.quotes == []
+    [diagnostic] = document.diagnostics
+    assert "unclosed <cite> holding no quotation" in diagnostic
+    assert not verify_document(document).ok
