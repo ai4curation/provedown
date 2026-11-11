@@ -15,6 +15,7 @@ from provedown.model import (
     Document,
     DocumentEvent,
     ProvedownConfig,
+    QuoteClaim,
     ResultAssertion,
     SourceLocation,
 )
@@ -44,6 +45,7 @@ __all__ = [
     "LintReport",
     "ParseError",
     "ProvedownConfig",
+    "QuoteClaim",
     "Report",
     "ResultAssertion",
     "SourceLocation",

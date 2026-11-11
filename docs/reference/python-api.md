@@ -49,6 +49,55 @@ The parsed `Document` contains:
 `diagnostics`
 : Parser diagnostics.
 
+`quotes`
+: Ordered `QuoteClaim` objects for the document's
+  [quotations](markup.md#quotations). They are not executable, so they are not
+  in `events`.
+
+Each `QuoteClaim` has:
+
+`text`
+: The quoted text, with entities decoded and whitespace collapsed.
+
+`location`
+: Location of the `<q>` or `<blockquote>` start tag.
+
+`element`
+: `"q"` or `"blockquote"`.
+
+`citation`
+: The citation's own text, without its quotes, or `None` when the quote is not
+  inside a citation.
+
+`citation_location`
+: Location of the `<cite>` start tag, or `None`.
+
+`sources`
+: Reference ids named in the citation text, in order.
+
+`rejected_sources`
+: Tokens in the citation text that look like reference ids but hold a
+  character an id cannot, such as leftover markup.
+
+`source`
+: The single reference id when `sources` has exactly one and
+  `rejected_sources` is empty, else `None`. A quote
+  verifier checks `text` against this source.
+
+`unclosed`
+: True when the quote's own end tag is missing. Its `text` runs to the end of
+  the document, so do not trust it, and no quotation after it was parsed.
+
+`citation_unclosed`
+: True when the `<cite>` or `<figure>` around a properly closed quote has no
+  end tag. The `text` is complete, but `citation` and `sources` may include
+  text after the quote.
+
+`contains_executable_markup`
+: True when a `<code>` element or result span appears inside the quote or its
+  citation text. That markup is still executed; its text is also part of
+  `text` or `citation`.
+
 ## Verify Documents
 
 Verify parsed text:

@@ -1153,7 +1153,7 @@ def test_svg_claim_markup_on_code_is_reported_as_run(marker: str) -> None:
     assert lowering.diagnostics[0].endswith("which verify would run as code, not check")
 
 
-def test_drawio_leak_dropping_property_evidence_and_claims_reports_both() -> None:
+def test_drawio_leak_dropping_evidence_and_claims_reports_the_open_region() -> None:
     # draw.io converts a bare <br> in an evidence label to a newline, but not
     # one with attributes, which leaks the region into later blocks.
     label = (
@@ -1168,10 +1168,13 @@ def test_drawio_leak_dropping_property_evidence_and_claims_reports_both() -> Non
 
     lowering = script.drawio_to_html(source, origin="t.drawio")
 
+    # The core parser now reports the region the <br>s leave open, so the
+    # lowering names that cause instead of guessing from the dropped claims.
     assert lowering.diagnostics == (
-        f"t.drawio: page 'p' cell 'c': verify would skip this <code> element; "
-        f"{DROPPED_CAUSE}",
-        f"t.drawio: page 'p' cell 'r': verify would skip this claim; {DROPPED_CAUSE}",
+        "t.drawio: page 'p' cell 'ev' (line 1 of its block, column 30): "
+        "unclosed ignored region; most likely a void element such as <br> "
+        "inside or carrying the ignore marker, which counts as an open element, "
+        "or a missing end tag",
     )
 
 
@@ -1231,7 +1234,7 @@ def _no_fences(html: str) -> bool:
     """Whether no line of the output reads to the core parser as a fence."""
 
     lines = html.splitlines(keepends=True)
-    return all(core_parser._fence_marker(line) is None for line in lines)
+    return all(core_parser.fence_marker(line) is None for line in lines)
 
 
 def _code_blocks(html: str) -> list[str]:
@@ -1310,7 +1313,7 @@ def test_claim_after_a_defused_fence_on_its_line_is_still_matched() -> None:
 def test_fence_rule_matches_the_core_parser(line: str) -> None:
     # If core's fence rule changes, the converter's copy of it must too.
     assert bool(script.FENCE.match(line)) == (
-        core_parser._fence_marker(line + "\n") is not None
+        core_parser.fence_marker(line + "\n") is not None
     )
 
 

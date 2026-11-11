@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -111,6 +112,7 @@ def lint_document(document: Document) -> LintReport:
     _add_result_policy_lints(document, findings)
     _add_python_fragility_lints(document, findings)
     _add_mutation_lints(document, findings)
+    _add_quote_lints(document, findings)
     return LintReport(path=document.path, findings=findings)
 
 
@@ -149,6 +151,149 @@ def _add_relationship_lints(
                     target=issue.target,
                 )
             )
+
+
+def _add_quote_lints(
+    document: Document,
+    findings: list[LintFinding],
+) -> None:
+    """Flag quotations that a quote verifier could not check.
+
+    A quote outside any citation is ordinary HTML, so it is only a warning. A
+    quote inside a citation claims to be verbatim, so a citation that does not
+    name exactly one source, or a quote with no text, is an error. Unclosed
+    quote markup is an error wherever it is: an unclosed quote swallows the
+    rest of the document, and an unclosed citation may name the wrong source.
+    """
+
+    for quote in document.quotes:
+        rejected_named = False
+        if quote.unclosed:
+            findings.append(
+                LintFinding(
+                    level="error",
+                    code="unclosed-quote",
+                    location=quote.location,
+                    message=(
+                        f"<{quote.element}> has no end tag, so its text runs to "
+                        "the end of the document and quotations after it are "
+                        "not parsed"
+                    ),
+                    target=quote.citation,
+                )
+            )
+        elif quote.citation_unclosed:
+            findings.append(
+                LintFinding(
+                    level="error",
+                    code="unclosed-citation",
+                    location=quote.location,
+                    message=(
+                        "the <cite> or <figure> around this quote has no end "
+                        "tag, so its citation may name the wrong source"
+                    ),
+                    target=quote.citation,
+                )
+            )
+        elif quote.citation is None:
+            findings.append(
+                LintFinding(
+                    level="warning",
+                    code="uncited-quote",
+                    location=quote.location,
+                    message=(
+                        f"<{quote.element}> is not inside a citation, so it "
+                        "cannot be checked against a source"
+                    ),
+                )
+            )
+        elif not quote.text:
+            findings.append(
+                LintFinding(
+                    level="error",
+                    code="empty-quote",
+                    location=quote.location,
+                    message=f"<{quote.element}> has no quoted text",
+                )
+            )
+        elif not quote.sources:
+            rejected_named = True
+            findings.append(
+                LintFinding(
+                    level="error",
+                    code="quote-citation-without-source",
+                    location=quote.location,
+                    message=_without_source_message(quote.rejected_sources),
+                    target=quote.citation,
+                )
+            )
+        elif len(quote.sources) > 1:
+            findings.append(
+                LintFinding(
+                    level="error",
+                    code="quote-citation-with-several-sources",
+                    location=quote.location,
+                    message=(
+                        "the citation around this quote names several reference "
+                        f"ids ({', '.join(quote.sources)}); a quote must cite "
+                        "exactly one source"
+                    ),
+                    target=" ".join(quote.sources),
+                )
+            )
+        if quote.rejected_sources and not rejected_named:
+            findings.append(
+                LintFinding(
+                    level="error",
+                    code="rejected-reference-id",
+                    location=quote.location,
+                    message=(
+                        "the citation around this quote names "
+                        f"{_quoted(quote.rejected_sources)}, which "
+                        f"{_is_or_are(quote.rejected_sources)} not a valid "
+                        "reference id; fix it or remove it"
+                    ),
+                    target=quote.citation,
+                )
+            )
+        if quote.contains_executable_markup:
+            findings.append(
+                LintFinding(
+                    level="warning",
+                    code="executable-markup-in-quote",
+                    location=quote.location,
+                    message=(
+                        f"<{quote.element}> or its citation contains a <code> "
+                        "or result span, which provedown verify executes; mark "
+                        "up quoted code with <samp> and keep ids out of <code>"
+                    ),
+                    target=quote.citation,
+                )
+            )
+
+
+def _without_source_message(rejected: tuple[str, ...]) -> str:
+    if not rejected:
+        return "the citation around this quote names no reference id such as PMID:123"
+    return (
+        "the citation around this quote names no valid reference id; "
+        f"found {_quoted(rejected)}, which {_is_or_are(rejected)} not a valid "
+        "reference id"
+    )
+
+
+def _quoted(tokens: tuple[str, ...]) -> str:
+    """Quote each token so its boundaries show, even when it holds a quote.
+
+    ``json.dumps`` also escapes non-ASCII characters on purpose: that is how an
+    invisible or look-alike character in a rejected id becomes visible.
+    """
+
+    return ", ".join(json.dumps(token) for token in tokens)
+
+
+def _is_or_are(tokens: tuple[str, ...]) -> str:
+    return "is" if len(tokens) == 1 else "are each"
 
 
 def _add_result_policy_lints(

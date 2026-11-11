@@ -64,6 +64,60 @@ DocumentEvent = CodeBlock | CodeUse | ResultAssertion
 
 
 @dataclass(frozen=True)
+class QuoteClaim:
+    """A quotation that claims to reproduce text from a cited source verbatim.
+
+    Parsed from a ``<q>`` inside a ``<cite>``, or from a ``<blockquote>`` inside
+    a ``<figure>`` whose ``<figcaption>`` holds a ``<cite>``. Quotes are not
+    executable, so they are kept apart from ``Document.events``; a verifier
+    plugin that can fetch sources checks them.
+
+    ``citation`` is the citation's own text, without its quotes, or ``None``
+    when the quote is not inside a citation. ``sources`` are the reference ids
+    found in that text, in order.
+
+    ``unclosed`` is true when the quote's own end tag is missing: its text runs
+    to the end of the document, so verifiers should not trust it, and no
+    quotation after it was parsed. ``citation_unclosed`` is true when the
+    ``<cite>`` or ``<figure>`` around a properly closed quote has no end tag:
+    the quote's text is complete, but the citation text may run on and name
+    the wrong source.
+
+    ``rejected_sources`` are tokens in the citation text that look like ids
+    but hold a character an id cannot, such as leftover markup. When there is
+    any, ``source`` is ``None``: the quote may be from the rejected one.
+
+    ``contains_executable_markup`` is true when a ``<code>`` or result span
+    appears inside the quote or its citation text. Quote markup never changes
+    what is executable, so that markup still runs; its text is also part of the
+    quote or citation.
+    """
+
+    text: str
+    location: SourceLocation
+    element: str = "q"
+    citation: str | None = None
+    citation_location: SourceLocation | None = None
+    sources: tuple[str, ...] = ()
+    rejected_sources: tuple[str, ...] = ()
+    unclosed: bool = False
+    citation_unclosed: bool = False
+    contains_executable_markup: bool = False
+
+    @property
+    def source(self) -> str | None:
+        """The reference id to check against, when the citation names exactly one.
+
+        ``None`` when the citation names several ids, or a rejected id-shaped
+        token as well as a valid one, since either could be the quote's source.
+        """
+
+        if len(self.sources) == 1 and not self.rejected_sources:
+            return self.sources[0]
+        return None
+
+
+@dataclass(frozen=True)
 class ProvedownConfig:
     """Optional configuration parsed from a document's ``provedown`` frontmatter."""
 
@@ -89,6 +143,7 @@ class Document:
     frontmatter: Mapping[str, Any] = field(default_factory=dict)
     provedown: ProvedownConfig = field(default_factory=ProvedownConfig)
     diagnostics: list[str] = field(default_factory=list)
+    quotes: list[QuoteClaim] = field(default_factory=list)
 
     def referenced_code_names(self) -> list[str]:
         names: list[str] = []

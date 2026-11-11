@@ -64,6 +64,43 @@ JSON output is intended for CI, editor integrations, and scripts.
 `python-syntax-error`
 : A Python code block or inline expression cannot be parsed. This is an error.
 
+`uncited-quote`
+: A `<q>` or `<blockquote>` is not inside a citation, so no verifier can check
+  it against a source. This is a warning. See
+  [Quotations](../reference/markup.md#quotations).
+
+`quote-citation-without-source`
+: A quote is inside a `<cite>` whose text names no valid reference id such as
+  `PMID:123`. The message names any id-shaped token that was rejected, such as
+  `PMID:1~~`. This is an error.
+
+`rejected-reference-id`
+: The citation around a quote names an id-shaped token that is not valid, such
+  as `PMID:1~~`, and no other finding already names it. When a valid id is also
+  present, the quote is not attributed to it alone: `QuoteClaim.source` is
+  `None`. This is an error.
+
+`quote-citation-with-several-sources`
+: The citation around a quote names more than one reference id: a `<cite>`
+  with several ids, or a `<figcaption>` with several `<cite>` elements. A quote
+  must cite exactly one source. This is an error.
+
+`empty-quote`
+: A `<q>` or `<blockquote>` inside a citation has no text. This is an error.
+
+`unclosed-quote`
+: A `<q>` or `<blockquote>` has no end tag, so its text runs to the end of the
+  document and quotations after it are not parsed. This is an error.
+
+`unclosed-citation`
+: The `<cite>` or `<figure>` around a properly closed quote has no end tag, so
+  the citation may name the wrong source. This is an error.
+
+`executable-markup-in-quote`
+: A quote or its citation text contains a `<code>` element or result span.
+  `provedown verify` still executes it; mark up code quoted from a source with
+  `<samp>` and keep reference ids out of `<code>`. This is a warning.
+
 ## Justify Explicitly Unverified Claims
 
 When a claim is intentionally outside the verifier's scope, mark it with

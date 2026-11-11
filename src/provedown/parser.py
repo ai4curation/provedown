@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import re
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
@@ -16,8 +17,46 @@ from provedown.model import (
     Document,
     DocumentEvent,
     ProvedownConfig,
+    QuoteClaim,
     ResultAssertion,
     SourceLocation,
+)
+
+# A reference id in citation text: a CURIE-like ``prefix:local`` token such as
+# ``PMID:18467591``, ``DOI:10.1016/...``, ``Reactome:R-HSA-75899`` or
+# ``file:genes/x.txt``. Commas and semicolons separate ids from each other and
+# from the quote, so they never belong to one.
+# Markdown code and emphasis markers around an id (`PMID:1`, **PMID:1**,
+# _PMID:1_) are not part of it, so they are excluded from the body or trimmed.
+_SOURCE_ID_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9/:.-])[A-Za-z][\w.-]*:[^\s,;\[\]`*]+"
+)
+_VALID_SOURCE_ID = re.compile(r"[A-Za-z][\w.-]*:[\w.\-/():#%+=&?@]*[\w/)#]")
+# The target of a Markdown link, ``[text](target "title")``: the id is the link
+# text. A target may hold one level of balanced parentheses, as DOIs often do.
+_MARKDOWN_LINK_TARGET = re.compile(
+    r'\]\((?:[^()\s]|\([^()\s]*\))*(?:\s+"[^"]*")?\)'
+)
+# A bare link (http, ftp, mailto) is where a source lives, not a reference id
+# for it; a URL source is written with a ``url:`` prefix.
+_WEB_LINK_PREFIXES = frozenset({"http", "https", "ftp", "mailto"})
+_SOURCE_ID_TRAILING = ".:_"
+_CLOSING_BRACKETS = {")": "(", "]": "[", "}": "{"}
+# Start tags that, skipped inside an ignored region, lose markup that would
+# otherwise be parsed: quotations, citations and code.
+_SWALLOWABLE_TAGS = frozenset({"q", "blockquote", "cite", "figure", "code"})
+
+
+def _is_swallowable(tag: str, attr_map: Mapping[str, str]) -> bool:
+    """Whether skipping this start tag loses markup that would be parsed."""
+
+    is_result = tag == "span" and _has_class(attr_map, "result")
+    return tag in _SWALLOWABLE_TAGS or is_result
+
+
+# Elements whose boundaries separate words in quoted and citation text.
+_QUOTE_WORD_BREAK_TAGS = frozenset(
+    {"br", "p", "div", "li", "tr", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6"}
 )
 
 
@@ -65,6 +104,70 @@ class _ResultBuilder:
         )
 
 
+@dataclass
+class _QuoteBuilder:
+    location: SourceLocation
+    element: str
+    owner: _CiteBuilder | _FigureBuilder | None
+    depth: int = 1
+    parts: list[str] = field(default_factory=list)
+    unclosed: bool = False
+    citation_unclosed: bool = False
+    contains_executable_markup: bool = False
+
+    def build(
+        self,
+        citation: str | None = None,
+        citation_location: SourceLocation | None = None,
+        citation_executable: bool = False,
+    ) -> QuoteClaim:
+        sources, rejected = (
+            _source_id_candidates(citation) if citation is not None else ((), ())
+        )
+        return QuoteClaim(
+            text=_collapse_whitespace("".join(self.parts)),
+            location=self.location,
+            element=self.element,
+            citation=citation,
+            citation_location=citation_location,
+            sources=sources,
+            rejected_sources=rejected,
+            unclosed=self.unclosed,
+            citation_unclosed=self.citation_unclosed,
+            contains_executable_markup=(
+                self.contains_executable_markup or citation_executable
+            ),
+        )
+
+
+@dataclass
+class _CiteBuilder:
+    location: SourceLocation
+    parts: list[str] = field(default_factory=list)
+    quotes: list[_QuoteBuilder] = field(default_factory=list)
+    contains_executable_markup: bool = False
+    # The tag of an ignore-marked element of its own kind opened inside it.
+    ignored_own_kind: str = ""
+    # An ignored region inside it ended on another element's end tag.
+    ignored_region_leaked: bool = False
+
+    @property
+    def text(self) -> str:
+        return _collapse_whitespace("".join(self.parts))
+
+
+@dataclass
+class _FigureBuilder:
+    location: SourceLocation
+    caption_depth: int = 0
+    quotes: list[_QuoteBuilder] = field(default_factory=list)
+    captions: list[_CiteBuilder] = field(default_factory=list)
+    # The tag of an ignore-marked element of its own kind opened inside it.
+    ignored_own_kind: str = ""
+    # An ignored region inside it ended on another element's end tag.
+    ignored_region_leaked: bool = False
+
+
 @dataclass(frozen=True)
 class _Frontmatter:
     data: Mapping[str, Any] = field(default_factory=dict)
@@ -90,6 +193,30 @@ class _ProvedownHTMLParser(HTMLParser):
         self._code: _CodeBuilder | None = None
         self._results: list[_ResultBuilder] = []
         self._ignore_depth = 0
+        # Set while a parse_* override copies a markup span into open code, so
+        # a nested parse_* call (end tag -> bogus comment) does not copy twice.
+        self._keeping_in_code = False
+        self._ignore_location: SourceLocation | None = None
+        # The quote or citation markup the current ignored region began in, the
+        # end tags that can end it, and how many of those were opened inside the
+        # region, so the owner's own end tag still closes it if the region was
+        # left open; that region is then reported as unclosed.
+        self._ignore_owner: _QuoteBuilder | _CiteBuilder | _FigureBuilder | None = None
+        self._ignore_owner_ends: frozenset[str] = frozenset()
+        self._ignored_owner_tags: dict[str, int] = {}
+        self._ignore_opening_tag = ""
+        # The owner-kind end tag the region consumed, if any.
+        self._region_took_owner_end_tag = ""
+        # Whether the region's own end tag has passed while it stays open.
+        self._region_closed_over_owner_kind = False
+        # Elements named like the region's opener, opened inside it and open.
+        self._ignored_opener_tags = 0
+        # Whether the current region skipped markup that would otherwise be
+        # parsed: a quotation, citation, code block or result span.
+        self._region_skipped_markup = False
+        self.quotes: list[QuoteClaim] = []
+        self._quote: _QuoteBuilder | None = None
+        self._quote_containers: list[_CiteBuilder | _FigureBuilder] = []
 
     def handle_starttag(
         self,
@@ -101,21 +228,38 @@ class _ProvedownHTMLParser(HTMLParser):
 
         if self._ignore_depth > 0:
             self._ignore_depth += 1
-            return
-
-        if _is_ignored_region(attr_map):
-            self._ignore_depth = 1
+            if tag in _QUOTE_WORD_BREAK_TAGS:
+                self._append_quotation_text(" ")
+            if tag == self._ignore_opening_tag:
+                # Another element named like the region's opener: its end tag
+                # is not the region's own.
+                self._ignored_opener_tags += 1
+            if self._ignore_owner is not None and tag in self._ignore_owner_ends:
+                # Counted, so its own end tag is accounted for: not skipped markup.
+                self._ignored_owner_tags[tag] = self._ignored_owner_tags.get(tag, 0) + 1
+            elif _is_swallowable(tag, attr_map):
+                self._region_skipped_markup = True
             return
 
         if self._code is not None:
+            # Checked before the ignore marker: nothing inside code is markup.
             self.diagnostics.append(
                 f"{location.display()}: nested HTML tag inside <code> was ignored"
             )
             return
 
+        if _is_ignored_region(attr_map):
+            if tag in _QUOTE_WORD_BREAK_TAGS:
+                self._append_quotation_text(" ")
+            self._start_ignored_region(tag, location)
+            return
+
         if tag == "code":
+            self._mark_executable_in_quote()
             self._start_code(attr_map, location)
             return
+
+        self._start_quote_markup(tag, location)
 
         if tag == "span" and self._results:
             self._results[-1].span_depth += 1
@@ -133,10 +277,29 @@ class _ProvedownHTMLParser(HTMLParser):
         attr_map = _attrs_to_dict(attrs)
         location = self._location()
 
-        if self._ignore_depth > 0 or _is_ignored_region(attr_map):
+        if self._ignore_depth > 0:
+            # Ignored markup still separates the visible words around it.
+            if tag in _QUOTE_WORD_BREAK_TAGS:
+                self._append_quotation_text(" ")
+            if _is_swallowable(tag, attr_map):
+                self._region_skipped_markup = True
+            return
+
+        if self._code is not None:
+            # Like any other tag inside code: no event, and a blocking diagnostic.
+            self.diagnostics.append(
+                f"{location.display()}: nested HTML tag inside <code> was ignored"
+            )
+            return
+
+        if tag in _QUOTE_WORD_BREAK_TAGS:
+            self._append_quotation_text(" ")
+
+        if _is_ignored_region(attr_map):
             return
 
         if tag == "code":
+            self._mark_executable_in_quote()
             if "use" in attr_map:
                 self._append_code_use(attr_map, location)
             else:
@@ -156,6 +319,11 @@ class _ProvedownHTMLParser(HTMLParser):
             self._finish_result()
 
     def handle_data(self, data: str) -> None:
+        # Visible text belongs to a quote or citation around it, even inside an
+        # ignored region or a code block: the ignore marker keeps markup out of
+        # the executable contract, never words out of a verbatim quote.
+        self._append_quotation_text(data)
+
         if self._ignore_depth > 0:
             return
 
@@ -166,6 +334,46 @@ class _ProvedownHTMLParser(HTMLParser):
         if self._results and self._results[-1].method_depth == 0:
             self._results[-1].parts.append(data)
 
+    # End tags, comments, declarations and processing instructions inside
+    # <code> are code text, exactly as written: dropping one would turn a check
+    # on "</p>" or "<!-- x -->" into a check on "". The base parser hands these
+    # to handlers without their source text (or, for "</>", to no handler), so
+    # these overrides of internal HTMLParser hooks copy the span it consumed.
+    # Tests pin "</P >", "</>", "</ p>", comments, declarations and PIs.
+
+    def parse_endtag(self, i: int) -> int:
+        return self._keep_in_code(super().parse_endtag, i)
+
+    def parse_comment(self, i: int, report: bool = True) -> int:
+        return self._keep_in_code(
+            lambda j: HTMLParser.parse_comment(self, j, report), i
+        )
+
+    def parse_bogus_comment(self, i: int, report: bool = True) -> int:
+        return self._keep_in_code(
+            lambda j: HTMLParser.parse_bogus_comment(self, j, report), i
+        )
+
+    def parse_html_declaration(self, i: int) -> int:
+        return self._keep_in_code(super().parse_html_declaration, i)
+
+    def parse_pi(self, i: int) -> int:
+        return self._keep_in_code(super().parse_pi, i)
+
+    def _keep_in_code(self, parse: Callable[[int], int], i: int) -> int:
+        if self._keeping_in_code:
+            return parse(i)
+        code_before = self._code
+        self._keeping_in_code = True
+        try:
+            end = parse(i)
+        finally:
+            self._keeping_in_code = False
+        # Not for the </code> that closes the block, which ends the code.
+        if end > i and code_before is not None and self._code is code_before:
+            code_before.parts.append(self.rawdata[i:end])
+        return end
+
     def handle_entityref(self, name: str) -> None:
         self.handle_data(f"&{name};")
 
@@ -174,14 +382,52 @@ class _ProvedownHTMLParser(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         if self._ignore_depth > 0:
-            self._ignore_depth -= 1
-            return
+            if self._is_owner_end_tag(tag):
+                # The quote or citation the region began in ends here while the
+                # region is still open: end the region too, and report it.
+                self._report_unclosed_ignored_region()
+                self._end_ignored_region()
+            else:
+                if tag == self._ignore_opening_tag and self._ignored_opener_tags > 0:
+                    # It closes a nested element named like the opener.
+                    self._ignored_opener_tags -= 1
+                elif (
+                    tag == self._ignore_opening_tag
+                    and tag not in self._ignore_owner_ends
+                ):
+                    # The region's own end tag has passed while the region is
+                    # still open: an owner-kind end tag consumed from here on
+                    # is most likely the owner's.
+                    self._region_closed_over_owner_kind = True
+                if self._ignored_owner_tags.get(tag, 0) > 0:
+                    # It closes the same tag opened inside the region. If that
+                    # element lacked its own end tag, this is the owner's; what
+                    # that loses is decided when the region ends.
+                    self._ignored_owner_tags[tag] -= 1
+                    if (
+                        tag == self._ignore_opening_tag
+                        or self._region_closed_over_owner_kind
+                    ):
+                        self._region_took_owner_end_tag = tag
+                self._ignore_depth -= 1
+                if self._ignore_depth == 0:
+                    self._mark_owner_losses(tag)
+                    self._end_ignored_region()
+                if tag in _QUOTE_WORD_BREAK_TAGS:
+                    self._append_quotation_text(" ")
+                return
 
         if tag == "code" and self._code is not None:
             code = self._code.build()
             self._code = None
             self._append_code_block(code)
             return
+
+        if self._code is not None:
+            # Code text; parse_endtag copies its exact source span.
+            return
+
+        self._end_quote_markup(tag)
 
         if tag == "span" and self._results:
             current = self._results[-1]
@@ -193,6 +439,9 @@ class _ProvedownHTMLParser(HTMLParser):
 
     def close(self) -> None:
         super().close()
+        if self._ignore_depth > 0:
+            # Everything after it was skipped, so nothing there was checked.
+            self._report_unclosed_ignored_region()
         if self._code is not None:
             self.diagnostics.append(
                 f"{self._code.location.display()}: unclosed <code> block"
@@ -206,6 +455,155 @@ class _ProvedownHTMLParser(HTMLParser):
                 f"{result.location.display()}: unclosed result span"
             )
             self._finish_result()
+        # Unclosed quote markup is reported by lint rather than as a parser
+        # diagnostic, so it never blocks the document's executable checks.
+        if self._quote is not None:
+            self._quote.unclosed = True
+            self._finish_quote()
+        while self._quote_containers:
+            container = self._quote_containers[-1]
+            kind = container.ignored_own_kind
+            if kind and not container.quotes:
+                # No quotation can carry the unclosed-citation lint: its end tag
+                # most likely closed an ignored element of the same kind that
+                # lacked one, so what the region skipped was lost.
+                outer = "cite" if isinstance(container, _CiteBuilder) else "figure"
+                self.diagnostics.append(
+                    f"{container.location.display()}: unclosed <{outer}> holding "
+                    f"no quotation; most likely a <{kind}> in an ignored region "
+                    "inside it has no end tag"
+                )
+            # An unclosed container is reported above, or by lint through its
+            # quotations; finishing it below must not report it again.
+            container.ignored_region_leaked = False
+            for quote in container.quotes:
+                # An unclosed quote already says its text is untrustworthy.
+                quote.citation_unclosed = not quote.unclosed
+            self._finish_quote_container()
+
+    def _start_quote_markup(self, tag: str, location: SourceLocation) -> None:
+        """Track the elements that make up a cited quotation.
+
+        Markup inside an open quote is part of the quoted text, so only a
+        nested quote of the same element is tracked there, to find its end.
+        Even a ``</cite>`` or ``</figure>`` end tag does not close an open
+        quote: a stray end tag cannot be told apart from a missing ``</q>``
+        without reading ahead, and treating it as quoted text never truncates
+        the quote. A quote whose end tag is missing runs to the end of the
+        document and is marked ``unclosed``.
+        """
+
+        if tag in _QUOTE_WORD_BREAK_TAGS:
+            self._append_quotation_text(" ")
+
+        if self._quote is not None:
+            if tag == self._quote.element:
+                self._quote.depth += 1
+            return
+
+        if tag in {"q", "blockquote"}:
+            owner = self._quote_containers[-1] if self._quote_containers else None
+            self._quote = _QuoteBuilder(location=location, element=tag, owner=owner)
+        elif tag == "cite":
+            self._quote_containers.append(_CiteBuilder(location=location))
+        elif tag == "figure":
+            self._quote_containers.append(_FigureBuilder(location=location))
+        elif tag == "figcaption" and self._quote_containers:
+            container = self._quote_containers[-1]
+            if isinstance(container, _FigureBuilder):
+                container.caption_depth += 1
+
+    def _end_quote_markup(self, tag: str) -> None:
+        if tag in _QUOTE_WORD_BREAK_TAGS:
+            self._append_quotation_text(" ")
+
+        if self._quote is not None:
+            if tag == self._quote.element:
+                self._quote.depth -= 1
+                if self._quote.depth == 0:
+                    self._finish_quote()
+            return
+
+        if not self._quote_containers:
+            return
+        container = self._quote_containers[-1]
+        if _closes_container(tag, container):
+            if (
+                isinstance(container, _FigureBuilder)
+                and container.caption_depth > 0
+                and container.ignored_own_kind == "figcaption"
+            ):
+                # An ignored <figcaption> took the caption's end tag, and the
+                # caption's citation was skipped with it.
+                self.diagnostics.append(
+                    f"{container.location.display()}: unclosed <figcaption>; "
+                    "most likely a <figcaption> in an ignored region inside it "
+                    "has no end tag"
+                )
+                # Reported once: finishing it below must not report it again.
+                container.ignored_region_leaked = False
+            self._finish_quote_container()
+        elif (
+            tag == "figcaption"
+            and isinstance(container, _FigureBuilder)
+            and container.caption_depth > 0
+        ):
+            container.caption_depth -= 1
+
+    def _finish_quote(self) -> None:
+        assert self._quote is not None
+        quote = self._quote
+        self._quote = None
+        if quote.owner is None:
+            self.quotes.append(quote.build())
+        else:
+            quote.owner.quotes.append(quote)
+
+    def _finish_quote_container(self) -> None:
+        container = self._quote_containers.pop()
+        if container.ignored_region_leaked:
+            # A leaked ignored region skipped quotation markup; a stray end tag
+            # closed the container after the region took the real one. Any
+            # quotation that survived carries no lint for the ones lost.
+            kind = "cite" if isinstance(container, _CiteBuilder) else "figure"
+            self.diagnostics.append(
+                f"{container.location.display()}: <{kind}> lost the quotation "
+                "markup an ignored region inside it skipped; most likely an "
+                "element in that region has no end tag"
+            )
+        if isinstance(container, _CiteBuilder):
+            for quote in container.quotes:
+                self.quotes.append(
+                    quote.build(
+                        container.text,
+                        container.location,
+                        container.contains_executable_markup,
+                    )
+                )
+            parent = self._quote_containers[-1] if self._quote_containers else None
+            if isinstance(parent, _FigureBuilder) and parent.caption_depth > 0:
+                parent.captions.append(container)
+            elif isinstance(parent, _CiteBuilder):
+                # A nested citation's text is part of the enclosing citation,
+                # kept apart from the words around it.
+                parent.parts.append(f" {container.text} ")
+            return
+
+        citation = (
+            " ".join(caption.text for caption in container.captions)
+            if container.captions
+            else None
+        )
+        citation_location = (
+            container.captions[0].location if container.captions else None
+        )
+        citation_executable = any(
+            caption.contains_executable_markup for caption in container.captions
+        )
+        for quote in container.quotes:
+            self.quotes.append(
+                quote.build(citation, citation_location, citation_executable)
+            )
 
     def _start_code(
         self,
@@ -222,6 +620,112 @@ class _ProvedownHTMLParser(HTMLParser):
             language=_language(attr_map, self.default_language),
             attributes=attr_map,
         )
+
+    def _start_ignored_region(self, tag: str, location: SourceLocation) -> None:
+        self._ignore_depth = 1
+        self._ignore_location = location
+        self._ignore_opening_tag = tag
+        if self._quote is not None:
+            self._ignore_owner = self._quote
+            self._ignore_owner_ends = frozenset({self._quote.element})
+        elif self._quote_containers:
+            container = self._quote_containers[-1]
+            self._ignore_owner = container
+            if isinstance(container, _CiteBuilder):
+                self._ignore_owner_ends = frozenset({"cite"})
+            elif container.caption_depth > 0:
+                # Inside a caption, its end tag comes first, but the figure's
+                # still ends the region if the caption's is missing.
+                self._ignore_owner_ends = frozenset({"figcaption", "figure"})
+            else:
+                self._ignore_owner_ends = frozenset({"figure"})
+        else:
+            self._ignore_owner = None
+            self._ignore_owner_ends = frozenset()
+        # The opening element counts too when it is of the owner's own kind, so
+        # its end tag is not taken for the owner's.
+        self._ignored_owner_tags = {tag: 1} if tag in self._ignore_owner_ends else {}
+        self._region_skipped_markup = False
+        self._region_took_owner_end_tag = ""
+        self._region_closed_over_owner_kind = False
+        self._ignored_opener_tags = 0
+
+    def _mark_owner_losses(self, ending_tag: str) -> None:
+        """Record on the owner container what a region that took its end tag lost.
+
+        Only a region that skipped markup lost anything. Its owner may still be
+        reported at the end of the document (``ignored_own_kind``) or, if the
+        region ended on another element's end tag so its own was taken earlier,
+        even when a stray end tag closes the owner later (``ignored_region_leaked``).
+        """
+
+        owner = self._ignore_owner
+        took = self._region_took_owner_end_tag
+        if not took or not self._region_skipped_markup:
+            return
+        if isinstance(owner, _QuoteBuilder | None):
+            return
+        owner.ignored_own_kind = took
+        if ending_tag != self._ignore_opening_tag:
+            owner.ignored_region_leaked = True
+
+    def _end_ignored_region(self) -> None:
+        self._ignore_depth = 0
+        self._ignore_location = None
+        self._ignore_owner = None
+        self._ignore_owner_ends = frozenset()
+        self._ignored_owner_tags = {}
+        self._region_skipped_markup = False
+        self._ignore_opening_tag = ""
+        self._region_took_owner_end_tag = ""
+        self._region_closed_over_owner_kind = False
+        self._ignored_opener_tags = 0
+
+    def _is_owner_end_tag(self, tag: str) -> bool:
+        """Whether ``tag`` ends the markup the current ignored region began in."""
+
+        owner = self._ignore_owner
+        if owner is None or tag not in self._ignore_owner_ends:
+            return False
+        if self._ignored_owner_tags.get(tag, 0) > 0:
+            return False
+        if isinstance(owner, _QuoteBuilder):
+            return owner is self._quote
+        return bool(self._quote_containers) and owner is self._quote_containers[-1]
+
+    def _report_unclosed_ignored_region(self) -> None:
+        assert self._ignore_location is not None
+        self.diagnostics.append(
+            f"{self._ignore_location.display()}: unclosed ignored region; "
+            "most likely a void element such as <br> inside or carrying the "
+            "ignore marker, which counts as an open element, or a missing end tag"
+        )
+
+    def _append_quotation_text(self, text: str) -> None:
+        """Add visible text to the open quote, or else to the open citation."""
+
+        if self._quote is not None:
+            self._quote.parts.append(text)
+        elif self._quote_containers and isinstance(
+            self._quote_containers[-1], _CiteBuilder
+        ):
+            self._quote_containers[-1].parts.append(text)
+
+    def _mark_executable_in_quote(self) -> None:
+        """Record executable markup inside the open quote or citation text.
+
+        Quote markup never changes what is executable: a ``<code>`` or result
+        span runs wherever it is. This only lets lint warn about it, since
+        quoted code is better marked up with ``<samp>`` and an id should not be
+        executable code.
+        """
+
+        if self._quote is not None:
+            self._quote.contains_executable_markup = True
+        elif self._quote_containers and isinstance(
+            self._quote_containers[-1], _CiteBuilder
+        ):
+            self._quote_containers[-1].contains_executable_markup = True
 
     def _append_code_use(
         self,
@@ -257,6 +761,7 @@ class _ProvedownHTMLParser(HTMLParser):
         attr_map: Mapping[str, str],
         location: SourceLocation,
     ) -> None:
+        self._mark_executable_in_quote()
         code = attr_map.get("data-code", "").strip()
         if not code:
             self.diagnostics.append(
@@ -308,11 +813,81 @@ def parse_document(source: str, path: Path | None = None) -> Document:
         frontmatter=frontmatter.data,
         provedown=frontmatter.provedown,
         diagnostics=parser.diagnostics,
+        quotes=sorted(
+            parser.quotes,
+            key=lambda quote: (quote.location.line, quote.location.column),
+        ),
     )
 
 
 def parse_file(path: Path) -> Document:
     return parse_document(path.read_text(encoding="utf-8"), path=path)
+
+
+def source_ids(citation: str) -> tuple[str, ...]:
+    """Return the reference ids named in a citation's text, in order.
+
+    >>> source_ids("PMID:18467591,")
+    ('PMID:18467591',)
+    >>> source_ids("Smith et al. (DOI:10.1016/S0092-8674(00)81141-4).")
+    ('DOI:10.1016/S0092-8674(00)81141-4',)
+    >>> source_ids("PMID:1; Reactome:R-HSA-75899 and file:genes/x.txt")
+    ('PMID:1', 'Reactome:R-HSA-75899', 'file:genes/x.txt')
+    >>> source_ids("[PMID:123](https://pubmed.ncbi.nlm.nih.gov/123/),")
+    ('PMID:123',)
+    >>> source_ids("PMID:1 (https://pubmed.ncbi.nlm.nih.gov/1/)")
+    ('PMID:1',)
+    >>> source_ids("Smith 2020, 10:30, Figure:.")
+    ()
+    """
+
+    return _source_id_candidates(citation)[0]
+
+
+def _source_id_candidates(citation: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Split a citation's id-shaped tokens into valid ids and rejected ones.
+
+    A web link is neither: it is where a source lives, so it is skipped. A
+    rejected token looks like an id but holds a character an id cannot, such
+    as leftover markup; lint names it so the author can see what was refused.
+    """
+
+    valid: list[str] = []
+    rejected: list[str] = []
+    for match in _SOURCE_ID_PATTERN.finditer(_MARKDOWN_LINK_TARGET.sub("]", citation)):
+        candidate = _trim_source_id(match.group(0))
+        if candidate.split(":", 1)[0].lower() in _WEB_LINK_PREFIXES:
+            continue
+        if _VALID_SOURCE_ID.fullmatch(candidate):
+            valid.append(candidate)
+        elif ":" in candidate and candidate.split(":", 1)[1]:
+            rejected.append(candidate)
+    # A repeated id names the same source once.
+    return tuple(dict.fromkeys(valid)), tuple(dict.fromkeys(rejected))
+
+
+def _trim_source_id(token: str) -> str:
+    """Drop sentence punctuation and unbalanced closing brackets from an id."""
+
+    while token:
+        last = token[-1]
+        unbalanced = last in _CLOSING_BRACKETS and token.count(last) > token.count(
+            _CLOSING_BRACKETS[last]
+        )
+        if last not in _SOURCE_ID_TRAILING and not unbalanced:
+            break
+        token = token[:-1]
+    return token
+
+
+def _closes_container(tag: str, container: _CiteBuilder | _FigureBuilder) -> bool:
+    if isinstance(container, _CiteBuilder):
+        return tag == "cite"
+    return tag == "figure"
+
+
+def _collapse_whitespace(text: str) -> str:
+    return " ".join(text.split())
 
 
 def _extract_frontmatter(source: str, path: Path | None) -> _Frontmatter:
