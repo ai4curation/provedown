@@ -18,7 +18,7 @@ from provedown.integrations.okf import parse_okf_file, verify_okf_file
 from provedown.linting import LintReport, lint_document, lint_file
 from provedown.report import Finding, Report, Status
 from provedown.runner import verify_file
-from provedown.verifiers import default_registry
+from provedown.verifiers import PluginLoadError, default_registry
 
 OKF_HELP = (
     "treat inputs as Open Knowledge Format documents and lift an attested "
@@ -30,6 +30,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
+    try:
+        return _run(parser, args)
+    except PluginLoadError as exc:
+        print(f"provedown: {exc}", file=sys.stderr)
+        return 2
+
+
+def _run(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     if args.command == "verify":
         return _verify(args)
     if args.command == "inspect":

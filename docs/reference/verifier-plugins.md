@@ -99,4 +99,32 @@ gate.
 The default registry currently includes:
 
 - `python-results` for `python` and `py` code;
-- `sql-results` for `sql`, `duckdb`, and `duckdb-sql` code.
+- `sql-results` for `sql`, `duckdb`, and `duckdb-sql` code;
+- every verifier that an installed package publishes as a plugin (see below).
+
+## Publishing A Plugin
+
+A package publishes verifiers under the `provedown.verifiers` entry-point
+group. Each entry point names a verifier class, or any callable that takes no
+arguments and returns a verifier:
+
+```toml
+# pyproject.toml of the plugin package
+[project.entry-points."provedown.verifiers"]
+quotes = "my_package.provedown_plugin:QuoteVerifier"
+```
+
+Once that package is installed alongside Provedown, `default_registry()` loads
+the verifier, `provedown list-verifiers` lists it, and `provedown verify` runs
+it with the built-in verifiers or alone with `--verifier <id>`.
+
+Entry points load in name order. A plugin may not reuse the id of a verifier
+that is already registered. A plugin that cannot be imported or constructed,
+or that reuses an id, raises `PluginLoadError` naming the entry point and the
+package that provides it; the CLI prints that message and exits with status 2.
+Call `default_registry(plugins=False)` to get only the built-in verifiers, and
+`load_plugin_verifiers()` to inspect what is installed.
+
+A plugin runs in the Provedown process, so install only plugins you trust. A
+verifier that does not execute document code, such as one that checks quoted
+text against its sources, can ignore `context.sandbox`.
