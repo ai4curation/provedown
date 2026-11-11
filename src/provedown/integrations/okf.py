@@ -37,6 +37,7 @@ placeholders replaced by literals.
 from __future__ import annotations
 
 import dataclasses
+import os
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -188,10 +189,11 @@ class OkfDocument:
 def parse_okf_document(source: str, path: Path | None = None) -> OkfDocument:
     """Parse an OKF document and lift its computation into executable markup.
 
-    A string ``path`` from an untyped caller is converted to a ``Path``.
+    A ``str`` or other path-like ``path`` from an untyped caller is converted to
+    a ``Path``.
     """
 
-    if isinstance(path, str):
+    if isinstance(path, str | os.PathLike) and not isinstance(path, Path):
         path = Path(path)
     base = parse_document(source, path=path)
     metadata = _metadata(base.frontmatter)

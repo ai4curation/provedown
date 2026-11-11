@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Protocol
 
 from provedown.compare import ComparatorRegistry, default_comparators
-from provedown.model import Document, SourceLocation
+from provedown.model import Document
 from provedown.report import Finding, Report, Status
 
 # Installed packages advertise verifiers under this entry-point group. Each
@@ -153,7 +153,7 @@ def _run_verifier(
     """
 
     findings: list[Finding] = []
-    location = SourceLocation(path=document.path, line=1, column=1)
+    location = document.start_location()
     try:
         results = verifier.verify(document, context)
         try:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
-from provedown.model import Document, SourceLocation
+from provedown.model import Document
 from provedown.parser import parse_file
 from provedown.report import Finding, Report, Status
 from provedown.verifiers import VerificationContext, VerifierRegistry, default_registry
@@ -45,7 +45,7 @@ def verify_document(
             Finding(
                 verifier_id=PARSER_VERIFIER_ID,
                 status=Status.SKIP,
-                location=SourceLocation(path=document.path, line=1, column=1),
+                location=document.start_location(),
                 message=VERIFICATION_SKIPPED_MESSAGE,
             )
         )
@@ -78,7 +78,7 @@ def verify_file(
 
 
 def _diagnostic_findings(document: Document) -> Iterable[Finding]:
-    location = SourceLocation(path=document.path, line=1, column=1)
+    location = document.start_location()
     for diagnostic in document.diagnostics:
         yield Finding(
             verifier_id=PARSER_VERIFIER_ID,

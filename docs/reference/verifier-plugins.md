@@ -59,8 +59,8 @@ Each finding has:
 `location`
 : A `SourceLocation` for the relevant document item, such as an event's or
   quote's `location`. Its `path` must be a `Path` or `None` and render as
-  text, and its `line` and `column` must be `int`s. Anything else raises
-  `TypeError`.
+  text (a `str` or other path-like is converted to a `Path`), and its `line`
+  and `column` must be `int`s. Anything else raises `TypeError`.
 
 `message`
 : Human-readable explanation, as a `str`.

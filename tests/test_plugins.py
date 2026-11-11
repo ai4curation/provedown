@@ -1096,3 +1096,23 @@ def test_string_paths_from_untyped_callers_never_break_the_safety_net(
 
     okf = parse_okf_document("plain text", path="notes.md")  # type: ignore[arg-type]
     assert okf.document.path == Path("notes.md")
+
+
+def test_path_likes_are_converted_and_the_net_survives_any_path(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    import dataclasses
+    import os
+
+    install_plugin(tmp_path, monkeypatch, {"crashing": "countplugin:CrashingVerifier"})
+    (tmp_path / "notes.md").write_text("x")
+    [entry] = [e for e in os.scandir(tmp_path) if e.name == "notes.md"]
+    base = parse_document("<pre><code>x = 1</code></pre>")
+
+    converted = dataclasses.replace(base, path=entry)  # type: ignore[arg-type]
+    assert converted.path == tmp_path / "notes.md"
+
+    # A path no caller should pass still yields attributed findings, not a crash.
+    odd = dataclasses.replace(base, path=b"notes.md")  # type: ignore[arg-type]
+    errors = [f for f in verify_document(odd).findings if f.status == Status.ERROR]
+    assert errors and all(f.location.path is None for f in errors)
