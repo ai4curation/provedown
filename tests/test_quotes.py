@@ -198,13 +198,43 @@ def test_unclosed_quote_is_flagged_without_blocking_verification() -> None:
     ]
 
 
-def test_quotes_in_an_unclosed_citation_are_flagged() -> None:
-    document = parse_document("<cite>PMID:20, <q>complete</q> but no end tag")
+def test_quote_in_an_unclosed_citation_keeps_its_text_trustworthy() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<cite>PMID:20, <q>complete</q> but no end tag",
+                "<figure><blockquote>A</blockquote>"
+                "<figcaption><cite>PMID:21</cite></figcaption>",
+            ]
+        )
+    )
 
     assert document.diagnostics == []
-    assert [(quote.text, quote.unclosed) for quote in document.quotes] == [
-        ("complete", True)
+    assert [
+        (quote.text, quote.unclosed, quote.citation_unclosed)
+        for quote in document.quotes
+    ] == [
+        ("complete", False, True),
+        ("A", False, True),
     ]
+    assert [finding.code for finding in lint_document(document).findings] == [
+        "unclosed-citation",
+        "unclosed-citation",
+    ]
+
+
+def test_quotations_after_an_unclosed_quote_are_not_parsed() -> None:
+    document = parse_document(
+        "<cite>PMID:1, <q>never closed</cite>\n\n"
+        "<cite>PMID:2, <q>a real claim</q></cite>"
+    )
+
+    assert [(quote.text, quote.unclosed) for quote in document.quotes] == [
+        ("never closed PMID:2, a real claim", True)
+    ]
+    [finding] = lint_document(document).findings
+    assert finding.code == "unclosed-quote"
+    assert "quotations after it are not parsed" in finding.message
 
 
 def test_nested_or_stray_cite_end_tag_does_not_truncate_a_quote() -> None:
@@ -236,12 +266,33 @@ def test_figure_nested_in_a_figure_blockquote_keeps_the_caption() -> None:
     ]
 
 
-def test_code_inside_a_quote_is_part_of_the_quoted_text() -> None:
+def test_code_inside_a_quote_is_quoted_text_not_an_executable_cell() -> None:
     document = parse_document(
-        "<cite>PMID:24, <q>the gene <code>ERG9</code> is required</q></cite>"
+        "\n".join(
+            [
+                "<cite>PMID:24, <q>the gene <code>ERG9</code> is required</q></cite>",
+                '<figure><blockquote><pre><code name="quoted">',
+                'os.system("rm -rf /tmp/x")',
+                '</code></pre><code use="quoted"/><code/></blockquote>',
+                "<figcaption><cite>PMID:25</cite></figcaption></figure>",
+            ]
+        )
     )
 
-    assert document.quotes[0].text == "the gene ERG9 is required"
+    assert document.events == []
+    assert document.named_code == {}
+    assert [quote.text for quote in document.quotes] == [
+        "the gene ERG9 is required",
+        'os.system("rm -rf /tmp/x")',
+    ]
+    assert verify_document(document).ok
+
+
+def test_unclosed_code_inside_a_quote_keeps_its_text() -> None:
+    document = parse_document("<cite>PMID:26, <q>see <code>gene X")
+
+    assert document.events == []
+    assert document.quotes[0].text == "see gene X"
 
 
 def test_quote_markup_alone_does_not_add_events_or_block_verification() -> None:
@@ -325,3 +376,36 @@ def test_trimmed_tokens_without_a_local_part_are_not_sources() -> None:
     document = parse_document("<cite>see Figure:. PMID:26, <q>text</q></cite>")
 
     assert document.quotes[0].sources == ("PMID:26",)
+
+
+def test_markdown_link_targets_with_titles_or_parentheses_are_not_sources() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                '<cite>[PMID:27](https://doi.org/10.1/x "title"), <q>a</q></cite>',
+                "<cite>[DOI:10.1016/S0092-8674(00)81141-4]"
+                "(https://doi.org/10.1016/S0092-8674(00)81141-4), <q>b</q></cite>",
+            ]
+        )
+    )
+
+    assert [quote.sources for quote in document.quotes] == [
+        ("PMID:27",),
+        ("DOI:10.1016/S0092-8674(00)81141-4",),
+    ]
+
+
+def test_bare_web_links_are_not_reference_ids() -> None:
+    document = parse_document(
+        "\n".join(
+            [
+                "<cite>PMID:28 (https://pubmed.ncbi.nlm.nih.gov/28/), <q>a</q></cite>",
+                "<cite>url:https://example.org/paper, <q>b</q></cite>",
+            ]
+        )
+    )
+
+    assert [quote.sources for quote in document.quotes] == [
+        ("PMID:28",),
+        ("url:https://example.org/paper",),
+    ]

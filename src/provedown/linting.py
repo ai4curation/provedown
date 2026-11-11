@@ -161,8 +161,8 @@ def _add_quote_lints(
     A quote outside any citation is ordinary HTML, so it is only a warning. A
     quote inside a citation claims to be verbatim, so a citation that does not
     name exactly one source, or a quote with no text, is an error. Unclosed
-    quote markup is an error wherever it is, because it swallows the text after
-    it.
+    quote markup is an error wherever it is: an unclosed quote swallows the
+    rest of the document, and an unclosed citation may name the wrong source.
     """
 
     for quote in document.quotes:
@@ -173,9 +173,23 @@ def _add_quote_lints(
                     code="unclosed-quote",
                     location=quote.location,
                     message=(
-                        f"<{quote.element}>, or the citation or figure around "
-                        "it, has no end tag"
+                        f"<{quote.element}> has no end tag, so its text runs to "
+                        "the end of the document and quotations after it are "
+                        "not parsed"
                     ),
+                )
+            )
+        elif quote.citation_unclosed:
+            findings.append(
+                LintFinding(
+                    level="error",
+                    code="unclosed-citation",
+                    location=quote.location,
+                    message=(
+                        "the <cite> or <figure> around this quote has no end "
+                        "tag, so its citation may name the wrong source"
+                    ),
+                    target=quote.citation,
                 )
             )
         elif quote.citation is None:

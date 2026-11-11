@@ -80,8 +80,13 @@ Each `QuoteClaim` has:
   verifier checks `text` against this source.
 
 `unclosed`
-: True when the quote, or the citation or figure around it, has no end tag.
-  Its `text` may then run to the end of the document.
+: True when the quote's own end tag is missing. Its `text` runs to the end of
+  the document, so do not trust it, and no quotation after it was parsed.
+
+`citation_unclosed`
+: True when the `<cite>` or `<figure>` around a properly closed quote has no
+  end tag. The `text` is complete, but `citation` and `sources` may include
+  text after the quote.
 
 ## Verify Documents
 

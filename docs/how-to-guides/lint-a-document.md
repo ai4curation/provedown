@@ -74,15 +74,20 @@ JSON output is intended for CI, editor integrations, and scripts.
   `PMID:123`. This is an error.
 
 `quote-citation-with-several-sources`
-: A quote is inside a `<cite>` that names more than one reference id. Give each
-  source its own `<cite>`. This is an error.
+: The citation around a quote names more than one reference id: a `<cite>`
+  with several ids, or a `<figcaption>` with several `<cite>` elements. A quote
+  must cite exactly one source. This is an error.
 
 `empty-quote`
 : A `<q>` or `<blockquote>` inside a citation has no text. This is an error.
 
 `unclosed-quote`
-: A `<q>` or `<blockquote>`, or the `<cite>` or `<figure>` around it, has no
-  end tag, so the quote may have swallowed the text after it. This is an error.
+: A `<q>` or `<blockquote>` has no end tag, so its text runs to the end of the
+  document and quotations after it are not parsed. This is an error.
+
+`unclosed-citation`
+: The `<cite>` or `<figure>` around a properly closed quote has no end tag, so
+  the citation may name the wrong source. This is an error.
 
 ## Justify Explicitly Unverified Claims
 

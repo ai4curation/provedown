@@ -73,7 +73,8 @@ Markdown fenced code blocks and YAML frontmatter are ignored when scanning for
 Provedown HTML. HTML regions with `data-provedown-ignore="true"` or the
 `provedown-ignore` class are also ignored.
 
-In source HTML, every `<code>` element is treated as Provedown code. Put
+In source HTML, every `<code>` element is treated as Provedown code, except
+one inside a [quotation](#quotations), which is quoted text. Put other
 non-executable code samples inside an ignored region when they should only be
 shown to readers.
 
@@ -193,9 +194,11 @@ The `<cite>` scopes the claim. Its own text, outside its `<q>` elements, must
 name exactly one reference id: a `prefix:local` token such as `PMID:18467591`,
 `DOI:10.1016/...`, `Reactome:R-HSA-75899` or `file:genes/x.txt`. Commas and
 semicolons separate an id from the text around it; trailing sentence
-punctuation and unbalanced closing brackets are dropped. Each `<q>` in the
-citation is a separate claim against that source, and the id may be link text,
-from an HTML `<a>` or a Markdown `[PMID:18467591](https://...)` link:
+punctuation and unbalanced closing brackets are dropped. A bare web link such
+as `https://...` is not a reference id; write a URL source as `url:https://...`.
+Each `<q>` in the citation is a separate claim against that source, and the id
+may be link text, from an HTML `<a>` or a Markdown `[PMID:18467591](https://...)`
+link:
 
 ````markdown
 <cite><a href="https://pubmed.ncbi.nlm.nih.gov/18467591/">PMID:18467591</a>, <q>first excerpt</q> and <q>second excerpt</q></cite>
@@ -222,16 +225,20 @@ quotation marks.
 The quoted text is collected with HTML entities decoded and whitespace,
 including line wraps, collapsed to single spaces. Markup inside a quote, such as
 a nested `<q>` or a `<code>` element, is part of the quoted text, and paragraph
-or `<br>` boundaries separate words. Even a `</cite>` or `</figure>` end tag
+or `<br>` boundaries separate words. A `<code>` element inside a quote is
+quoted text only: it is never executed, and neither is a `<code use="..."/>`
+there. Even a `</cite>` or `</figure>` end tag
 inside an open quote is treated as quoted text, so a stray end tag never cuts
 a quote short. Markdown inside a quote is not rendered first, so avoid
 Markdown emphasis there.
 
-A quote whose end tag is missing runs to the end of the document. Such a quote,
-and any quote in a `<cite>` or `<figure>` without an end tag, is marked
-`unclosed` and reported by `provedown lint`. Unclosed quote markup is not a
-parser diagnostic, so it never stops a document's Python or SQL claims from
-being verified.
+A quote whose end tag is missing runs to the end of the document, so no
+quotation after it is parsed; it is marked `unclosed`. A properly closed quote
+in a `<cite>` or `<figure>` that has no end tag keeps its text, but is marked
+`citation_unclosed`, because the citation text may run on and name the wrong
+source. `provedown lint` reports both. Unclosed quote markup is not a parser
+diagnostic, so it never stops a document's Python or SQL claims from being
+verified.
 
 Quotations are parsed into `Document.quotes` as `QuoteClaim` objects, not into
 `Document.events`, because they are not executable. Provedown itself does not

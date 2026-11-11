@@ -74,9 +74,14 @@ class QuoteClaim:
 
     ``citation`` is the citation's own text, without its quotes, or ``None``
     when the quote is not inside a citation. ``sources`` are the reference ids
-    found in that text, in order. ``unclosed`` is true when the quote, or the
-    citation or figure around it, has no end tag; its text may then run to the
-    end of the document, so verifiers should not trust it.
+    found in that text, in order.
+
+    ``unclosed`` is true when the quote's own end tag is missing: its text runs
+    to the end of the document, so verifiers should not trust it, and no
+    quotation after it was parsed. ``citation_unclosed`` is true when the
+    ``<cite>`` or ``<figure>`` around a properly closed quote has no end tag:
+    the quote's text is complete, but the citation text may run on and name
+    the wrong source.
     """
 
     text: str
@@ -86,6 +91,7 @@ class QuoteClaim:
     citation_location: SourceLocation | None = None
     sources: tuple[str, ...] = ()
     unclosed: bool = False
+    citation_unclosed: bool = False
 
     @property
     def source(self) -> str | None:
