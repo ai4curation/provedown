@@ -64,7 +64,10 @@ Each finding has:
   because it appears in `--format json` output. Convert values such as `Path`
   to strings, and avoid `NaN` and infinite floats. Omit it when there is none:
   `None`, like any other value that is not such a mapping, raises `TypeError`.
-  The finding keeps its own copy.
+  Its keys must be strings. The finding keeps its own deep copy, decoded from
+  the checked JSON, so later changes to the plugin's objects do not reach it;
+  values therefore come back as JSON types (a tuple becomes a list, and keys of
+  nested mappings become strings).
 
 ## Status Semantics
 

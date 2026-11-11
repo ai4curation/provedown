@@ -51,13 +51,25 @@ class Finding:
             _require_str(name, getattr(self, name), optional=True)
         try:
             evidence = dict(self.evidence)
-            # Strict JSON: NaN and infinities are not valid in --format json.
-            json.dumps(evidence, sort_keys=True, allow_nan=False)
         except (TypeError, ValueError) as exc:
             raise TypeError(
                 f"Finding evidence must be a JSON-serializable mapping: {exc}"
             ) from exc
-        object.__setattr__(self, "evidence", evidence)
+        for key in evidence:
+            if not isinstance(key, str):
+                raise TypeError(
+                    f"Finding evidence keys must be strings, not {type(key).__name__}"
+                )
+        try:
+            # Strict JSON: NaN and infinities are not valid in --format json.
+            text = json.dumps(evidence, sort_keys=True, allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                f"Finding evidence must be a JSON-serializable mapping: {exc}"
+            ) from exc
+        # Keep a deep copy decoded from the checked text, so a plugin changing
+        # its own objects later cannot change or break this finding's evidence.
+        object.__setattr__(self, "evidence", json.loads(text))
 
     def to_dict(self) -> dict[str, Any]:
         return {

@@ -1,3 +1,5 @@
+import importlib
+import json
 import sys
 from pathlib import Path
 
@@ -985,7 +987,36 @@ def test_plain_shape_errors_carry_no_internal_chain_and_unset_slots_are_absent(
         load_plugin_verifiers()
     assert loaded.value.__cause__ is None
 
-    slotted = sys.modules["countplugin"].UnsetSlotVerifier()
+    slotted = importlib.import_module("countplugin").UnsetSlotVerifier()
     with pytest.raises(TypeError, match=r": it has no verifier_id$") as registered:
         VerifierRegistry().register(slotted)
     assert registered.value.__cause__ is None
+
+
+def test_finding_evidence_is_a_deep_copy_with_string_keys() -> None:
+    from provedown import Finding, SourceLocation
+
+    location = SourceLocation(path=None, line=1, column=1)
+    rows: list[object] = ["first"]
+    finding = Finding(
+        verifier_id="x",
+        status=Status.PASS,
+        location=location,
+        message="m",
+        evidence={"rows": rows, "span": (1, 2)},
+    )
+    # A plugin reusing its buffer cannot change or break the finding afterwards.
+    rows.append(Path("later"))
+
+    assert finding.evidence == {"rows": ["first"], "span": [1, 2]}
+    assert finding.to_dict()["evidence"] == {"rows": ["first"], "span": [1, 2]}
+    json.dumps(finding.to_dict())
+
+    with pytest.raises(TypeError, match="keys must be strings, not int"):
+        Finding(
+            verifier_id="x",
+            status=Status.PASS,
+            location=location,
+            message="m",
+            evidence={1: "a"},  # type: ignore[dict-item]
+        )
