@@ -1112,7 +1112,12 @@ def test_path_likes_are_converted_and_the_net_survives_any_path(
     converted = dataclasses.replace(base, path=entry)  # type: ignore[arg-type]
     assert converted.path == tmp_path / "notes.md"
 
-    # A path no caller should pass still yields attributed findings, not a crash.
-    odd = dataclasses.replace(base, path=b"notes.md")  # type: ignore[arg-type]
-    errors = [f for f in verify_document(odd).findings if f.status == Status.ERROR]
-    assert errors and all(f.location.path is None for f in errors)
+    class Unprintable(type(Path())):  # type: ignore[misc]
+        def __str__(self) -> str:
+            raise RuntimeError("no")
+
+    # Paths no caller should pass still yield attributed findings, not a crash.
+    for bad in (b"notes.md", Unprintable("notes.md")):
+        odd = dataclasses.replace(base, path=bad)  # type: ignore[arg-type]
+        errors = [f for f in verify_document(odd).findings if f.status == Status.ERROR]
+        assert errors and all(f.location.path is None for f in errors), bad

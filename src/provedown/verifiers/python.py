@@ -233,7 +233,7 @@ def _deferred_code_names(document: Document) -> set[str]:
 
 
 def _document_location(document: Document) -> SourceLocation:
-    return SourceLocation(path=document.path, line=1, column=1)
+    return document.start_location()
 
 
 def _seed_value(attributes: Mapping[str, str]) -> int | None:

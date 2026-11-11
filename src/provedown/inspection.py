@@ -126,7 +126,7 @@ def inspect_document(document: Document) -> InspectionReport:
             InspectionIssue(
                 level="error",
                 kind="parser-diagnostic",
-                location=SourceLocation(path=document.path, line=1, column=1),
+                location=document.start_location(),
                 message=diagnostic,
             )
         )

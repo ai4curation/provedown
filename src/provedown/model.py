@@ -100,11 +100,16 @@ class Document:
     def start_location(self) -> SourceLocation:
         """The document's first line, for findings about the whole document.
 
-        Its path is ``None`` unless the document's path is a real path, so the
-        findings that report errors can always be built.
+        Its path is ``None`` unless the document's path is a real path that
+        renders as text, so the findings that report errors can always be built.
         """
 
         path = self.path if isinstance(self.path, PurePath) else None
+        if path is not None:
+            try:
+                str(path)
+            except Exception:  # A caller's Path subclass may break str().
+                path = None
         return SourceLocation(path=path, line=1, column=1)
 
     def referenced_code_names(self) -> list[str]:
@@ -128,6 +133,11 @@ def _as_path(value: Any) -> Any:
     Anything else is returned unchanged, for the caller's own checks to reject.
     """
 
-    if isinstance(value, str | os.PathLike) and not isinstance(value, PurePath):
+    if value is None or isinstance(value, PurePath):
+        return value
+    if isinstance(value, _PATH_LIKE):
         return Path(value)
     return value
+
+
+_PATH_LIKE = (str, os.PathLike)

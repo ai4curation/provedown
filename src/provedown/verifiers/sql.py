@@ -16,7 +16,6 @@ from provedown.model import (
     CodeUse,
     Document,
     ResultAssertion,
-    SourceLocation,
 )
 from provedown.report import Finding, Status
 from provedown.verifiers import VerificationContext
@@ -41,10 +40,9 @@ class SQLResultVerifier:
                 Finding(
                     verifier_id=VERIFIER_ID,
                     status=Status.ERROR,
-                    location=SourceLocation(path=document.path, line=1, column=1),
+                    location=document.start_location(),
                     message=(
-                        "sql-results does not support sandbox mode "
-                        f"{context.sandbox!r}"
+                        f"sql-results does not support sandbox mode {context.sandbox!r}"
                     ),
                 )
             ]
