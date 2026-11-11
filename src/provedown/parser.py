@@ -205,6 +205,8 @@ class _ProvedownHTMLParser(HTMLParser):
         self._ignore_owner_ends: frozenset[str] = frozenset()
         self._ignored_owner_tags: dict[str, int] = {}
         self._ignore_opening_tag = ""
+        # Whether the region consumed an owner-kind end tag after skipping markup.
+        self._region_took_owner_end_tag = False
         # Whether the current region skipped markup that would otherwise be
         # parsed: a quotation, citation, code block or result span.
         self._region_skipped_markup = False
@@ -389,13 +391,20 @@ class _ProvedownHTMLParser(HTMLParser):
                         owner, _QuoteBuilder | None
                     ):
                         owner.ignored_own_kind = tag
-                        if self._ignore_depth == 1 and tag != self._ignore_opening_tag:
-                            # The region ends on another element's end tag, so
-                            # its own was taken earlier: a leak, even if the
-                            # owner is closed later by a stray end tag.
-                            owner.ignored_region_leaked = True
+                        self._region_took_owner_end_tag = True
                 self._ignore_depth -= 1
                 if self._ignore_depth == 0:
+                    owner = self._ignore_owner
+                    if (
+                        self._region_took_owner_end_tag
+                        and tag != self._ignore_opening_tag
+                        and not isinstance(owner, _QuoteBuilder | None)
+                    ):
+                        # The region ends on another element's end tag, so its
+                        # own was taken earlier, after an owner-kind end tag was
+                        # consumed: a leak, even if a stray end tag closes the
+                        # owner later.
+                        owner.ignored_region_leaked = True
                     self._end_ignored_region()
                 if tag in _QUOTE_WORD_BREAK_TAGS:
                     self._append_quotation_text(" ")
@@ -457,8 +466,9 @@ class _ProvedownHTMLParser(HTMLParser):
                     f"no quotation; most likely a <{kind}> in an ignored region "
                     "inside it has no end tag"
                 )
-                # Reported once: finishing it below must not report it again.
-                container.ignored_region_leaked = False
+            # An unclosed container is reported above, or by lint through its
+            # quotations; finishing it below must not report it again.
+            container.ignored_region_leaked = False
             for quote in container.quotes:
                 # An unclosed quote already says its text is untrustworthy.
                 quote.citation_unclosed = not quote.unclosed
@@ -629,6 +639,7 @@ class _ProvedownHTMLParser(HTMLParser):
         # its end tag is not taken for the owner's.
         self._ignored_owner_tags = {tag: 1} if tag in self._ignore_owner_ends else {}
         self._region_skipped_markup = False
+        self._region_took_owner_end_tag = False
 
     def _end_ignored_region(self) -> None:
         self._ignore_depth = 0
@@ -638,6 +649,7 @@ class _ProvedownHTMLParser(HTMLParser):
         self._ignored_owner_tags = {}
         self._region_skipped_markup = False
         self._ignore_opening_tag = ""
+        self._region_took_owner_end_tag = False
 
     def _is_owner_end_tag(self, tag: str) -> bool:
         """Whether ``tag`` ends the markup the current ignored region began in."""

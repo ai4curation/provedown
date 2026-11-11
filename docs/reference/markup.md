@@ -317,11 +317,12 @@ Markup diagnostics include:
 - a `<figure>` that ends while its `<figcaption>` is still open, after a
   `<figcaption>` inside an ignored region took the caption's end tag while that
   region skipped such markup.
-- a `<cite>` or `<figure>` that closes after an ignored region inside it ended
-  on another element's end tag while skipping such markup: the region's own end
-  tag was taken earlier, and a later stray end tag closed the container. It is
-  reported even when another quotation in it survived, since no lint carries
-  the ones that were lost.
+- a `<cite>` or `<figure>` that closes after an ignored region inside it took
+  an element's end tag of the container's kind, skipped such markup, and ended
+  on another element's end tag: the region's own end tag was taken earlier, and
+  a later stray end tag closed the container. It is reported even when another
+  quotation in it survived, since no lint carries the ones that were lost. A
+  container that never closes is reported by the bullets above instead.
 
 A void element inside an ignored region also extends the region past its own
 end tag. If the region began inside a quote, a `<cite>`, a `<figure>` or a
