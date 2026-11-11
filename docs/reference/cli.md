@@ -25,7 +25,8 @@ Arguments:
 Options:
 
 `--verifier VERIFIER_ID`
-: Run only the named verifier. May be passed more than once.
+: Run only the named verifier. May be passed more than once. An id that is not
+  registered stops the run with status `2` and lists the available ids.
 
 `--no-plugins`
 : Use only the built-in verifiers, without loading installed verifier plugins.
@@ -65,7 +66,7 @@ List verifier ids registered in the default registry, including installed
 verifier plugins. Pass `--no-plugins` to list only the built-in verifiers.
 
 ```bash
-provedown list-verifiers
+provedown list-verifiers [--no-plugins]
 ```
 
 Current output:

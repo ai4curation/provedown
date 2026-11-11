@@ -18,7 +18,11 @@ from provedown.integrations.okf import parse_okf_file, verify_okf_file
 from provedown.linting import LintReport, lint_document, lint_file
 from provedown.report import Finding, Report, Status
 from provedown.runner import verify_file
-from provedown.verifiers import PluginLoadError, default_registry
+from provedown.verifiers import (
+    PluginLoadError,
+    UnknownVerifierError,
+    default_registry,
+)
 
 OKF_HELP = (
     "treat inputs as Open Knowledge Format documents and lift an attested "
@@ -37,8 +41,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run(parser, args)
     except PluginLoadError as exc:
         print(
-            f"provedown: {exc} (use --no-plugins to run only the built-in "
-            "verifiers)",
+            f"provedown: {exc} (use --no-plugins to run only the built-in verifiers)",
             file=sys.stderr,
         )
         return 2
@@ -139,6 +142,11 @@ def _verify(args: argparse.Namespace) -> int:
     verify = verify_okf_file if args.okf else verify_file
     # Load plugins once for all paths, not once per file.
     registry = default_registry(plugins=not args.no_plugins)
+    try:
+        registry.check_ids(verifier_ids or ())
+    except UnknownVerifierError as exc:
+        print(f"provedown verify: {exc}", file=sys.stderr)
+        return 2
     reports: list[Report] = []
     for path in args.paths:
         reports.append(

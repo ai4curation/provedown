@@ -24,6 +24,7 @@ from provedown.runner import verify_document, verify_file
 from provedown.verifiers import (
     VERIFIER_ENTRY_POINT_GROUP,
     PluginLoadError,
+    UnknownVerifierError,
     VerificationContext,
     Verifier,
     VerifierRegistry,
@@ -53,6 +54,7 @@ __all__ = [
     "ResultAssertion",
     "SourceLocation",
     "Status",
+    "UnknownVerifierError",
     "VerificationContext",
     "Verifier",
     "VerifierRegistry",

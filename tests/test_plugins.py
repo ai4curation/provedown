@@ -7,6 +7,8 @@ from pytest import CaptureFixture, MonkeyPatch
 from provedown import (
     VERIFIER_ENTRY_POINT_GROUP,
     PluginLoadError,
+    Status,
+    UnknownVerifierError,
     default_registry,
     load_plugin_verifiers,
     parse_document,
@@ -66,6 +68,13 @@ class SecondByName(EventCountVerifier):
 
     def __init__(self):
         LOADED.append("zzz")
+
+
+class CrashingVerifier:
+    verifier_id = "crashing"
+
+    def verify(self, document, context):
+        raise RuntimeError("source cache is corrupt")
 """
 
 
@@ -95,6 +104,7 @@ def install_plugin(
 
 
 def test_no_plugins_installed_leaves_the_builtin_verifiers() -> None:
+    # Describes CI's environment: fails if a Provedown plugin is installed here.
     assert load_plugin_verifiers() == []
     assert default_registry().names() == ["python-results", "sql-results"]
 
@@ -261,3 +271,85 @@ def test_cli_loads_plugins_once_for_many_files(
 
     assert main(["verify", *paths]) == 0
     assert sys.modules["countplugin"].LOADED == ["aaa"]
+
+
+def test_clash_between_plugins_names_both_entry_points(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    install_plugin(
+        tmp_path, monkeypatch, {"aaa": "countplugin:EventCountVerifier"}, "alpha"
+    )
+    install_plugin(
+        tmp_path,
+        monkeypatch,
+        {"bbb": "countplugin:SecondEventCountVerifier"},
+        "beta",
+    )
+
+    with pytest.raises(PluginLoadError) as info:
+        load_plugin_verifiers()
+    message = str(info.value)
+    assert "'bbb' from beta" in message
+    assert "already registered by 'aaa' from alpha" in message
+
+
+def test_clash_with_a_builtin_says_so(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    install_plugin(tmp_path, monkeypatch, {"clash": "countplugin:ClashingVerifier"})
+
+    with pytest.raises(PluginLoadError, match="already registered by a built-in"):
+        default_registry()
+
+
+def test_unknown_verifier_id_is_a_typed_error_for_library_callers() -> None:
+    with pytest.raises(UnknownVerifierError, match=r"'nope'.*python-results"):
+        verify_document(parse_document("<code>x = 1</code>"), verifier_ids=["nope"])
+
+
+def test_cli_rejects_an_unknown_verifier_id(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    install_plugin(
+        tmp_path, monkeypatch, {"event-count": "countplugin:EventCountVerifier"}
+    )
+    report_path = tmp_path / "report.md"
+    report_path.write_text("<code>x = 1</code>\n", encoding="utf-8")
+
+    code = main(
+        ["verify", "--no-plugins", "--verifier", "event-count", str(report_path)]
+    )
+
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "unknown verifier 'event-count'" in err
+    assert "python-results, sql-results" in err
+
+
+def test_verifier_that_raises_becomes_an_error_finding(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    install_plugin(tmp_path, monkeypatch, {"crashing": "countplugin:CrashingVerifier"})
+    paths = []
+    for name in ("a.md", "b.md"):
+        path = tmp_path / name
+        path.write_text(
+            '<code>x = 1</code>\n<span class="result" data-code="x">1'
+            '<span class="method"></span></span>\n',
+            encoding="utf-8",
+        )
+        paths.append(str(path))
+
+    report = verify_document(
+        parse_document(Path(paths[0]).read_text(encoding="utf-8")),
+        registry=default_registry(),
+    )
+
+    assert not report.ok
+    assert report.count(Status.PASS) == 1
+    [error] = [f for f in report.findings if f.status == Status.ERROR]
+    assert error.verifier_id == "crashing"
+    assert "source cache is corrupt" in error.message
+
+    assert main(["verify", *paths]) == 1
+    out = capsys.readouterr().out
+    assert out.count("[pass] python-results") == 2
+    assert out.count("[error] crashing") == 2
