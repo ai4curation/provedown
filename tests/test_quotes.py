@@ -1160,3 +1160,16 @@ def test_owner_kind_opened_after_the_region_end_tag_still_reports_the_loss() -> 
     [diagnostic] = document.diagnostics
     assert "unclosed <cite> holding no quotation" in diagnostic
     assert not verify_document(document).ok
+
+
+def test_nested_element_named_like_the_opener_is_not_the_region_end() -> None:
+    document = parse_document(
+        '<cite>PMID:1 <p><span class="provedown-ignore">draft<br> <span>see</span> '
+        "<cite>x</cite> <q>note</q></span></p>, <q>real</q></cite>"
+    )
+
+    assert [(quote.text, quote.source) for quote in document.quotes] == [
+        ("real", "PMID:1")
+    ]
+    assert document.diagnostics == []
+    assert verify_document(document).ok
