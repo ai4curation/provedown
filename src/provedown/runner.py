@@ -8,12 +8,7 @@ from pathlib import Path
 from provedown.model import Document, SourceLocation
 from provedown.parser import parse_file
 from provedown.report import Finding, Report, Status
-from provedown.verifiers import (
-    _EMPTY_VERIFIER_IDS_MESSAGE,
-    VerificationContext,
-    VerifierRegistry,
-    default_registry,
-)
+from provedown.verifiers import VerificationContext, VerifierRegistry, default_registry
 
 PARSER_VERIFIER_ID = "parser"
 VERIFICATION_SKIPPED_MESSAGE = "verification skipped: document has parser errors"
@@ -40,10 +35,7 @@ def verify_document(
     # broken plugin or an unknown id is reported the same way for every
     # document; VerifierRegistry.verify() checks again for direct callers.
     active_registry = registry or default_registry()
-    if verifier_ids is not None:
-        if not verifier_ids:
-            raise ValueError(_EMPTY_VERIFIER_IDS_MESSAGE)
-        active_registry.check_ids(verifier_ids)
+    active_registry.check_requested_ids(verifier_ids)
 
     findings = list(_diagnostic_findings(document))
     # Parser diagnostics are currently all errors. Keep the status-based gate so

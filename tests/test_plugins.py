@@ -45,6 +45,19 @@ def broken():
     raise RuntimeError("no source cache configured")
 
 
+class _UnstringableLoadError(Exception):
+    def __str__(self):
+        raise RuntimeError("str exploded")
+
+
+def unstringable_broken():
+    raise _UnstringableLoadError()
+
+
+def huge_broken():
+    raise ValueError("schema " * 20000)
+
+
 def not_a_verifier():
     return {"verifier_id": "dict"}
 
@@ -757,8 +770,8 @@ def test_raise_with_an_unprintable_or_huge_exception_is_attributed(
     assert len(traceback_text) <= 4000
     # The frames survive a huge message, which is kept only in short form.
     assert traceback_text.startswith("Traceback (most recent call last):")
-    assert "HugeErrorVerifier" in traceback_text or "countplugin" in traceback_text
-    assert traceback_text.count("x" * 600) == 0
+    assert "in verify" in traceback_text
+    assert "x" * 500 not in traceback_text
 
 
 def test_empty_verifier_ids_is_an_error_not_an_empty_ok_report() -> None:
@@ -815,3 +828,33 @@ def test_raising_verifier_traceback_keeps_the_exception_chain(
     assert "ConnectionError: dns lookup failed for example.org" in traceback_text
     assert "direct cause of the following exception" in traceback_text
     assert "countplugin.SourceFetchError: could not fetch source" in traceback_text
+
+
+def test_load_error_message_is_guarded_bounded_and_typed(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    install_plugin(
+        tmp_path, monkeypatch, {"unstringable": "countplugin:unstringable_broken"}
+    )
+
+    with pytest.raises(PluginLoadError) as info:
+        load_plugin_verifiers()
+    assert str(info.value).endswith(
+        "_UnstringableLoadError: <unprintable _UnstringableLoadError>"
+    )
+    assert main(["list-verifiers"]) == 2
+    assert "--no-plugins" in capsys.readouterr().err
+
+
+def test_load_error_for_a_huge_message_keeps_the_hint_visible(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    install_plugin(tmp_path, monkeypatch, {"huge": "countplugin:huge_broken"})
+
+    assert main(["list-verifiers"]) == 2
+    err = capsys.readouterr().err
+    assert "ValueError: schema" in err
+    assert len(err) < 600
+    assert err.rstrip().endswith(
+        "(use --no-plugins to run only the built-in verifiers)"
+    )

@@ -23,9 +23,6 @@ from provedown.report import Finding, Report, Status
 VERIFIER_ENTRY_POINT_GROUP = "provedown.verifiers"
 
 
-_EMPTY_VERIFIER_IDS_MESSAGE = "no verifier ids given; pass None to run them all"
-
-
 class PluginLoadError(RuntimeError):
     """Raised when an installed verifier plugin cannot be loaded or registered."""
 
@@ -92,10 +89,7 @@ class VerifierRegistry:
         verifier_ids: Sequence[str] | None = None,
     ) -> Report:
         active_context = context or VerificationContext()
-        if verifier_ids is not None and not verifier_ids:
-            # Running nothing must not look like a passing report.
-            raise ValueError(_EMPTY_VERIFIER_IDS_MESSAGE)
-        self.check_ids(verifier_ids or ())
+        self.check_requested_ids(verifier_ids)
         # A repeated id runs its verifier once.
         selected = (
             list(dict.fromkeys(verifier_ids))
@@ -110,6 +104,20 @@ class VerifierRegistry:
                 )
             )
         return Report.from_findings(findings)
+
+    def check_requested_ids(self, verifier_ids: Sequence[str] | None) -> None:
+        """Check a request to run ``verifier_ids``, where ``None`` means all.
+
+        Raises ``ValueError`` for an empty list, since running nothing must not
+        look like a passing report, and ``UnknownVerifierError`` for an id that
+        is not registered.
+        """
+
+        if verifier_ids is None:
+            return
+        if not verifier_ids:
+            raise ValueError("no verifier ids given; pass None to run them all")
+        self.check_ids(verifier_ids)
 
     def check_ids(self, verifier_ids: Iterable[str]) -> None:
         """Raise ``UnknownVerifierError`` for the first id that is not registered."""
@@ -314,7 +322,8 @@ def _load_plugin(entry_point: EntryPoint) -> Verifier:
         verifier = factory()
     except Exception as exc:  # Plugin code is outside Provedown's control.
         raise PluginLoadError(
-            f"cannot load verifier plugin {_describe(entry_point)}: {exc}"
+            f"cannot load verifier plugin {_describe(entry_point)}: "
+            f"{type(exc).__name__}: {_safe_str(exc)}"
         ) from exc
     # Verifier is a Protocol, so nothing checked what the factory returned.
     problem = _verifier_shape_problem(verifier)
