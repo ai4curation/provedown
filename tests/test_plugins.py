@@ -162,6 +162,15 @@ class CleanupVerifier:
             CLOSED.append(True)
 
 
+class _Unprintable:
+    def __repr__(self):
+        raise RuntimeError("repr exploded")
+
+
+def unprintable_factory():
+    return _Unprintable()
+
+
 class BadReprVerifier:
     verifier_id = "bad-repr"
 
@@ -632,3 +641,60 @@ def test_wrong_type_yield_with_a_broken_repr_is_still_reported(
     [finding] = report.findings
     assert finding.status is Status.ERROR
     assert finding.message.startswith("verifier yielded <Unprintable")
+    assert "repr exploded" not in finding.message
+
+
+def test_finding_text_fields_must_be_strings() -> None:
+    from datetime import datetime
+
+    from provedown import Finding, SourceLocation
+
+    location = SourceLocation(path=None, line=1, column=1)
+    for field, value in (
+        ("verifier_id", 1),
+        ("message", Path("x")),
+        ("expected", Path("refs/paper.md")),
+        ("actual", datetime(2026, 1, 1)),
+    ):
+        kwargs = {"verifier_id": "x", "status": "pass", "location": location}
+        kwargs["message"] = "m"
+        kwargs[field] = value
+        with pytest.raises(TypeError, match=f"Finding {field} must be a str"):
+            Finding(**kwargs)  # type: ignore[arg-type]
+
+    finding = Finding(
+        verifier_id="x", status=Status.PASS, location=location, message="m", actual=None
+    )
+    assert finding.actual is None
+
+
+def test_finding_evidence_none_means_empty_and_nan_is_rejected() -> None:
+    from provedown import Finding, SourceLocation
+
+    location = SourceLocation(path=None, line=1, column=1)
+    finding = Finding(
+        verifier_id="x",
+        status=Status.PASS,
+        location=location,
+        message="m",
+        evidence=None,  # type: ignore[arg-type]
+    )
+    assert finding.evidence == {}
+
+    with pytest.raises(TypeError, match="JSON-serializable"):
+        Finding(
+            verifier_id="x",
+            status=Status.PASS,
+            location=location,
+            message="m",
+            evidence={"similarity": float("nan")},
+        )
+
+
+def test_load_error_for_a_non_verifier_with_a_broken_repr(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    install_plugin(tmp_path, monkeypatch, {"bad": "countplugin:unprintable_factory"})
+
+    with pytest.raises(PluginLoadError, match="'bad' from countplugin"):
+        load_plugin_verifiers()

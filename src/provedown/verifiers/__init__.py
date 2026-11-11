@@ -155,21 +155,21 @@ def _run_verifier(
     return findings
 
 
+_SHORT_REPR_LIMIT = 200
 _SHORT_REPR = reprlib.Repr()
-_SHORT_REPR.maxstring = _SHORT_REPR.maxother = 200
+_SHORT_REPR.maxstring = _SHORT_REPR.maxother = _SHORT_REPR_LIMIT
 
 
-def _short_repr(value: object, limit: int = 200) -> str:
-    """Return a bounded ``repr(value)``, at most ``limit`` characters, for a report.
+def _short_repr(value: object) -> str:
+    """Return ``repr(value)`` cut to a fixed length for a report.
 
-    ``reprlib`` stops early on large containers, and a third-party ``__repr__``
-    that raises is replaced by the type name.
+    ``reprlib`` stops early on large built-in containers and strings, and
+    replaces a third-party ``__repr__`` that raises with the type name; an
+    arbitrary object's own ``__repr__`` still runs in full before the cut.
     """
 
-    try:
-        text = _SHORT_REPR.repr(value)
-    except Exception:  # A plugin's __repr__ is outside Provedown's control.
-        text = f"<{type(value).__name__} object>"
+    text = _SHORT_REPR.repr(value)
+    limit = _SHORT_REPR_LIMIT
     return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
@@ -241,16 +241,13 @@ def _load_plugin(entry_point: EntryPoint) -> Verifier:
         ) from exc
     # Verifier is a Protocol, so nothing checked what the factory returned.
     verifier_id = getattr(verifier, "verifier_id", None)
+    returned = (
+        f"verifier plugin {_describe(entry_point)} returned {_short_repr(verifier)}"
+    )
     if not isinstance(verifier_id, str) or not verifier_id:
-        raise PluginLoadError(
-            f"verifier plugin {_describe(entry_point)} returned {verifier!r}, "
-            "which has no verifier_id"
-        )
+        raise PluginLoadError(f"{returned}, which has no verifier_id")
     if not callable(getattr(verifier, "verify", None)):
-        raise PluginLoadError(
-            f"verifier plugin {_describe(entry_point)} returned {verifier!r}, "
-            "which has no verify() method"
-        )
+        raise PluginLoadError(f"{returned}, which has no verify() method")
     loaded: Verifier = verifier
     return loaded
 

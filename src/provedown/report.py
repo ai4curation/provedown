@@ -43,11 +43,16 @@ class Finding:
                 "Finding location must be a SourceLocation, not "
                 f"{type(self.location).__name__}"
             )
-        # Evidence goes into JSON reports, so check it here rather than fail
-        # while printing a report after every document has been verified.
+        # Every field goes into JSON reports, so check them here rather than
+        # fail while printing a report after every document has been verified.
+        for name in ("verifier_id", "message"):
+            _require_str(name, getattr(self, name), optional=False)
+        for name in ("expected", "actual"):
+            _require_str(name, getattr(self, name), optional=True)
         try:
-            evidence = dict(self.evidence)
-            json.dumps(evidence, sort_keys=True)
+            evidence = dict(self.evidence) if self.evidence is not None else {}
+            # Strict JSON: NaN and infinities are not valid in --format json.
+            json.dumps(evidence, sort_keys=True, allow_nan=False)
         except (TypeError, ValueError) as exc:
             raise TypeError(
                 f"Finding evidence must be a JSON-serializable mapping: {exc}"
@@ -64,6 +69,13 @@ class Finding:
             "actual": self.actual,
             "evidence": dict(self.evidence),
         }
+
+
+def _require_str(name: str, value: object, *, optional: bool) -> None:
+    if isinstance(value, str) or (optional and value is None):
+        return
+    expected = "a str or None" if optional else "a str"
+    raise TypeError(f"Finding {name} must be {expected}, not {type(value).__name__}")
 
 
 @dataclass(frozen=True)

@@ -35,7 +35,7 @@ class MyVerifier:
 Each finding has:
 
 `verifier_id`
-: The verifier that produced the finding. Provedown does not check it against
+: The verifier that produced the finding, as a `str`. Provedown does not check it against
   the verifier that yielded the finding, so a composite verifier may report
   under sub-ids; treat it as the plugin's claim, not as proof of which code
   ran.
@@ -50,18 +50,20 @@ Each finding has:
   quote's `location`. Anything else raises `TypeError`.
 
 `message`
-: Human-readable explanation.
+: Human-readable explanation, as a `str`.
 
 `expected`
-: Optional authored value or expectation.
+: Optional authored value or expectation, as a `str` or `None`.
 
 `actual`
-: Optional computed value.
+: Optional computed value, as a `str` or `None`. Convert numbers and other
+  values with `str()`, as the built-in verifiers do.
 
 `evidence`
-: Optional structured metadata: a mapping that `json.dumps` can serialize,
+: Optional structured metadata: a mapping that strict JSON can represent,
   because it appears in `--format json` output. Convert values such as `Path`
-  to strings. Anything else raises `TypeError`.
+  to strings, and avoid `NaN` and infinite floats. `None` means no evidence.
+  Anything else raises `TypeError`. The finding keeps its own copy.
 
 ## Status Semantics
 
