@@ -7,13 +7,16 @@ The command-line entry point is `provedown`.
 Verify one or more documents.
 
 ```bash
-provedown verify [--verifier VERIFIER_ID] [--format text|json]
+provedown verify [--verifier VERIFIER_ID] [--no-plugins] [--format text|json]
   [--sandbox uv] [--okf] PATH [PATH ...]
 ```
 
 Parser diagnostics become `error` findings. If a document has any parser error,
-the command adds a `skip` finding, does not load or invoke verifiers for that
-document, and exits with status `1`.
+the command adds a `skip` finding, does not invoke verifiers for that document,
+and exits with status `1`. Installed [verifier
+plugins](verifier-plugins.md#publishing-a-plugin) are loaded once per run,
+before any document is verified; a plugin that cannot be loaded stops the run
+with status `2`.
 
 Arguments:
 
@@ -23,7 +26,11 @@ Arguments:
 Options:
 
 `--verifier VERIFIER_ID`
-: Run only the named verifier. May be passed more than once.
+: Run only the named verifier. May be passed more than once. An id that is not
+  registered stops the run with status `2` and lists the available ids.
+
+`--no-plugins`
+: Use only the built-in verifiers, without loading installed verifier plugins.
 
 `--format text`
 : Print human-readable output. This is the default.
@@ -52,14 +59,18 @@ Exit codes:
 : At least one report has a `fail` or `error` finding.
 
 `2`
-: Argument parsing failed.
+: Argument parsing failed, a `--verifier` id is not registered, `--sandbox` was
+  combined with an unsupported verifier, or an installed verifier plugin could
+  not be loaded.
 
 ## `provedown list-verifiers`
 
-List verifier ids registered in the default registry.
+List verifier ids registered in the default registry, including installed
+verifier plugins. Pass `--no-plugins` to list only the built-in verifiers.
+It exits with status `2` if an installed verifier plugin cannot be loaded.
 
 ```bash
-provedown list-verifiers
+provedown list-verifiers [--no-plugins]
 ```
 
 Current output:

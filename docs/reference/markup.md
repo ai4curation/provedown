@@ -182,13 +182,15 @@ value. Future renderers can use this slot for method markers or disclosure UI.
 ## Diagnostics
 
 The `provedown verify` CLI and the high-level `verify_file()` and
-`verify_document()` APIs convert every current parser diagnostic into an
-`error` finding. If any parser finding has `error` status, they append a `skip`
-finding and return without constructing the default registry or invoking a
-verifier. A document for which parsing reports an error therefore cannot execute
-Python, SQL, dependency setup, or other verifier side effects through these
-entry points. Static `inspect` and `lint` analysis remain available for
-diagnosing the document.
+`verify_document()` APIs convert every current parser diagnostic into an `error`
+finding. If any parser finding has `error` status, they append a `skip` finding
+and return without invoking a verifier. A document for which parsing reports an
+error therefore cannot execute Python, SQL, dependency setup, or other verifier
+side effects through these entry points. Installed verifier plugins are still
+imported and constructed when the default registry is built, before the document
+is checked, so install only plugins you trust (see [Verifier
+Plugins](verifier-plugins.md#publishing-a-plugin)). Static `inspect` and `lint`
+analysis remain available for diagnosing the document.
 
 `VerifierRegistry.verify()` is a lower-level plugin dispatch API: it does not
 inspect `Document.diagnostics` before invoking registered verifiers. Use

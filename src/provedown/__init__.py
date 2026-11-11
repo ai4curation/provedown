@@ -22,13 +22,18 @@ from provedown.parser import ParseError, parse_document, parse_file
 from provedown.report import Finding, Report, Status
 from provedown.runner import verify_document, verify_file
 from provedown.verifiers import (
+    VERIFIER_ENTRY_POINT_GROUP,
+    PluginLoadError,
+    UnknownVerifierError,
     VerificationContext,
     Verifier,
     VerifierRegistry,
     default_registry,
+    load_plugin_verifiers,
 )
 
 __all__ = [
+    "VERIFIER_ENTRY_POINT_GROUP",
     "CodeBlock",
     "CodeUse",
     "Comparator",
@@ -43,11 +48,13 @@ __all__ = [
     "LintFinding",
     "LintReport",
     "ParseError",
+    "PluginLoadError",
     "ProvedownConfig",
     "Report",
     "ResultAssertion",
     "SourceLocation",
     "Status",
+    "UnknownVerifierError",
     "VerificationContext",
     "Verifier",
     "VerifierRegistry",
@@ -56,6 +63,7 @@ __all__ = [
     "inspect_file",
     "lint_document",
     "lint_file",
+    "load_plugin_verifiers",
     "parse_document",
     "parse_file",
     "verify_document",

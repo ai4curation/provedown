@@ -30,7 +30,7 @@ The parsed `Document` contains:
 : Original source text.
 
 `path`
-: Optional source path.
+: Optional source path. A `str` or other path-like is converted to a `Path`.
 
 `events`
 : Ordered `CodeBlock`, `CodeUse`, and `ResultAssertion` events.
@@ -48,6 +48,11 @@ The parsed `Document` contains:
 
 `diagnostics`
 : Parser diagnostics.
+
+`Document.start_location()` returns a `SourceLocation` for the document's first
+line, for findings about the whole document. Its path is `None` unless the
+document's path is a real path that renders as text, so a finding built from it
+is always valid.
 
 ## Verify Documents
 
@@ -79,7 +84,9 @@ Pass `sandbox="uv"` and select `python-results` to use the uv sandbox adapter.
 
 `verify_document()` and `verify_file()` fail closed when the parsed document has
 an error diagnostic: their report contains every parser error plus a `skip`
-finding, and they do not construct the default registry or invoke a verifier.
+finding, and they do not invoke a verifier. Without a `registry` argument they
+still build the default registry first, which imports and constructs installed
+verifier plugins, so a broken plugin is reported for every document.
 `VerifierRegistry.verify()` is a lower-level dispatch API that does not inspect
 `Document.diagnostics` before invoking registered verifiers.
 

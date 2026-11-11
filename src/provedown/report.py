@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import PurePath
 from typing import Any
 
 from provedown.model import SourceLocation
@@ -31,6 +33,46 @@ class Finding:
     actual: str | None = None
     evidence: Mapping[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        # Plugins may pass the status as the plain string the docs describe; a
+        # bad value raises here, inside the verifier, so the registry reports
+        # it against that verifier instead of failing later in reporting.
+        if not isinstance(self.status, Status):
+            object.__setattr__(self, "status", Status(self.status))
+        if not isinstance(self.location, SourceLocation):
+            raise TypeError(
+                "Finding location must be a SourceLocation, not "
+                f"{type(self.location).__name__}"
+            )
+        _check_location(self.location)
+        # Every field goes into JSON reports, so check them here rather than
+        # fail while printing a report after every document has been verified.
+        for name in ("verifier_id", "message"):
+            _require_str(name, getattr(self, name), optional=False)
+        for name in ("expected", "actual"):
+            _require_str(name, getattr(self, name), optional=True)
+        try:
+            evidence = dict(self.evidence)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                f"Finding evidence must be a JSON-serializable mapping: {exc}"
+            ) from exc
+        for key in evidence:
+            if not isinstance(key, str):
+                raise TypeError(
+                    f"Finding evidence keys must be strings, not {type(key).__name__}"
+                )
+        try:
+            # Strict JSON: NaN and infinities are not valid in --format json.
+            text = json.dumps(evidence, sort_keys=True, allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                f"Finding evidence must be a JSON-serializable mapping: {exc}"
+            ) from exc
+        # Keep a deep copy decoded from the checked text, so a plugin changing
+        # its own objects later cannot change or break this finding's evidence.
+        object.__setattr__(self, "evidence", json.loads(text))
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "verifier_id": self.verifier_id,
@@ -39,8 +81,38 @@ class Finding:
             "message": self.message,
             "expected": self.expected,
             "actual": self.actual,
-            "evidence": dict(self.evidence),
+            # A fresh copy, so a caller changing it cannot reach the finding.
+            "evidence": json.loads(json.dumps(self.evidence)),
         }
+
+
+def _check_location(location: SourceLocation) -> None:
+    """Check a plugin's location now, since it is only rendered in reporting."""
+
+    if location.path is not None and not isinstance(location.path, PurePath):
+        raise TypeError(
+            "Finding location path must be a Path or None, not "
+            f"{type(location.path).__name__}"
+        )
+    for name in ("line", "column"):
+        value = getattr(location, name)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(
+                f"Finding location {name} must be an int, not {type(value).__name__}"
+            )
+    try:
+        location.display()
+    except Exception as exc:  # A Path subclass from a plugin may break str().
+        raise TypeError(
+            f"Finding location could not be rendered: {type(exc).__name__}"
+        ) from exc
+
+
+def _require_str(name: str, value: object, *, optional: bool) -> None:
+    if isinstance(value, str) or (optional and value is None):
+        return
+    expected = "a str or None" if optional else "a str"
+    raise TypeError(f"Finding {name} must be {expected}, not {type(value).__name__}")
 
 
 @dataclass(frozen=True)

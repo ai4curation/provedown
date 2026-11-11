@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
-from provedown.model import Document, SourceLocation
+from provedown.model import Document
 from provedown.parser import parse_file
 from provedown.report import Finding, Report, Status
 from provedown.verifiers import VerificationContext, VerifierRegistry, default_registry
@@ -20,6 +20,23 @@ def verify_document(
     context: VerificationContext | None = None,
     verifier_ids: Sequence[str] | None = None,
 ) -> Report:
+    """Verify a parsed document, refusing to run verifiers on parser errors.
+
+    Without ``registry``, the default registry is built, which loads installed
+    verifier plugins; a plugin that cannot be loaded raises ``PluginLoadError``.
+    A ``verifier_ids`` entry that is not registered raises
+    ``UnknownVerifierError``, and an empty ``verifier_ids`` raises
+    ``ValueError``, since running nothing must not look like a passing report;
+    pass ``None`` to run every verifier (the CLI never passes an empty list).
+    All are raised whether or not the document has parser errors.
+    """
+
+    # Build the registry and check the ids before the parser-error gate, so a
+    # broken plugin or an unknown id is reported the same way for every
+    # document; VerifierRegistry.verify() checks again for direct callers.
+    active_registry = registry or default_registry()
+    active_registry.check_requested_ids(verifier_ids)
+
     findings = list(_diagnostic_findings(document))
     # Parser diagnostics are currently all errors. Keep the status-based gate so
     # typed warning diagnostics can remain non-blocking if they are added later.
@@ -28,13 +45,12 @@ def verify_document(
             Finding(
                 verifier_id=PARSER_VERIFIER_ID,
                 status=Status.SKIP,
-                location=SourceLocation(path=document.path, line=1, column=1),
+                location=document.start_location(),
                 message=VERIFICATION_SKIPPED_MESSAGE,
             )
         )
         return Report.from_findings(findings)
 
-    active_registry = registry or default_registry()
     findings.extend(
         active_registry.verify(
             document,
@@ -62,7 +78,7 @@ def verify_file(
 
 
 def _diagnostic_findings(document: Document) -> Iterable[Finding]:
-    location = SourceLocation(path=document.path, line=1, column=1)
+    location = document.start_location()
     for diagnostic in document.diagnostics:
         yield Finding(
             verifier_id=PARSER_VERIFIER_ID,

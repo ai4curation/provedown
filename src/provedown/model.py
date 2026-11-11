@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 
@@ -15,6 +16,9 @@ class SourceLocation:
     path: Path | None
     line: int
     column: int
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "path", _as_path(self.path))
 
     def display(self) -> str:
         prefix = str(self.path) if self.path is not None else "<string>"
@@ -90,6 +94,24 @@ class Document:
     provedown: ProvedownConfig = field(default_factory=ProvedownConfig)
     diagnostics: list[str] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "path", _as_path(self.path))
+
+    def start_location(self) -> SourceLocation:
+        """The document's first line, for findings about the whole document.
+
+        Its path is ``None`` unless the document's path is a real path that
+        renders as text, so the findings that report errors can always be built.
+        """
+
+        path = self.path if isinstance(self.path, PurePath) else None
+        if path is not None:
+            try:
+                str(path)
+            except Exception:  # A caller's Path subclass may break str().
+                path = None
+        return SourceLocation(path=path, line=1, column=1)
+
     def referenced_code_names(self) -> list[str]:
         names: list[str] = []
         for event in self.events:
@@ -103,3 +125,21 @@ class Document:
 
     def code_definitions(self) -> dict[str, CodeBlock]:
         return dict(self.named_code)
+
+
+_PATH_LIKE = (str, os.PathLike)
+
+
+def _as_path(value: Any) -> Any:
+    """Convert a ``str`` or other path-like from an untyped caller to a ``Path``.
+
+    Anything else is returned unchanged, for the caller's own checks to reject.
+    A path-like whose ``__fspath__`` returns ``bytes`` makes ``Path`` raise
+    ``TypeError`` here.
+    """
+
+    if value is None or isinstance(value, PurePath):
+        return value
+    if isinstance(value, _PATH_LIKE):
+        return Path(value)
+    return value

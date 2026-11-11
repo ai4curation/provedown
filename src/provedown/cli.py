@@ -18,7 +18,11 @@ from provedown.integrations.okf import parse_okf_file, verify_okf_file
 from provedown.linting import LintReport, lint_document, lint_file
 from provedown.report import Finding, Report, Status
 from provedown.runner import verify_file
-from provedown.verifiers import default_registry
+from provedown.verifiers import (
+    PluginLoadError,
+    UnknownVerifierError,
+    default_registry,
+)
 
 OKF_HELP = (
     "treat inputs as Open Knowledge Format documents and lift an attested "
@@ -26,10 +30,24 @@ OKF_HELP = (
 )
 
 
+NO_PLUGINS_HELP = "run only the built-in verifiers, not installed plugins"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
+    try:
+        return _run(parser, args)
+    except PluginLoadError as exc:
+        print(
+            f"provedown: {exc} (use --no-plugins to run only the built-in verifiers)",
+            file=sys.stderr,
+        )
+        return 2
+
+
+def _run(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     if args.command == "verify":
         return _verify(args)
     if args.command == "inspect":
@@ -37,7 +55,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "lint":
         return _lint(args)
     if args.command == "list-verifiers":
-        registry = default_registry()
+        registry = default_registry(plugins=not args.no_plugins)
         for name in registry.names():
             print(name)
         return 0
@@ -58,6 +76,7 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="verifiers",
         help="verifier id to run; may be passed more than once",
     )
+    verify.add_argument("--no-plugins", action="store_true", help=NO_PLUGINS_HELP)
     verify.add_argument(
         "--format",
         choices=("text", "json"),
@@ -97,12 +116,24 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     lint.add_argument("--okf", action="store_true", help=OKF_HELP)
 
-    subparsers.add_parser("list-verifiers", help="list available verifier ids")
+    list_verifiers = subparsers.add_parser(
+        "list-verifiers", help="list available verifier ids"
+    )
+    list_verifiers.add_argument(
+        "--no-plugins", action="store_true", help=NO_PLUGINS_HELP
+    )
     return parser
 
 
 def _verify(args: argparse.Namespace) -> int:
     verifier_ids = args.verifiers
+    # Load plugins once for all paths, not once per file.
+    registry = default_registry(plugins=not args.no_plugins)
+    try:
+        registry.check_requested_ids(verifier_ids)
+    except UnknownVerifierError as exc:
+        print(f"provedown verify: {exc}", file=sys.stderr)
+        return 2
     if (
         args.sandbox is not None
         and verifier_ids is not None
@@ -121,6 +152,7 @@ def _verify(args: argparse.Namespace) -> int:
         reports.append(
             verify(
                 path,
+                registry=registry,
                 verifier_ids=verifier_ids,
                 sandbox=args.sandbox,
             )
